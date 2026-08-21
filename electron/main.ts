@@ -20,8 +20,42 @@ function createWindow(): void {
     },
   });
 
-  // 外链使用系统浏览器打开
+  // 应用内弹窗(组合节点内部画布)创建独立窗体,其余外链交给系统浏览器
   win.webContents.setWindowOpenHandler(({ url }) => {
+    try {
+      const target = new URL(url);
+      const current = new URL(win.webContents.getURL());
+      const sameOrigin = target.origin === current.origin;
+      if (sameOrigin) {
+        const child = new BrowserWindow({
+          width: 1200,
+          height: 820,
+          title: 'NodeFlow - 组合节点内部画布',
+          backgroundColor: '#17181c',
+          autoHideMenuBar: process.platform === 'win32' || process.platform === 'linux',
+          webPreferences: {
+            preload: path.join(__dirname, 'preload.js'),
+            contextIsolation: true,
+            nodeIntegration: false,
+            sandbox: true,
+          },
+        });
+        child.webContents.setWindowOpenHandler(({ url: inner }) => {
+          shell.openExternal(inner);
+          return { action: 'deny' };
+        });
+        if (isDev) {
+          child.loadURL(url);
+        } else {
+          child.loadFile(path.join(__dirname, '..', 'dist', 'index.html'), {
+            query: Object.fromEntries(target.searchParams),
+          });
+        }
+        return { action: 'deny' };
+      }
+    } catch {
+      /* URL 解析失败则按外链处理 */
+    }
     shell.openExternal(url);
     return { action: 'deny' };
   });

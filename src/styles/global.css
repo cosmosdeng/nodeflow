@@ -703,6 +703,223 @@ body,
   filter: grayscale(0.4);
 }
 
+/* ---------- 组合节点(Composite Node) ---------- */
+.nf-node .node-ctl-btn {
+  width: 22px;
+  height: 22px;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  background: var(--bg-panel-2);
+  color: var(--text-faint);
+  font-size: 11px;
+  line-height: 1;
+  cursor: pointer;
+  padding: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.12s;
+}
+
+.nf-node .node-ctl-btn:hover {
+  border-color: var(--border-hover);
+  color: var(--text);
+  transform: scale(1.1);
+}
+
+.nf-node .node-ctl-btn:disabled {
+  cursor: default;
+  filter: grayscale(0.4);
+  opacity: 0.6;
+}
+
+/* 塌缩态:粗边框组合节点 */
+.nf-composite-node {
+  border-width: 2.5px;
+  border-color: color-mix(in srgb, var(--accent) 55%, var(--border-strong));
+}
+
+.nf-composite-node.selected {
+  border-color: var(--accent);
+}
+
+/* 聚合端口标签:只读 */
+.nf-node .port-label.static {
+  cursor: default;
+  user-select: text;
+}
+
+/* 端口空态提示 */
+.nf-node .port-empty {
+  font-size: 10.5px;
+  color: var(--text-faint);
+  padding: 4px 8px;
+  font-style: italic;
+}
+
+/* 展开态:虚线框包裹内部节点 */
+.nf-composite-frame {
+  background: color-mix(in srgb, var(--accent) 6%, transparent);
+  border: 2px dashed color-mix(in srgb, var(--accent) 70%, var(--border-strong));
+  border-radius: 14px;
+  box-shadow: none;
+  overflow: visible;
+  /* 框体本身不拦截事件,内部节点可正常交互 */
+  pointer-events: none;
+}
+
+.nf-composite-frame.selected {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 20%, transparent);
+}
+
+.nf-composite-frame .composite-frame-bar {
+  pointer-events: auto;
+  position: absolute;
+  top: 0;
+  left: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 10px;
+  margin: -16px 0 0 12px;
+  background: var(--bg-panel);
+  border: 1px solid var(--border-strong);
+  border-radius: 10px;
+  box-shadow: var(--shadow);
+  max-width: calc(100% - 24px);
+}
+
+.nf-composite-frame .composite-frame-bar .node-title {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.nf-composite-frame .composite-frame-icon {
+  font-size: 14px;
+  color: var(--accent);
+  flex-shrink: 0;
+}
+
+.nf-composite-frame .composite-frame-hint {
+  pointer-events: none;
+  position: absolute;
+  bottom: 4px;
+  right: 8px;
+  font-size: 10px;
+  color: var(--text-faint);
+}
+
+/* ---------- 标签页(主画布 + 内部画布) ---------- */
+.tab-bar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 10px;
+  background: var(--bg);
+  border-bottom: 1px solid var(--border);
+  overflow-x: auto;
+  flex-shrink: 0;
+}
+
+.tab {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 5px 10px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--bg-panel);
+  color: var(--text-dim);
+  font-size: 12px;
+  cursor: pointer;
+  white-space: nowrap;
+  user-select: none;
+  transition: all 0.12s;
+}
+
+.tab:hover {
+  border-color: var(--border-hover);
+  color: var(--text);
+}
+
+.tab.active {
+  border-color: var(--accent);
+  color: var(--text);
+  background: color-mix(in srgb, var(--accent) 12%, var(--bg-panel));
+}
+
+.tab .tab-icon {
+  color: var(--accent);
+  flex-shrink: 0;
+}
+
+.tab .tab-label {
+  max-width: 140px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.tab-btn {
+  border: none;
+  background: transparent;
+  color: var(--text-faint);
+  cursor: pointer;
+  font-size: 11px;
+  padding: 1px 4px;
+  border-radius: 4px;
+  line-height: 1;
+}
+
+.tab-btn:hover {
+  background: var(--bg-hover);
+  color: var(--text);
+}
+
+/* ---------- 组合节点独立窗口 ---------- */
+.popup-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg);
+  flex-shrink: 0;
+}
+
+.popup-title {
+  font-weight: 700;
+  font-size: 14px;
+}
+
+.popup-sub {
+  font-size: 11px;
+  color: var(--text-faint);
+}
+
+.popup-canvas {
+  flex: 1;
+  min-height: 0;
+}
+
+.popup-empty {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  color: var(--text-faint);
+  font-size: 13px;
+  text-align: center;
+  line-height: 1.7;
+}
+
+.popup-empty .big {
+  font-size: 40px;
+}
+
 .nf-node .node-desc {
   padding: 8px 11px;
   color: var(--text-dim);

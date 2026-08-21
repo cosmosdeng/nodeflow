@@ -22,6 +22,13 @@ import {
   createDefaultNode,
   uid,
 } from '../types';
+import {
+  COMPOSITE_PAD,
+  computeCompositeBounds,
+  computeCompositePorts,
+  decodeCompositePort,
+  encodeCompositePort,
+} from '../lib/composite';
 
 const SAVE_KEY = 'nodeflow:graph:v1';
 const PREFS_KEY = 'nodeflow:prefs:v1';
@@ -84,6 +91,26 @@ interface FlowStore extends GraphState {
   theme: ThemeMode;
   setEdgeStyle: (style: EdgeStyle) => void;
   setTheme: (theme: ThemeMode) => void;
+
+  // ---- 组合节点(Composite Node) ----
+  /** 已打开的"内部画布"标签(组合节点 id 列表) */
+  compositeTabs: string[];
+  /** 当前激活的标签页:'main' 表示主画布,否则为组合节点 id */
+  activeTabId: string;
+  /** 将当前选中的 ≥2 个节点组合为一个组合节点 */
+  groupSelected: () => string | null;
+  /** 取消组合,恢复全部子节点 */
+  ungroup: (id: string) => void;
+  /** 展开/塌缩组合节点 */
+  toggleComposite: (id: string) => void;
+  /** 打开组合节点的内部画布标签 */
+  openCompositeTab: (id: string) => void;
+  /** 关闭内部画布标签 */
+  closeCompositeTab: (id: string) => void;
+  /** 切换当前激活的标签页 */
+  setActiveTab: (id: string) => void;
+  /** 在组合节点的内部画布中新建节点(创建 + 加入 childIds + 塌缩态隐藏,原子记录历史) */
+  addNodeToComposite: (compositeId: string, position?: { x: number; y: number }) => string;
 
   // ---- 全局锁定(演示模式) ----
   /** 一键锁定所有节点与连线,锁定后禁止任何编辑操作 */
@@ -276,6 +303,292 @@ const seedGraph = buildSeedGraph();
 const prefs = loadPrefs();
 
 /* ------------------------------------------------------------------ */
+/* 组合节点(Composite Node)                                             */
+/* ------------------------------------------------------------------ */
+
+/**
+ * 塌缩组合节点:
+ * - 组合节点移动到子节点群的中心
+ * - 子节点与内部连线隐藏
+ * - 外部连线改写为指向组合节点(端口引用 cid: 编码,可逆)
+ * - 组合节点端口更新为聚合端口
+ */
+function collapseComposite(
+  get: () => FlowStore,
+  set: (partial: Partial<FlowStore>) => void,
+  id: string,
+) {
+  const s = get();
+  const comp = s.nodes.find((n) => n.id === id);
+  if (!comp?.data?.composite) return;
+  const childSet = new Set(comp.data.composite.childIds);
+  const children = s.nodes.filter((n) => childSet.has(n.id));
+
+  // 聚合输入/输出端口
+  const { inputs, outputs } = computeCompositePorts(children, s.edges);
+
+  // 组合节点定位到子节点群中心
+  const bounds = computeCompositeBounds(children, 0);
+  const pos = bounds
+    ? {
+        x: Math.round(bounds.x + bounds.width / 2 - 170),
+        y: Math.round(bounds.y + bounds.height / 2 - 120),
+      }
+    : comp.position;
+
+  const nodes = s.nodes.map((n) => {
+    if (n.id === id) {
+      return {
+        ...n,
+        position: pos,
+        width: undefined,
+        height: undefined,
+        style: undefined,
+        draggable: undefined,
+        data: {
+          ...n.data,
+          composite: { ...(n.data.composite as NonNullable<FlowNodeData['composite']>), expanded: false },
+          inputs,
+          outputs,
+        },
+      };
+    }
+    if (childSet.has(n.id)) return { ...n, hidden: true, selected: false };
+    return n;
+  });
+
+  // 内部连线(两端都在组合内)仅隐藏、不改写端口,保证内部画布仍可显示;
+  // 外部连线改写为指向组合节点(端口 cid: 编码,可逆)
+  const edges = s.edges.map((e) => {
+    const inside = childSet.has(e.source) && childSet.has(e.target);
+    if (inside) return { ...e, hidden: true };
+    let { source, sourceHandle, target, targetHandle } = e;
+    if (childSet.has(e.source)) {
+      source = id;
+      sourceHandle = encodeCompositePort(e.source, e.sourceHandle ?? '');
+    }
+    if (childSet.has(e.target)) {
+      target = id;
+      targetHandle = encodeCompositePort(e.target, e.targetHandle ?? '');
+    }
+    return { ...e, source, sourceHandle, target, targetHandle, hidden: false };
+  });
+
+  set({ nodes, edges });
+}
+
+/**
+ * 展开组合节点:
+ * - 恢复子节点与内部连线显示
+ * - 外部连线从组合端口还原回子节点端口
+ * - 组合节点变为虚线框,包裹全部子节点
+ */
+function expandComposite(
+  get: () => FlowStore,
+  set: (partial: Partial<FlowStore>) => void,
+  id: string,
+) {
+  const s = get();
+  const comp = s.nodes.find((n) => n.id === id);
+  if (!comp?.data?.composite) return;
+  const childSet = new Set(comp.data.composite.childIds);
+
+  const nodes = s.nodes.map((n) => {
+    if (childSet.has(n.id)) return { ...n, hidden: false };
+    return n;
+  });
+
+  const edges = s.edges.map((e) => {
+    // 属于其他塌缩组合的连线保持原样,不因本组合展开而改变隐藏状态
+    const inside = childSet.has(e.source) && childSet.has(e.target);
+    let { source, sourceHandle, target, targetHandle } = e;
+    let touched = false;
+    if (source === id && sourceHandle) {
+      const ref = decodeCompositePort(sourceHandle);
+      if (ref) {
+        source = ref.nodeId;
+        sourceHandle = ref.portId;
+        touched = true;
+      }
+    }
+    if (target === id && targetHandle) {
+      const ref = decodeCompositePort(targetHandle);
+      if (ref) {
+        target = ref.nodeId;
+        targetHandle = ref.portId;
+        touched = true;
+      }
+    }
+    // 与本组合相关的边:展开后全部显示(内部连线与外部连线都恢复到子节点端口)
+    if (touched || inside) return { ...e, source, sourceHandle, target, targetHandle, hidden: false };
+    return e;
+  });
+
+  // 组合节点变为包裹子节点的虚线框
+  const children = nodes.filter((n) => childSet.has(n.id));
+  const bounds = computeCompositeBounds(children, COMPOSITE_PAD);
+  const updated = nodes.map((n) => {
+    if (n.id !== id) return n;
+    const base: FlowNode = {
+      ...n,
+      draggable: false,
+      data: {
+        ...n.data,
+        composite: { ...(n.data.composite as NonNullable<FlowNodeData['composite']>), expanded: true },
+      },
+    };
+    if (bounds) {
+      base.position = { x: Math.round(bounds.x), y: Math.round(bounds.y) };
+      base.width = Math.round(bounds.width);
+      base.height = Math.round(bounds.height);
+      base.style = { ...(base.style ?? {}), width: Math.round(bounds.width), height: Math.round(bounds.height) };
+    }
+    return base;
+  });
+
+  set({ nodes: updated, edges });
+}
+
+/** 基于当前节点数组,重算所有展开态组合节点的虚线框包围盒(纯函数) */
+function applyCompositeBoxes(nodes: FlowNode[]): FlowNode[] {
+  let changed = false;
+  const out = nodes.map((n) => {
+    if (!n.data?.composite || !n.data.composite.expanded) return n;
+    const children = nodes.filter((c) => n.data!.composite!.childIds.includes(c.id));
+    const bounds = computeCompositeBounds(children, COMPOSITE_PAD);
+    if (!bounds) return n;
+    if (
+      Math.abs(n.position.x - bounds.x) < 0.5 &&
+      Math.abs(n.position.y - bounds.y) < 0.5 &&
+      Math.abs((n.width ?? 0) - bounds.width) < 0.5 &&
+      Math.abs((n.height ?? 0) - bounds.height) < 0.5
+    ) {
+      return n;
+    }
+    changed = true;
+    return {
+      ...n,
+      position: { x: Math.round(bounds.x), y: Math.round(bounds.y) },
+      width: Math.round(bounds.width),
+      height: Math.round(bounds.height),
+      style: {
+        ...(n.style ?? {}),
+        width: Math.round(bounds.width),
+        height: Math.round(bounds.height),
+      },
+    };
+  });
+  return changed ? out : nodes;
+}
+
+/**
+ * 同步塌缩组合的子节点/内部连线隐藏状态。
+ * 用于内部画布中新增内部连线、或编辑子节点后,保证主画布展示一致。
+ */
+function refreshCompositeHidden(
+  get: () => FlowStore,
+  set: (partial: Partial<FlowStore>) => void,
+) {
+  const s = get();
+  const comps = s.nodes.filter((n) => n.data?.composite);
+  if (!comps.length) return;
+
+  let changed = false;
+  const nodes = s.nodes.map((n) => {
+    // 塌缩组合:重新计算聚合端口,保证属性面板与画布展示一致
+    const composite = n.data?.composite;
+    if (composite && !composite.expanded) {
+      const children = s.nodes.filter((c) => composite.childIds.includes(c.id));
+      const { inputs, outputs } = computeCompositePorts(children, s.edges);
+      if (
+        JSON.stringify(inputs) !== JSON.stringify(n.data.inputs) ||
+        JSON.stringify(outputs) !== JSON.stringify(n.data.outputs)
+      ) {
+        changed = true;
+        return { ...n, data: { ...n.data, inputs, outputs } };
+      }
+      return n;
+    }
+    const owner = comps.find((c) => c.data!.composite!.childIds.includes(n.id));
+    if (!owner) return n;
+    const targetHidden = !owner.data!.composite!.expanded;
+    if (!!n.hidden !== targetHidden) {
+      changed = true;
+      return { ...n, hidden: targetHidden };
+    }
+    return n;
+  });
+  const edges = s.edges.map((e) => {
+    const owner = comps.find((c) => {
+      const ids = c.data!.composite!.childIds;
+      return ids.includes(e.source) && ids.includes(e.target);
+    });
+    if (!owner) return e;
+    const targetHidden = !owner.data!.composite!.expanded;
+    if (!!e.hidden !== targetHidden) {
+      changed = true;
+      return { ...e, hidden: targetHidden };
+    }
+    return e;
+  });
+  if (changed) set({ nodes, edges });
+}
+
+/**
+ * 判断一条边是否直接或通过 cid: 端口引用指定节点。
+ * 塌缩状态下,外部连线会被改写为指向组合节点且端口编码为 cid:<childId>:<portId>,
+ * 因此删除子节点时必须解码端口引用,否则会遗留指向该子节点的悬空连线。
+ */
+function edgeReferencesNode(e: FlowEdge, nodeId: string): boolean {
+  if (e.source === nodeId || e.target === nodeId) return true;
+  return (
+    decodeCompositePort(e.sourceHandle)?.nodeId === nodeId ||
+    decodeCompositePort(e.targetHandle)?.nodeId === nodeId
+  );
+}
+
+/** 子节点被删除后,从所有组合的 childIds 中移除该 id */
+function removeChildFromComposites(
+  get: () => FlowStore,
+  set: (partial: Partial<FlowStore>) => void,
+  childId: string,
+) {
+  const s = get();
+  let changed = false;
+  const nodes = s.nodes.map((n) => {
+    if (n.data?.composite && n.data.composite.childIds.includes(childId)) {
+      changed = true;
+      const childIds = n.data.composite.childIds.filter((c) => c !== childId);
+      return { ...n, data: { ...n.data, composite: { ...n.data.composite, childIds } } };
+    }
+    return n;
+  });
+  if (changed) set({ nodes });
+}
+
+/** 历史恢复后同步标签:仅保留节点数组中仍存在的组合标签 */
+function syncTabsWithNodes(s: FlowStore, nodes: FlowNode[]) {
+  const compositeTabs = s.compositeTabs.filter((t) => nodes.some((n) => n.id === t));
+  const activeTabId =
+    compositeTabs.includes(s.activeTabId) ? s.activeTabId : 'main';
+  return { compositeTabs, activeTabId };
+}
+
+/** 关闭组合内部画布标签(纯函数),返回需要合并的状态片段 */
+function closeCompositeTabInState(s: FlowStore, id: string) {
+  const compositeTabs = s.compositeTabs.filter((t) => t !== id);
+  return {
+    compositeTabs,
+    activeTabId:
+      s.activeTabId === id
+        ? compositeTabs.length
+          ? compositeTabs[compositeTabs.length - 1]
+          : 'main'
+        : s.activeTabId,
+  };
+}
+
+/* ------------------------------------------------------------------ */
 /* Store                                                               */
 /* ------------------------------------------------------------------ */
 export const useGraphStore = create<FlowStore>()(
@@ -290,6 +603,8 @@ export const useGraphStore = create<FlowStore>()(
     dirty: false,
     edgeStyle: prefs?.edgeStyle ?? 'smoothstep',
     theme: prefs?.theme ?? 'dark',
+    compositeTabs: [],
+    activeTabId: 'main',
     allLocked: false,
     toggleLockAll: () => set((s) => ({ allLocked: !s.allLocked })),
 
@@ -299,8 +614,51 @@ export const useGraphStore = create<FlowStore>()(
         changes = changes.filter((c) => c.type !== 'remove');
         if (!changes.length) return;
       }
-      if (changes.some((c) => c.type === 'remove')) get().markHistory();
-      set((s) => ({ nodes: applyNodeChanges(changes, s.nodes) }));
+      const removes = changes.filter((c) => c.type === 'remove');
+      if (removes.length) {
+        get().markHistory();
+        const removedIds = new Set(removes.map((c) => c.id));
+        const removedCompositeIds = new Set<string>();
+        // 删除组合节点前先展开,恢复其子节点
+        for (const rid of removedIds) {
+          const node = get().nodes.find((n) => n.id === rid);
+          if (node?.data?.composite) {
+            removedCompositeIds.add(rid);
+            expandComposite(get, set, rid);
+          }
+        }
+        const applied = applyNodeChanges(changes, get().nodes);
+        set((s) => ({
+          nodes: applied,
+          // 同时清理直接引用与通过 cid: 端口(塌缩聚合端口)引用被删节点的连线
+          edges: s.edges.filter(
+            (e) =>
+              !removedIds.has(e.source) &&
+              !removedIds.has(e.target) &&
+              ![...removedIds].some(
+                (rid) =>
+                  decodeCompositePort(e.sourceHandle)?.nodeId === rid ||
+                  decodeCompositePort(e.targetHandle)?.nodeId === rid,
+              ),
+          ),
+          selected:
+            s.selected?.kind === 'node' && removedIds.has(s.selected.id) ? null : s.selected,
+        }));
+        // 若删除的是组合的子节点,从组合中移除;若删除的是组合节点,关闭其标签
+        for (const rid of removedIds) {
+          if (removedCompositeIds.has(rid)) {
+            set((s) => closeCompositeTabInState(s, rid));
+          } else {
+            removeChildFromComposites(get, set, rid);
+          }
+        }
+        // 统一刷新剩余塌缩组合的聚合端口与隐藏状态
+        refreshCompositeHidden(get, set);
+        return;
+      }
+      const applied = applyNodeChanges(changes, get().nodes);
+      const needRecompute = changes.some((c) => c.type === 'position' || c.type === 'dimensions');
+      set({ nodes: needRecompute ? applyCompositeBoxes(applied) : applied });
     },
     onEdgesChange: (changes) => {
       // 全局锁定时不允许删除连线(仍允许选中查看)
@@ -325,6 +683,8 @@ export const useGraphStore = create<FlowStore>()(
         data: { label: '', artifact: null },
       };
       set((s) => ({ edges: [...s.edges, edge] }));
+      // 若在塌缩组合内部画布中新增内部连线,同步隐藏状态
+      refreshCompositeHidden(get, set);
     },
     onViewportChange: (v) => set({ viewport: v }),
 
@@ -353,6 +713,7 @@ export const useGraphStore = create<FlowStore>()(
           nodes: prev.nodes,
           edges: prev.edges,
           viewport: prev.viewport,
+          ...syncTabsWithNodes(s, prev.nodes),
         };
       });
     },
@@ -371,6 +732,7 @@ export const useGraphStore = create<FlowStore>()(
           nodes: next.nodes,
           edges: next.edges,
           viewport: next.viewport,
+          ...syncTabsWithNodes(s, next.nodes),
         };
       });
     },
@@ -389,6 +751,7 @@ export const useGraphStore = create<FlowStore>()(
           nodes: target.nodes,
           edges: target.edges,
           viewport: target.viewport,
+          ...syncTabsWithNodes(s, target.nodes),
         };
       });
     },
@@ -404,6 +767,38 @@ export const useGraphStore = create<FlowStore>()(
       set((s) => ({ nodes: [...s.nodes, node] }));
       return node.id;
     },
+    addNodeToComposite: (compositeId, position) => {
+      if (get().allLocked) return '';
+      const comp = get().nodes.find((n) => n.id === compositeId);
+      if (!comp?.data?.composite) return '';
+      // 与 addNode 一致:新建节点作为一次原子历史记录
+      get().markHistory();
+      const node = createDefaultNode(position ?? { x: 80, y: 80 });
+      // 塌缩态下新节点在主画布隐藏(内部画布渲染时强制显示)
+      const collapsed = !comp.data.composite.expanded;
+      const newNode: FlowNode = collapsed ? { ...node, hidden: true } : node;
+      set((s) => ({
+        nodes: s.nodes
+          .map((n) =>
+            n.id === compositeId
+              ? {
+                  ...n,
+                  data: {
+                    ...n.data,
+                    composite: {
+                      ...(n.data.composite as NonNullable<FlowNodeData['composite']>),
+                      childIds: [...n.data.composite!.childIds, newNode.id],
+                    },
+                  },
+                }
+              : n,
+          )
+          .concat(newNode),
+      }));
+      // 塌缩态下同步聚合端口快照与主画布隐藏状态
+      refreshCompositeHidden(get, set);
+      return newNode.id;
+    },
     updateNode: (id, patch) => {
       if (get().allLocked) return;
       get().markHistory();
@@ -415,18 +810,37 @@ export const useGraphStore = create<FlowStore>()(
     },
     deleteNode: (id) => {
       if (get().allLocked) return;
+      const target = get().nodes.find((n) => n.id === id);
       get().markHistory();
+      if (target?.data?.composite) {
+        // 删除组合节点:先展开恢复子节点,再删除组合节点自身
+        expandComposite(get, set, id);
+        set((s) => ({
+          nodes: s.nodes.filter((n) => n.id !== id),
+          selected: s.selected?.kind === 'node' && s.selected.id === id ? null : s.selected,
+        }));
+        set((s) => closeCompositeTabInState(s, id));
+        refreshCompositeHidden(get, set);
+        return;
+      }
       set((s) => ({
         nodes: s.nodes.filter((n) => n.id !== id),
-        edges: s.edges.filter((e) => e.source !== id && e.target !== id),
+        // 同时清理直接引用与通过 cid: 端口(塌缩聚合端口)引用该节点的连线
+        edges: s.edges.filter((e) => !edgeReferencesNode(e, id)),
         selected: s.selected?.kind === 'node' && s.selected.id === id ? null : s.selected,
       }));
+      // 若删除的是某组合的子节点,从组合中移除
+      removeChildFromComposites(get, set, id);
+      // 刷新剩余塌缩组合的聚合端口与隐藏状态
+      refreshCompositeHidden(get, set);
     },
     duplicateNode: (id) => {
       if (get().allLocked) return;
       get().markHistory();
       const src = get().nodes.find((n) => n.id === id);
       if (!src) return;
+      // 组合节点共享 childIds,不能直接复制,否则复制品会与原组合互相干扰
+      if (src.data.composite) return;
       const copy: FlowNode = {
         ...src,
         id: uid('node'),
@@ -501,7 +915,7 @@ export const useGraphStore = create<FlowStore>()(
     clearGraph: () => {
       if (get().allLocked) return;
       get().markHistory();
-      set({ nodes: [], edges: [] });
+      set({ nodes: [], edges: [], compositeTabs: [], activeTabId: 'main' });
     },
 
     loadGraph: (data) => {
@@ -512,6 +926,8 @@ export const useGraphStore = create<FlowStore>()(
         edges: data.edges,
         viewport: data.viewport,
         selected: null,
+        compositeTabs: [],
+        activeTabId: 'main',
       });
     },
 
@@ -523,6 +939,8 @@ export const useGraphStore = create<FlowStore>()(
         edges: [],
         viewport: { x: 0, y: 0, zoom: 1 },
         selected: null,
+        compositeTabs: [],
+        activeTabId: 'main',
       });
     },
 
@@ -544,6 +962,75 @@ export const useGraphStore = create<FlowStore>()(
         2,
       );
     },
+
+    // ---- 组合节点操作 ----
+    groupSelected: () => {
+      if (get().allLocked) return null;
+      const s = get();
+      const selectedNodes = s.nodes.filter((n) => n.selected);
+      if (selectedNodes.length < 2) return null;
+      if (selectedNodes.some((n) => n.data.composite)) return null;
+      get().markHistory();
+      const childIds = selectedNodes.map((n) => n.id);
+      const id = uid('composite');
+      const bounds = computeCompositeBounds(selectedNodes, 0);
+      const pos = bounds
+        ? {
+            x: Math.round(bounds.x + bounds.width / 2 - 170),
+            y: Math.round(bounds.y + bounds.height / 2 - 120),
+          }
+        : { x: 100, y: 100 };
+      const nodes = s.nodes.map((n) => (n.selected ? { ...n, selected: false } : n));
+      const compNode: FlowNode = {
+        id,
+        type: 'flow',
+        position: pos,
+        selected: true,
+        data: {
+          label: `组合(${selectedNodes.length})`,
+          description: `${selectedNodes.length} 个节点组合而成,可展开编辑内部流程`,
+          actor: 'human',
+          locked: false,
+          inputs: [],
+          outputs: [],
+          composite: { expanded: false, childIds },
+        },
+      };
+      set({ nodes: [...nodes, compNode], selected: { kind: 'node', id } });
+      collapseComposite(get, set, id);
+      return id;
+    },
+    ungroup: (id) => {
+      if (get().allLocked) return;
+      const node = get().nodes.find((n) => n.id === id);
+      if (!node?.data?.composite) return;
+      get().markHistory();
+      expandComposite(get, set, id);
+      set((s) => ({
+        nodes: s.nodes.filter((n) => n.id !== id),
+        selected: s.selected?.kind === 'node' && s.selected.id === id ? null : s.selected,
+      }));
+      set((s) => closeCompositeTabInState(s, id));
+    },
+    toggleComposite: (id) => {
+      if (get().allLocked) return;
+      const node = get().nodes.find((n) => n.id === id);
+      if (!node?.data?.composite) return;
+      get().markHistory();
+      if (node.data.composite.expanded) {
+        collapseComposite(get, set, id);
+      } else {
+        expandComposite(get, set, id);
+      }
+    },
+    openCompositeTab: (id) =>
+      set((s) =>
+        s.compositeTabs.includes(id)
+          ? { activeTabId: id }
+          : { compositeTabs: [...s.compositeTabs, id], activeTabId: id },
+      ),
+    closeCompositeTab: (id) => set((s) => closeCompositeTabInState(s, id)),
+    setActiveTab: (id) => set({ activeTabId: id }),
 
     setEdgeStyle: (style) => {
       set({ edgeStyle: style });

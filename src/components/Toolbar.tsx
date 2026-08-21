@@ -51,6 +51,8 @@ export default function Toolbar({
   const undo = useGraphStore((s) => s.undo);
   const redo = useGraphStore((s) => s.redo);
   const addNode = useGraphStore((s) => s.addNode);
+  const nodes = useGraphStore((s) => s.nodes);
+  const groupSelected = useGraphStore((s) => s.groupSelected);
   const allLocked = useGraphStore((s) => s.allLocked);
   const toggleLockAll = useGraphStore((s) => s.toggleLockAll);
   const setSelected = useGraphStore((s) => s.setSelected);
@@ -181,6 +183,20 @@ export default function Toolbar({
 
       <button className="tb-btn primary" disabled={allLocked} onClick={handleAddNode}>
         ＋ 添加节点
+      </button>
+      <button
+        className="tb-btn"
+        disabled={
+          allLocked || nodes.filter((n) => n.selected).length < 2 ||
+          nodes.some((n) => n.selected && !!n.data.composite)
+        }
+        title="将选中的 2 个以上节点组合为一个组合节点(Composite Node)"
+        onClick={() => {
+          const id = groupSelected();
+          if (id) setSelected({ kind: 'node', id });
+        }}
+      >
+        ⧉ 组合节点
       </button>
 
       <span className="sep" />

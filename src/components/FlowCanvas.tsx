@@ -1,4 +1,4 @@
-import { useCallback } from 'react';
+import { useCallback, useMemo } from 'react';
 import {
   ReactFlow,
   Background,
@@ -29,9 +29,11 @@ export default function FlowCanvas() {
   const onViewportChange = useGraphStore((s) => s.onViewportChange);
   const setSelected = useGraphStore((s) => s.setSelected);
   const addNode = useGraphStore((s) => s.addNode);
+  const addNodeToComposite = useGraphStore((s) => s.addNodeToComposite);
   const markHistory = useGraphStore((s) => s.markHistory);
   const theme = useGraphStore((s) => s.theme);
   const allLocked = useGraphStore((s) => s.allLocked);
+  const activeTabId = useGraphStore((s) => s.activeTabId);
 
   const { screenToFlowPosition } = useReactFlow();
   const isDark = theme === 'dark';
@@ -42,14 +44,36 @@ export default function FlowCanvas() {
         // 演示锁定时禁止双击新建节点
         if (allLocked) return;
         const pos = screenToFlowPosition({ x: e.clientX, y: e.clientY });
-        const id = addNode(undefined, pos);
-        setSelected({ kind: 'node', id });
+        const st = useGraphStore.getState();
+        // 内部画布中新建节点时,原子地加入所属组合(创建 + childIds + 塌缩隐藏,
+        // 一次性记录历史,避免 addNode 后 setState 直改 hidden 绕过撤销栈)
+        const comp =
+          st.activeTabId !== 'main' ? st.nodes.find((n) => n.id === st.activeTabId) : null;
+        const id = comp?.data?.composite
+          ? addNodeToComposite(comp.id, pos)
+          : addNode(undefined, pos);
+        if (id) setSelected({ kind: 'node', id });
       } else {
         setSelected(null);
       }
     },
-    [addNode, allLocked, setSelected, screenToFlowPosition],
+    [addNode, addNodeToComposite, allLocked, setSelected, screenToFlowPosition],
   );
+
+  /** 根据当前标签页过滤出实际渲染的节点与连线 */
+  const { displayNodes, displayEdges } = useMemo(() => {
+    if (activeTabId === 'main') return { displayNodes: nodes, displayEdges: edges };
+    const comp = nodes.find((n) => n.id === activeTabId);
+    const childSet = new Set(comp?.data?.composite?.childIds ?? []);
+    return {
+      displayNodes: nodes
+        .filter((n) => childSet.has(n.id))
+        .map((n) => ({ ...n, hidden: false })),
+      displayEdges: edges
+        .filter((e) => childSet.has(e.source) && childSet.has(e.target))
+        .map((e) => ({ ...e, hidden: false })),
+    };
+  }, [activeTabId, nodes, edges]);
 
   const handleNodeClick: NodeMouseHandler = useCallback(
     (_, node) => setSelected({ kind: 'node', id: node.id }),
@@ -66,12 +90,18 @@ export default function FlowCanvas() {
   return (
     <div className="flow-area">
       <ReactFlow<FlowNode, FlowEdge>
-        nodes={nodes}
-        edges={edges}
+        key={activeTabId}
+        nodes={displayNodes}
+        edges={displayEdges}
         nodeTypes={nodeTypes}
         edgeTypes={edgeTypes}
-        viewport={viewport}
-        onViewportChange={onViewportChange}
+        viewport={activeTabId === 'main' ? viewport : undefined}
+        fitView={activeTabId !== 'main'}
+        fitViewOptions={{ padding: 0.2 }}
+        onViewportChange={(v) => {
+          // 仅主画布的视口写入 store,避免内部画布污染主画布视图
+          if (activeTabId === 'main') onViewportChange(v);
+        }}
         onNodesChange={onNodesChange}
         onEdgesChange={onEdgesChange}
         onConnect={onConnect}
@@ -102,6 +132,8 @@ export default function FlowCanvas() {
           pannable
           zoomable
           nodeColor={(n) => {
+            // 隐藏节点(塌缩组合的内部节点)不显示在小地图中
+            if (n.hidden) return 'transparent';
             const actor = (n.data as { actor?: string } | undefined)?.actor;
             if (actor === 'human') return '#e8b028';
             if (actor === 'hybrid') return '#9d6bff';

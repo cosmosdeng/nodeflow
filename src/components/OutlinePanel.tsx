@@ -27,13 +27,27 @@ export default function OutlinePanel({ onClose }: Props) {
     );
   }, [nodes, keyword]);
 
+  // 子节点 → 所属组合(塌缩态时定位到组合)
+  const ownerOf = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const n of nodes) {
+      const c = n.data.composite;
+      if (c) for (const cid of c.childIds) map.set(cid, n.id);
+    }
+    return map;
+  }, [nodes]);
+
   const groups = useMemo(() => {
     if (groupBy === 'flat') return [{ key: 'all', title: '全部节点', items: filtered }];
-    return ACTOR_KINDS.map((a: ActorType) => ({
-      key: a,
+    const comps = filtered.filter((n) => n.data.composite);
+    const actorGroups = ACTOR_KINDS.map((a: ActorType) => ({
+      key: a as string,
       title: `${ACTOR_META[a].icon} ${ACTOR_META[a].label}节点`,
-      items: filtered.filter((n) => n.data.actor === a),
+      items: filtered.filter((n) => n.data.actor === a && !n.data.composite),
     })).filter((g) => g.items.length > 0);
+    if (comps.length)
+      actorGroups.unshift({ key: 'composite', title: '⧉ 组合节点', items: comps });
+    return actorGroups;
   }, [filtered, groupBy]);
 
   const edgeCountOf = (nodeId: string) =>
@@ -41,9 +55,13 @@ export default function OutlinePanel({ onClose }: Props) {
 
   const handleSelect = (nodeId: string) => {
     const node = nodes.find((n) => n.id === nodeId);
-    setSelected({ kind: 'node', id: nodeId });
-    if (node) {
-      setCenter(node.position.x + 115, node.position.y + 60, { zoom: 1.1, duration: 450 });
+    // 塌缩组合内被隐藏的子节点:定位到所属组合节点
+    const ownerId = ownerOf.get(nodeId);
+    const owner = ownerId ? nodes.find((n) => n.id === ownerId) : undefined;
+    const target = node?.hidden && owner ? owner : node;
+    setSelected({ kind: 'node', id: target?.id ?? nodeId });
+    if (target) {
+      setCenter(target.position.x + 115, target.position.y + 60, { zoom: 1.1, duration: 450 });
     }
   };
 
@@ -96,7 +114,11 @@ export default function OutlinePanel({ onClose }: Props) {
             )}
             {g.items.map((n) => {
               const actor = ACTOR_META[n.data.actor];
+              const composite = n.data.composite;
               const isSel = selected?.kind === 'node' && selected.id === n.id;
+              const ownerId = ownerOf.get(n.id);
+              const owner = ownerId ? nodes.find((x) => x.id === ownerId) : undefined;
+              const foldedChild = !!(owner && !owner.data.composite?.expanded);
               return (
                 <button
                   key={n.id}
@@ -105,15 +127,32 @@ export default function OutlinePanel({ onClose }: Props) {
                 >
                   <span
                     className="icon-wrap"
-                    style={{ background: actor.bg, color: actor.color }}
+                    style={
+                      composite
+                        ? { background: 'color-mix(in srgb, var(--accent) 20%, transparent)', color: 'var(--accent)' }
+                        : { background: actor.bg, color: actor.color }
+                    }
                   >
-                    {actor.icon}
+                    {composite ? '⧉' : actor.icon}
                   </span>
                   <span className="li-main">
                     <span className="li-title">{n.data.label || '未命名节点'}</span>
                     <span className="li-sub">
-                      {n.data.inputs.length} 入 · {n.data.outputs.length} 出 · {edgeCountOf(n.id)}{' '}
-                      连线
+                      {composite ? (
+                        <>
+                          {composite.childIds.length} 个子节点 ·{' '}
+                          {composite.expanded ? '已展开' : '已塌缩'} · {edgeCountOf(n.id)} 连线
+                        </>
+                      ) : foldedChild ? (
+                        <>
+                          ⧉ {owner?.data.label} 内 · 已塌缩
+                        </>
+                      ) : (
+                        <>
+                          {n.data.inputs.length} 入 · {n.data.outputs.length} 出 · {edgeCountOf(n.id)}{' '}
+                          连线
+                        </>
+                      )}
                     </span>
                   </span>
                 </button>

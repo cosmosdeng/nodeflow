@@ -4,9 +4,11 @@ import FlowCanvas from './components/FlowCanvas';
 import OutlinePanel from './components/OutlinePanel';
 import PropertiesPanel from './components/PropertiesPanel';
 import HistoryPanel from './components/HistoryPanel';
+import CompositePopupView from './components/CompositePopupView';
+import { openCompositePopup } from './lib/compositePopup';
 import { useGraphStore } from './store/graphStore';
 
-export default function App() {
+function MainApp() {
   const [showOutline, setShowOutline] = useState(false);
   const [showProperties, setShowProperties] = useState(true);
   const [showHistory, setShowHistory] = useState(false);
@@ -19,6 +21,11 @@ export default function App() {
   const edgesCount = useGraphStore((s) => s.edges.length);
   const zoom = useGraphStore((s) => s.viewport.zoom);
   const theme = useGraphStore((s) => s.theme);
+  const nodes = useGraphStore((s) => s.nodes);
+  const compositeTabs = useGraphStore((s) => s.compositeTabs);
+  const activeTabId = useGraphStore((s) => s.activeTabId);
+  const setActiveTab = useGraphStore((s) => s.setActiveTab);
+  const closeCompositeTab = useGraphStore((s) => s.closeCompositeTab);
 
   // 应用全局配色主题到根元素
   useEffect(() => {
@@ -65,6 +72,51 @@ export default function App() {
         onToggleHistory={() => setShowHistory((v) => !v)}
       />
 
+      {/* 标签页:主画布 + 各组合节点的内部画布 */}
+      <div className="tab-bar">
+        <div
+          className={`tab ${activeTabId === 'main' ? 'active' : ''}`}
+          onClick={() => setActiveTab('main')}
+          title="主画布"
+        >
+          🏠 主画布
+        </div>
+        {compositeTabs.map((cid) => {
+          const comp = nodes.find((n) => n.id === cid);
+          return (
+            <div
+              key={cid}
+              className={`tab ${activeTabId === cid ? 'active' : ''}`}
+              onClick={() => setActiveTab(cid)}
+              title={comp?.data.label ?? cid}
+            >
+              <span className="tab-icon">⧉</span>
+              <span className="tab-label">{comp?.data.label ?? cid}</span>
+              <button
+                className="tab-btn"
+                title="在新窗口弹出内部画布"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  openCompositePopup(cid);
+                }}
+              >
+                ⇱
+              </button>
+              <button
+                className="tab-btn"
+                title="关闭标签页"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  closeCompositeTab(cid);
+                }}
+              >
+                ✕
+              </button>
+            </div>
+          );
+        })}
+      </div>
+
       <div className="app-main">
         {showOutline && <OutlinePanel onClose={() => setShowOutline(false)} />}
         <FlowCanvas />
@@ -81,6 +133,11 @@ export default function App() {
           <span className="stat">⬤ {nodesCount} 节点</span>
         )}
         {!allLocked && <span className="stat">— {edgesCount} 连线</span>}
+        {activeTabId !== 'main' && (
+          <span className="stat" style={{ color: 'var(--accent)' }}>
+            ⧉ 内部画布视图
+          </span>
+        )}
         <span className="stat">🔍 {Math.round(zoom * 100)}%</span>
         <span className="stat" style={{ marginLeft: 'auto' }}>
           {allLocked
@@ -90,4 +147,14 @@ export default function App() {
       </div>
     </div>
   );
+}
+
+export default function App() {
+  // 独立窗口模式:?composite=<id> 展示组合节点的内部画布
+  const params = new URLSearchParams(window.location.search);
+  const popupId = params.get('composite');
+  if (popupId) {
+    return <CompositePopupView id={popupId} />;
+  }
+  return <MainApp />;
 }

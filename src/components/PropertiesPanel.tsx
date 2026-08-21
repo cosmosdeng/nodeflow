@@ -1,4 +1,4 @@
-import { useEffect, useState, type ReactNode } from 'react';
+import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import {
   ACTOR_META,
   ACTOR_KINDS,
@@ -10,6 +10,7 @@ import {
   uid,
 } from '../types';
 import { useGraphStore } from '../store/graphStore';
+import { computeCompositePorts } from '../lib/composite';
 
 /* ---------------- 基础控件 ---------------- */
 
@@ -73,7 +74,15 @@ function Field({
   );
 }
 
-function Section({ title, children }: { title: string; children: ReactNode }) {
+function Section({
+  title,
+  children,
+  hint,
+}: {
+  title: string;
+  children: ReactNode;
+  hint?: string;
+}) {
   return (
     <div style={{ marginTop: 14 }}>
       <div
@@ -89,6 +98,7 @@ function Section({ title, children }: { title: string; children: ReactNode }) {
         {title}
       </div>
       {children}
+      {hint && <span className="helper">{hint}</span>}
     </div>
   );
 }
@@ -97,9 +107,14 @@ function Section({ title, children }: { title: string; children: ReactNode }) {
 
 function NodeProperties({ nodeId }: { nodeId: string }) {
   const node = useGraphStore((s) => s.nodes.find((n) => n.id === nodeId));
+  const nodes = useGraphStore((s) => s.nodes);
+  const edges = useGraphStore((s) => s.edges);
   const updateNode = useGraphStore((s) => s.updateNode);
   const deleteNode = useGraphStore((s) => s.deleteNode);
   const duplicateNode = useGraphStore((s) => s.duplicateNode);
+  const toggleComposite = useGraphStore((s) => s.toggleComposite);
+  const ungroup = useGraphStore((s) => s.ungroup);
+  const openCompositeTab = useGraphStore((s) => s.openCompositeTab);
   const allLocked = useGraphStore((s) => s.allLocked);
   const setSelected = useGraphStore((s) => s.setSelected);
 
@@ -107,6 +122,15 @@ function NodeProperties({ nodeId }: { nodeId: string }) {
   const d = node.data;
   const locked = !!d.locked;
   const disabled = locked || allLocked;
+  const composite = d.composite;
+  const isComposite = !!composite;
+
+  // 组合节点的聚合端口一律实时计算,与画布展示保持一致(单一数据源,不依赖历史快照)
+  const aggPorts = useMemo(() => {
+    if (!composite) return null;
+    const children = nodes.filter((c) => composite.childIds.includes(c.id));
+    return computeCompositePorts(children, edges);
+  }, [composite, edges, nodes]);
 
   const setPorts = (inputs: FlowNodeData['inputs'], outputs: FlowNodeData['outputs']) =>
     updateNode(nodeId, { inputs, outputs });
@@ -201,58 +225,148 @@ function NodeProperties({ nodeId }: { nodeId: string }) {
         </div>
       </Section>
 
-      <Section title={`输入端口 (${d.inputs.length})`}>
-        {d.inputs.length === 0 && <div className="helper">暂无输入端口</div>}
-        {d.inputs.map((p) => (
-          <div key={p.id} className="field-row" style={{ marginBottom: 6 }}>
-            <CommitField value={p.name} onCommit={(v) => renameInput(p.id, v)} placeholder="端口名" disabled={disabled} />
-            <button className="tb-btn" title="删除该端口" disabled={disabled} onClick={() => removeInput(p.id)}>
-              ✕
+      {isComposite && (
+        <Section title="组合节点">
+          <div
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 10,
+              padding: '10px 12px',
+              borderRadius: 10,
+              background: 'var(--bg)',
+              border: '1px solid var(--border)',
+              marginBottom: 10,
+            }}
+          >
+            <span style={{ fontSize: 24 }}>⧉</span>
+            <div style={{ minWidth: 0 }}>
+              <div style={{ fontWeight: 700 }}>
+                {composite!.childIds.length} 个子节点
+              </div>
+              <div style={{ fontSize: 11, color: 'var(--text-faint)' }}>
+                {composite!.expanded ? '已展开(虚线框内可编辑内部节点)' : '已塌缩(显示聚合端口)'}
+              </div>
+            </div>
+          </div>
+          <div className="field-row" style={{ marginBottom: 6 }}>
+            <button
+              className="tb-btn"
+              style={{ flex: 1, justifyContent: 'center' }}
+              disabled={disabled}
+              onClick={() => toggleComposite(nodeId)}
+            >
+              {composite!.expanded ? '◀ 塌缩收起' : '▶ 展开内部'}
+            </button>
+            <button
+              className="tb-btn"
+              style={{ flex: 1, justifyContent: 'center' }}
+              disabled={disabled}
+              onClick={() => openCompositeTab(nodeId)}
+            >
+              🖼 内部画布
             </button>
           </div>
-        ))}
-        <button className="tb-btn" style={{ width: '100%', justifyContent: 'center' }} disabled={disabled} onClick={addInput}>
-          + 添加输入
-        </button>
-      </Section>
+          <div className="field-row">
+            <button
+              className="tb-btn"
+              style={{ flex: 1, justifyContent: 'center' }}
+              disabled={disabled}
+              onClick={() => ungroup(nodeId)}
+            >
+              ⧗ 取消组合
+            </button>
+          </div>
+        </Section>
+      )}
 
-      <Section title={`输出端口 (${d.outputs.length})`}>
-        {d.outputs.length === 0 && <div className="helper">暂无输出端口</div>}
-        {d.outputs.map((p) => (
-          <div key={p.id} className="field-row" style={{ marginBottom: 6 }}>
-            <CommitField value={p.name} onCommit={(v) => renameOutput(p.id, v)} placeholder="端口名" disabled={disabled} />
-            <button className="tb-btn" title="删除该端口" disabled={disabled} onClick={() => removeOutput(p.id)}>
-              ✕
+      {isComposite ? (
+        <>
+          <Section
+            title={`聚合输入 (${aggPorts?.inputs.length ?? 0})`}
+            hint="自动来自内部节点未连入的输入端口(实时计算)"
+          >
+            {(!aggPorts || aggPorts.inputs.length === 0) && <div className="helper">无输入端口</div>}
+            {aggPorts?.inputs.map((p) => (
+              <div key={p.id} className="field-row" style={{ marginBottom: 6 }}>
+                <span className="port-label static" style={{ flex: 1 }}>
+                  {p.name}
+                </span>
+              </div>
+            ))}
+          </Section>
+          <Section
+            title={`聚合输出 (${aggPorts?.outputs.length ?? 0})`}
+            hint="自动来自内部节点未连出的输出端口(实时计算)"
+          >
+            {(!aggPorts || aggPorts.outputs.length === 0) && <div className="helper">无输出端口</div>}
+            {aggPorts?.outputs.map((p) => (
+              <div key={p.id} className="field-row" style={{ marginBottom: 6 }}>
+                <span className="port-label static" style={{ flex: 1, textAlign: 'right' }}>
+                  {p.name}
+                </span>
+              </div>
+            ))}
+          </Section>
+        </>
+      ) : (
+        <>
+          <Section title={`输入端口 (${d.inputs.length})`}>
+            {d.inputs.length === 0 && <div className="helper">暂无输入端口</div>}
+            {d.inputs.map((p) => (
+              <div key={p.id} className="field-row" style={{ marginBottom: 6 }}>
+                <CommitField value={p.name} onCommit={(v) => renameInput(p.id, v)} placeholder="端口名" disabled={disabled} />
+                <button className="tb-btn" title="删除该端口" disabled={disabled} onClick={() => removeInput(p.id)}>
+                  ✕
+                </button>
+              </div>
+            ))}
+            <button className="tb-btn" style={{ width: '100%', justifyContent: 'center' }} disabled={disabled} onClick={addInput}>
+              + 添加输入
             </button>
-          </div>
-        ))}
-        <button className="tb-btn" style={{ width: '100%', justifyContent: 'center' }} disabled={disabled} onClick={addOutput}>
-          + 添加输出
-        </button>
-      </Section>
+          </Section>
+
+          <Section title={`输出端口 (${d.outputs.length})`}>
+            {d.outputs.length === 0 && <div className="helper">暂无输出端口</div>}
+            {d.outputs.map((p) => (
+              <div key={p.id} className="field-row" style={{ marginBottom: 6 }}>
+                <CommitField value={p.name} onCommit={(v) => renameOutput(p.id, v)} placeholder="端口名" disabled={disabled} />
+                <button className="tb-btn" title="删除该端口" disabled={disabled} onClick={() => removeOutput(p.id)}>
+                  ✕
+                </button>
+              </div>
+            ))}
+            <button className="tb-btn" style={{ width: '100%', justifyContent: 'center' }} disabled={disabled} onClick={addOutput}>
+              + 添加输出
+            </button>
+          </Section>
+        </>
+      )}
 
       <Section title="操作">
         <div className="field-row">
-          <button
-            className="tb-btn"
-            style={{ flex: 1, justifyContent: 'center' }}
-            disabled={disabled}
-            onClick={() => duplicateNode(nodeId)}
-          >
-            ⧉ 复制节点
-          </button>
+          {!isComposite && (
+            <button
+              className="tb-btn"
+              style={{ flex: 1, justifyContent: 'center' }}
+              disabled={disabled}
+              onClick={() => duplicateNode(nodeId)}
+            >
+              ⧉ 复制节点
+            </button>
+          )}
           <button
             className="tb-btn danger"
-            style={{ flex: 1, justifyContent: 'center' }}
+            style={{ flex: isComposite ? 1 : undefined, justifyContent: 'center' }}
             disabled={disabled}
             onClick={() => {
-              if (confirm('确定删除该节点?其所有连线也会被删除。')) {
+              if (confirm(isComposite ? '确定删除该组合节点?其子节点会恢复并保留,连线还原。' : '确定删除该节点?其所有连线也会被删除。')) {
                 deleteNode(nodeId);
                 setSelected(null);
               }
             }}
           >
-            🗑 删除节点
+            🗑 删除
           </button>
         </div>
       </Section>

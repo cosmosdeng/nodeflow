@@ -28,6 +28,14 @@ export interface PortDef {
   name: string;
 }
 
+/** 组合节点(Composite Node)元数据:将多个节点聚合为一个节点 */
+export interface CompositeMeta {
+  /** 是否在主画布上展开:true 显示为虚线框并显示内部节点,false 塌缩为粗边框组合节点 */
+  expanded: boolean;
+  /** 包含的子节点 id 列表 */
+  childIds: string[];
+}
+
 /** 节点数据 */
 export interface FlowNodeData {
   label: string;
@@ -37,6 +45,8 @@ export interface FlowNodeData {
   locked: boolean;
   inputs: PortDef[];
   outputs: PortDef[];
+  /** 组合节点元数据(存在即表示该节点是组合节点) */
+  composite?: CompositeMeta;
   [key: string]: unknown;
 }
 
