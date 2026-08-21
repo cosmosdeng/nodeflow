@@ -18,6 +18,7 @@ import {
 import FlowNodeComponent from './FlowNodeComponent';
 import FlowEdgeComponent from './FlowEdgeComponent';
 import ContextMenu, { type ContextMenuState } from './ContextMenu';
+import ConfirmDialog, { type ConfirmDialogState } from './ConfirmDialog';
 import { useGraphStore } from '../store/graphStore';
 import type { FlowNode, FlowEdge, EdgeStyle } from '../types';
 
@@ -59,6 +60,33 @@ export default function FlowCanvas() {
 
   // 右键菜单状态
   const [contextMenu, setContextMenu] = useState<ContextMenuState | null>(null);
+  // 删除确认对话框
+  const [confirmDialog, setConfirmDialog] = useState<ConfirmDialogState | null>(null);
+  const closeConfirmDialog = useCallback(() => setConfirmDialog(null), []);
+
+  // Delete / Backspace 删除前确认:通过 Promise 弹自定义对话框,确认才删除
+  const handleBeforeDelete = useCallback(
+    ({ nodes }: { nodes: FlowNode[] }) => {
+      if (allLocked) return Promise.resolve(false);
+      if (!nodes.length) return Promise.resolve(true);
+      const label =
+        nodes.length > 1
+          ? `确定删除选中的 ${nodes.length} 个节点?`
+          : `确定删除节点「${nodes[0].data.label || '未命名'}」?`;
+      return new Promise<boolean>((resolve) => {
+        setConfirmDialog({
+          title: '删除确认',
+          message: `${label}\n撤销删除(Ctrl+Z)可还原节点及其连线关系。`,
+          confirmLabel: '删除',
+          cancelLabel: '取消',
+          danger: true,
+          onConfirm: () => resolve(true),
+          onCancel: () => resolve(false),
+        });
+      });
+    },
+    [allLocked, setConfirmDialog],
+  );
 
   // 记录「右键是否处于拖拽平移中」,用于右键松开时不弹菜单
   const rightDragRef = useRef(false);
@@ -315,17 +343,24 @@ export default function FlowCanvas() {
               const label = multi
                 ? `确定删除选中的 ${targets.length} 个节点?`
                 : `确定删除节点「${node.data.label || '未命名'}」?`;
-              if (window.confirm(label)) {
-                // 组合节点删除前需展开,store 的 deleteNode 会处理
-                targets.forEach((n) => deleteNode(n.id));
-                setSelected(null);
-              }
+              // 弹出确认对话框;确认后删除(store 会一并清理相关连线,撤销可完整还原)
+              setConfirmDialog({
+                title: '删除确认',
+                message: `${label}\n撤销删除(Ctrl+Z)可还原节点及其连线关系。`,
+                confirmLabel: '删除',
+                cancelLabel: '取消',
+                danger: true,
+                onConfirm: () => {
+                  targets.forEach((n) => deleteNode(n.id));
+                  setSelected(null);
+                },
+              });
             },
           },
         ],
       });
     },
-    [deleteNode, duplicateNode, groupSelected, setSelected, ungroup, allLocked],
+    [deleteNode, duplicateNode, groupSelected, setSelected, setConfirmDialog, ungroup, allLocked],
   );
 
   /**
@@ -415,6 +450,7 @@ export default function FlowCanvas() {
         onEdgeClick={handleEdgeClick}
         onPaneClick={handlePaneClick}
         onNodeDragStop={handleNodeDragStop}
+        onBeforeDelete={handleBeforeDelete}
         onNodeDoubleClick={(_, node) => setSelected({ kind: 'node', id: node.id })}
         nodesDraggable={!allLocked}
         nodesConnectable={!allLocked}
@@ -492,6 +528,7 @@ export default function FlowCanvas() {
         </Panel>
       </ReactFlow>
       <ContextMenu menu={contextMenu} onClose={closeContextMenu} />
+      <ConfirmDialog dialog={confirmDialog} onClose={closeConfirmDialog} />
     </div>
   );
 }

@@ -36,6 +36,13 @@ const PREFS_KEY = 'nodeflow:prefs:v1';
 const SAVE_DELAY = 600;
 
 /**
+ * 标记「删除连线」是否已由 onEdgesChange 记录历史。
+ * React Flow 删除节点时先 triggerEdgeChanges 再 triggerNodeChanges,
+ * onEdgesChange 已记录「删除前含连线」快照,onNodesChange 据此跳过重复记录。
+ */
+let edgeDeleteHistoryPending = false;
+
+/**
  * 按多数派推断一组节点的执行主体。
  * 统计 human / machine / hybrid 出现次数,返回出现最多的;平手时按
  * human → machine → hybrid 优先级取靠前者;全为空时默认 human。
@@ -654,7 +661,13 @@ export const useGraphStore = create<FlowStore>()(
       }
       const removes = changes.filter((c) => c.type === 'remove');
       if (removes.length) {
-        get().markHistory();
+        // 若删除伴随连线(onEdgesChange 已记录「删除前含连线」快照),则不重复记历史,
+        // 否则(仅删节点无关联边)在此记录,保证删除可撤销还原。
+        if (edgeDeleteHistoryPending) {
+          edgeDeleteHistoryPending = false;
+        } else {
+          get().markHistory();
+        }
         const removedIds = new Set(removes.map((c) => c.id));
         const removedCompositeIds = new Set<string>();
         // 删除组合节点前先展开,恢复其子节点
@@ -704,8 +717,18 @@ export const useGraphStore = create<FlowStore>()(
         changes = changes.filter((c) => c.type !== 'remove');
         if (!changes.length) return;
       }
-      // 记录删除连线的历史
-      if (changes.some((c) => c.type === 'remove')) get().markHistory();
+      const removes = changes.filter((c) => c.type === 'remove');
+      if (removes.length) {
+        // React Flow 删除节点时先 triggerEdgeChanges 再 triggerNodeChanges。
+        // 此处记录「删除前含连线」快照,并置标志,使随后的 onNodesChange 不再重复记历史,
+        // 从而撤销删除时能完整还原节点与连线。
+        edgeDeleteHistoryPending = true;
+        // 若本次只删边(无伴随节点删除),下一宏任务自动清理标志,避免影响后续删除
+        setTimeout(() => {
+          edgeDeleteHistoryPending = false;
+        }, 0);
+        get().markHistory();
+      }
       set((s) => ({ edges: applyEdgeChanges(changes, s.edges) }));
     },
     onConnect: (conn) => {

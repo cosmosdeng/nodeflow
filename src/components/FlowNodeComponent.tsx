@@ -155,18 +155,21 @@ function FlowNodeComponent({ id, data, selected }: NodeProps<FlowNode>) {
     [composite, children, edges],
   );
 
-  // 统计每个端口是否已有连线(用于端口光晕:已连接绿 / 未连接桔)
+  // 统计每个端口是否已有连线(用于端口光晕:已连接绿 / 未连接桔)。
+  // 按「节点id:端口id」精确匹配,避免不同节点同名端口(如 in_1/out_1)被误判为已连接。
   const connectedHandles = useMemo(() => {
     const set = new Set<string>();
     for (const e of edges) {
-      if (e.sourceHandle) set.add('o:' + e.sourceHandle);
-      if (e.targetHandle) set.add('i:' + e.targetHandle);
+      if (e.sourceHandle) set.add(e.source + ':' + e.sourceHandle);
+      if (e.targetHandle) set.add(e.target + ':' + e.targetHandle);
     }
     return set;
   }, [edges]);
 
-  const handleClass = (side: 'i' | 'o', portId: string) =>
-    connectedHandles.has(side + ':' + portId) ? 'nf-connected' : 'nf-disconnected';
+  const handleClass = (side: 'i' | 'o', portId: string) => {
+    const ref = id + ':' + portId;
+    return connectedHandles.has(ref) ? 'nf-connected' : 'nf-disconnected';
+  };
 
   const updateInputs = (inputs: PortDef[]) => updateNode(id, { inputs });
   const updateOutputs = (outputs: PortDef[]) => updateNode(id, { outputs });
