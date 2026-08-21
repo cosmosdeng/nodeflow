@@ -23,6 +23,7 @@ function FlowEdgeComponent({
   const setSelected = useGraphStore((s) => s.setSelected);
   const setArtifact = useGraphStore((s) => s.setArtifact);
   const edgeStyle = useGraphStore((s) => s.edgeStyle);
+  const allLocked = useGraphStore((s) => s.allLocked);
   const artifact = data?.artifact ?? null;
 
   const [path, labelX, labelY] =
@@ -99,9 +100,11 @@ function FlowEdgeComponent({
               position: 'absolute',
               transform: `translate(-50%, -50%) translate(${labelX}px, ${labelY + 20}px)`,
             }}
-            title="添加中间产物"
+            title={allLocked ? '演示模式已锁定' : '添加中间产物'}
+            disabled={allLocked}
             onClick={(e) => {
               e.stopPropagation();
+              if (allLocked) return;
               const artifactId = uid('art');
               setArtifact(id, {
                 id: artifactId,

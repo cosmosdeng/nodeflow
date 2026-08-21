@@ -51,6 +51,8 @@ export default function Toolbar({
   const undo = useGraphStore((s) => s.undo);
   const redo = useGraphStore((s) => s.redo);
   const addNode = useGraphStore((s) => s.addNode);
+  const allLocked = useGraphStore((s) => s.allLocked);
+  const toggleLockAll = useGraphStore((s) => s.toggleLockAll);
   const setSelected = useGraphStore((s) => s.setSelected);
   const newDocument = useGraphStore((s) => s.newDocument);
   const clearGraph = useGraphStore((s) => s.clearGraph);
@@ -115,6 +117,7 @@ export default function Toolbar({
         {fileOpen && (
           <div className="file-actions" onMouseLeave={() => setFileOpen(false)}>
             <button
+              disabled={allLocked}
               onClick={() => {
                 if (confirm('新建文档将清空当前画布,历史记录仍可撤销。继续?')) {
                   newDocument();
@@ -125,6 +128,7 @@ export default function Toolbar({
               🆕 新建文档
             </button>
             <button
+              disabled={allLocked}
               onClick={() => {
                 fileRef.current?.click();
                 setFileOpen(false);
@@ -136,6 +140,7 @@ export default function Toolbar({
               📤 导出 JSON…
             </button>
             <button
+              disabled={allLocked}
               onClick={() => {
                 if (confirm('清空画布上的所有节点与连线?')) clearGraph();
                 setFileOpen(false);
@@ -160,13 +165,13 @@ export default function Toolbar({
 
       <span className="sep" />
 
-      <button className="tb-btn" title="撤销 (Ctrl+Z)" disabled={pastLen === 0} onClick={undo}>
+      <button className="tb-btn" title="撤销 (Ctrl+Z)" disabled={allLocked || pastLen === 0} onClick={undo}>
         ↩ 撤销
       </button>
       <button
         className="tb-btn"
         title="重做 (Ctrl+Shift+Z)"
-        disabled={futureLen === 0}
+        disabled={allLocked || futureLen === 0}
         onClick={redo}
       >
         ↪ 重做
@@ -174,8 +179,23 @@ export default function Toolbar({
 
       <span className="sep" />
 
-      <button className="tb-btn primary" onClick={handleAddNode}>
+      <button className="tb-btn primary" disabled={allLocked} onClick={handleAddNode}>
         ＋ 添加节点
+      </button>
+
+      <span className="sep" />
+
+      <button
+        className={`tb-btn ${allLocked ? 'active' : ''}`}
+        style={
+          allLocked
+            ? { borderColor: 'rgba(232,176,40,.6)', color: '#ffc53d', fontWeight: 600 }
+            : undefined
+        }
+        title={allLocked ? '演示模式已锁定,点击解锁全部内容' : '演示模式:一键锁定所有节点与连线,防止误编辑'}
+        onClick={toggleLockAll}
+      >
+        {allLocked ? '🔒 锁定全部' : '🔓 锁定全部'}
       </button>
 
       <span className="sep" />

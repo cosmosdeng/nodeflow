@@ -143,6 +143,20 @@ body,
   cursor: default;
 }
 
+/* 演示模式全局锁定横幅 */
+.lock-all-banner {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 10px;
+  margin-bottom: 12px;
+  background: rgba(232, 176, 40, 0.1);
+  border: 1px solid rgba(232, 176, 40, 0.35);
+  border-radius: 8px;
+  font-size: 11.5px;
+  color: #ffc53d;
+}
+
 .tb-btn.primary {
   background: var(--accent);
   color: #0b1220;
@@ -327,6 +341,18 @@ body,
   font-weight: 600;
 }
 
+.seg button:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.field input:disabled,
+.field textarea:disabled,
+.field select:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
 /* ---------- 空状态 ---------- */
 .empty-tip {
   color: var(--text-faint);
@@ -421,6 +447,12 @@ body,
   background: var(--bg-hover);
 }
 
+.history-item.disabled {
+  opacity: 0.45;
+  cursor: default;
+  pointer-events: none;
+}
+
 .history-item .h-time {
   font-weight: 600;
   color: var(--text);
@@ -495,6 +527,25 @@ body,
   stroke-width: 2;
 }
 
+/* 连线始终在节点之上,确保连到端口的部分不被节点遮挡 */
+.react-flow__edges {
+  z-index: 4;
+}
+
+.react-flow__nodes {
+  z-index: 2;
+}
+
+/* 连线端点的 label 保持最高可见性 */
+.react-flow__edgelabel-renderer {
+  z-index: 5;
+}
+
+/* 拖拽中的新连接线保持在最上层 */
+.react-flow__connectionline {
+  z-index: 6;
+}
+
 .react-flow__node {
   font-family: inherit;
 }
@@ -563,6 +614,95 @@ body,
   flex-shrink: 0;
 }
 
+/* 右上角:主体轮换按钮 + 锁定按钮 */
+.nf-node .node-actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
+}
+
+.nf-node .node-actor-btn {
+  width: 24px;
+  height: 24px;
+  border-radius: 7px;
+  border: 1px solid transparent;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 13px;
+  cursor: pointer;
+  padding: 0;
+  transition: transform 0.12s, box-shadow 0.12s;
+}
+
+.nf-node .node-actor-btn:hover {
+  transform: scale(1.15);
+  box-shadow: 0 0 10px currentColor;
+}
+
+.nf-node .node-lock-btn {
+  width: 22px;
+  height: 22px;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  background: var(--bg-panel-2);
+  color: var(--text-faint);
+  font-size: 11px;
+  line-height: 1;
+  cursor: pointer;
+  padding: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.12s;
+}
+
+.nf-node .node-lock-btn:hover {
+  border-color: var(--border-hover);
+  color: var(--text);
+}
+
+.nf-node .node-lock-btn.locked {
+  border-color: #e8b028;
+  color: #e8b028;
+  background: rgba(232, 176, 40, 0.12);
+  box-shadow: 0 0 8px rgba(232, 176, 40, 0.35);
+}
+
+.nf-node .node-actor-btn:disabled,
+.nf-node .node-lock-btn:disabled {
+  cursor: default;
+  filter: grayscale(0.4);
+  opacity: 0.6;
+}
+
+.nf-node .node-actor-btn:disabled:hover {
+  transform: none;
+  box-shadow: none;
+}
+
+.nf-node .node-lock-btn:disabled:hover {
+  border-color: var(--border);
+  color: var(--text-faint);
+}
+
+/* 锁定节点:虚线边框 + 内容降弱 */
+.nf-node.locked {
+  border-style: dashed;
+}
+
+.nf-node.locked .node-header,
+.nf-node.locked .node-desc,
+.nf-node.locked .port-label {
+  opacity: 0.78;
+}
+
+.nf-node.locked .node-actor-btn {
+  cursor: default;
+  filter: grayscale(0.4);
+}
+
 .nf-node .node-desc {
   padding: 8px 11px;
   color: var(--text-dim);
@@ -629,7 +769,41 @@ body,
   margin-bottom: 2px;
 }
 
-/* 端口快捷添加按钮 */
+/* ---------- 内联编辑文本 ---------- */
+.nf-editable {
+  outline: none;
+  cursor: text;
+  border-radius: 5px;
+}
+
+.nf-editable:focus {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+  background: color-mix(in srgb, var(--accent) 8%, transparent);
+  white-space: pre-wrap;
+  overflow: visible;
+  text-overflow: clip;
+}
+
+.nf-editable:empty::before {
+  content: attr(data-placeholder);
+  color: var(--text-faint);
+  font-style: italic;
+}
+
+.nf-node .node-title:focus {
+  white-space: normal;
+}
+
+.nf-node .node-desc:focus {
+  max-height: none;
+}
+
+.nf-node .port-label:focus {
+  max-width: none;
+}
+
+/* 端口快捷添加按钮:输入加号靠左下角,输出加号靠右下角 */
 .nf-node .port-add {
   display: flex;
   align-items: center;
@@ -644,15 +818,30 @@ body,
   line-height: 1;
   cursor: pointer;
   padding: 0;
-  margin: 2px auto 0;
+  margin: 2px 0 0;
   transition: all 0.12s;
 }
 
-.nf-node .port-add:hover {
+.nf-node .port-add.in {
+  align-self: flex-start;
+}
+
+.nf-node .port-add.out {
+  align-self: flex-end;
+}
+
+.nf-node .port-add:hover:not(:disabled) {
   background: var(--accent);
   border-color: var(--accent);
   border-style: solid;
   color: #0b1220;
+  box-shadow: 0 0 10px 2px color-mix(in srgb, var(--accent) 60%, transparent);
+  transform: scale(1.1);
+}
+
+.nf-node .port-add:disabled {
+  opacity: 0.3;
+  cursor: not-allowed;
 }
 
 .react-flow__handle {
@@ -661,11 +850,31 @@ body,
   background: var(--accent);
   border: 2px solid var(--handle-border);
   border-radius: 50%;
-  transition: transform 0.12s;
+  transition: transform 0.12s, box-shadow 0.12s;
+  z-index: 1;
 }
 
 .react-flow__handle:hover {
   transform: scale(1.35);
+}
+
+/* 已连接端口:绿色光晕 */
+.react-flow__handle.nf-connected {
+  background: #22c55e;
+  border-color: color-mix(in srgb, #22c55e 65%, var(--handle-border));
+  box-shadow: 0 0 0 3px rgba(34, 197, 94, 0.3), 0 0 14px 3px rgba(34, 197, 94, 0.55);
+}
+
+/* 未连接端口:桔色光晕 */
+.react-flow__handle.nf-disconnected {
+  background: #fb923c;
+  border-color: color-mix(in srgb, #fb923c 65%, var(--handle-border));
+  box-shadow: 0 0 0 3px rgba(251, 146, 60, 0.28), 0 0 14px 3px rgba(251, 146, 60, 0.5);
+}
+
+.react-flow__handle.nf-connected:hover,
+.react-flow__handle.nf-disconnected:hover {
+  box-shadow: 0 0 0 3px rgba(255, 255, 255, 0.14), 0 0 20px 5px currentColor;
 }
 
 /* ---------- 连线 ---------- */
@@ -818,4 +1027,13 @@ body,
 
 .file-actions button:hover {
   background: var(--bg-hover);
+}
+
+.file-actions button:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.file-actions button:disabled:hover {
+  background: none;
 }

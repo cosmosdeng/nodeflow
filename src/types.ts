@@ -33,6 +33,8 @@ export interface FlowNodeData {
   label: string;
   description: string;
   actor: ActorType;
+  /** 是否锁定:锁定后禁止在画布/面板上编辑内容 */
+  locked: boolean;
   inputs: PortDef[];
   outputs: PortDef[];
   [key: string]: unknown;
@@ -125,6 +127,7 @@ export function createDefaultNode(position: { x: number; y: number }): FlowNode 
       label: '新节点',
       description: '',
       actor: 'machine',
+      locked: false,
       inputs: [{ id: 'in_1', name: '输入' }],
       outputs: [{ id: 'out_1', name: '输出' }],
     },

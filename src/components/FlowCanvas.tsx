@@ -31,6 +31,7 @@ export default function FlowCanvas() {
   const addNode = useGraphStore((s) => s.addNode);
   const markHistory = useGraphStore((s) => s.markHistory);
   const theme = useGraphStore((s) => s.theme);
+  const allLocked = useGraphStore((s) => s.allLocked);
 
   const { screenToFlowPosition } = useReactFlow();
   const isDark = theme === 'dark';
@@ -38,6 +39,8 @@ export default function FlowCanvas() {
   const handlePaneClick = useCallback(
     (e: React.MouseEvent) => {
       if (e.detail === 2) {
+        // 演示锁定时禁止双击新建节点
+        if (allLocked) return;
         const pos = screenToFlowPosition({ x: e.clientX, y: e.clientY });
         const id = addNode(undefined, pos);
         setSelected({ kind: 'node', id });
@@ -45,7 +48,7 @@ export default function FlowCanvas() {
         setSelected(null);
       }
     },
-    [addNode, setSelected, screenToFlowPosition],
+    [addNode, allLocked, setSelected, screenToFlowPosition],
   );
 
   const handleNodeClick: NodeMouseHandler = useCallback(
@@ -77,7 +80,10 @@ export default function FlowCanvas() {
         onPaneClick={handlePaneClick}
         onNodeDragStop={handleNodeDragStop}
         onNodeDoubleClick={(_, node) => setSelected({ kind: 'node', id: node.id })}
-        deleteKeyCode={['Backspace', 'Delete']}
+        nodesDraggable={!allLocked}
+        nodesConnectable={!allLocked}
+        edgesReconnectable={!allLocked}
+        deleteKeyCode={allLocked ? null : ['Backspace', 'Delete']}
         multiSelectionKeyCode={['Shift', 'Meta']}
         connectionRadius={28}
         minZoom={0.1}

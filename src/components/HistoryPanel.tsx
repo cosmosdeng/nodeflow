@@ -16,6 +16,7 @@ function fmtTime(at?: number) {
 export default function HistoryPanel({ onClose }: Props) {
   const past = useGraphStore((s) => s.past);
   const future = useGraphStore((s) => s.future);
+  const allLocked = useGraphStore((s) => s.allLocked);
   const jumpTo = useGraphStore((s) => s.jumpTo);
   const undo = useGraphStore((s) => s.undo);
   const redo = useGraphStore((s) => s.redo);
@@ -39,10 +40,10 @@ export default function HistoryPanel({ onClose }: Props) {
             marginBottom: 12,
           }}
         >
-          <button className="tb-btn" style={{ flex: 1, justifyContent: 'center' }} disabled={past.length === 0} onClick={undo}>
+          <button className="tb-btn" style={{ flex: 1, justifyContent: 'center' }} disabled={allLocked || past.length === 0} onClick={undo}>
             ↩ 撤销
           </button>
-          <button className="tb-btn" style={{ flex: 1, justifyContent: 'center' }} disabled={future.length === 0} onClick={redo}>
+          <button className="tb-btn" style={{ flex: 1, justifyContent: 'center' }} disabled={allLocked || future.length === 0} onClick={redo}>
             ↪ 重做
           </button>
         </div>
@@ -112,7 +113,14 @@ export default function HistoryPanel({ onClose }: Props) {
                 .map((p, i) => {
                   const idx = past.length - 1 - i;
                   return (
-                    <div key={`p${idx}`} className="history-item" onClick={() => jumpTo(idx)}>
+                    <div
+                      key={`p${idx}`}
+                      className={`history-item ${allLocked ? 'disabled' : ''}`}
+                      onClick={() => {
+                        if (allLocked) return;
+                        jumpTo(idx);
+                      }}
+                    >
                       <div className="h-time">{fmtTime(p.at)}</div>
                       <div>
                         {p.nodes.length} 节点 · {p.edges.length} 连线

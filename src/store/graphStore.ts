@@ -84,6 +84,11 @@ interface FlowStore extends GraphState {
   theme: ThemeMode;
   setEdgeStyle: (style: EdgeStyle) => void;
   setTheme: (theme: ThemeMode) => void;
+
+  // ---- 全局锁定(演示模式) ----
+  /** 一键锁定所有节点与连线,锁定后禁止任何编辑操作 */
+  allLocked: boolean;
+  toggleLockAll: () => void;
 }
 
 /* ------------------------------------------------------------------ */
@@ -96,6 +101,7 @@ function buildSeedGraph(): GraphSnapshot {
     label: '需求收集',
     description: '与客户沟通并整理本次内容创作的需求、目标与素材清单',
     actor: 'human',
+    locked: false,
     inputs: [],
     outputs: [{ id: 'out_1', name: '需求文档' }],
   };
@@ -106,6 +112,7 @@ function buildSeedGraph(): GraphSnapshot {
     label: '脚本撰写',
     description: '根据需求文档由大模型生成初版脚本,人工校对润色',
     actor: 'hybrid',
+    locked: false,
     inputs: [{ id: 'in_1', name: '需求' }],
     outputs: [{ id: 'out_1', name: '脚本' }, { id: 'out_2', name: '分镜表' }],
   };
@@ -116,6 +123,7 @@ function buildSeedGraph(): GraphSnapshot {
     label: '素材渲染',
     description: '由渲染农场批量生成视频画面,GPU 并行处理',
     actor: 'machine',
+    locked: false,
     inputs: [{ id: 'in_1', name: '脚本' }],
     outputs: [{ id: 'out_1', name: '成片' }],
   };
@@ -126,6 +134,7 @@ function buildSeedGraph(): GraphSnapshot {
     label: '人工质检',
     description: '逐帧检查画面质量、字幕与音频同步,不合格退回重渲',
     actor: 'human',
+    locked: false,
     inputs: [{ id: 'in_1', name: '待检成片' }],
     outputs: [{ id: 'out_1', name: '合格成片' }],
   };
@@ -136,6 +145,7 @@ function buildSeedGraph(): GraphSnapshot {
     label: '发布上架',
     description: '多平台分发,配置封面、简介与定时发布',
     actor: 'hybrid',
+    locked: false,
     inputs: [{ id: 'in_1', name: '成片' }],
     outputs: [],
   };
@@ -280,17 +290,30 @@ export const useGraphStore = create<FlowStore>()(
     dirty: false,
     edgeStyle: prefs?.edgeStyle ?? 'smoothstep',
     theme: prefs?.theme ?? 'dark',
+    allLocked: false,
+    toggleLockAll: () => set((s) => ({ allLocked: !s.allLocked })),
 
     onNodesChange: (changes) => {
+      // 全局锁定时不允许删除/移动等结构变更(仍允许选中查看)
+      if (get().allLocked) {
+        changes = changes.filter((c) => c.type !== 'remove');
+        if (!changes.length) return;
+      }
       if (changes.some((c) => c.type === 'remove')) get().markHistory();
       set((s) => ({ nodes: applyNodeChanges(changes, s.nodes) }));
     },
     onEdgesChange: (changes) => {
+      // 全局锁定时不允许删除连线(仍允许选中查看)
+      if (get().allLocked) {
+        changes = changes.filter((c) => c.type !== 'remove');
+        if (!changes.length) return;
+      }
       // 记录删除连线的历史
       if (changes.some((c) => c.type === 'remove')) get().markHistory();
       set((s) => ({ edges: applyEdgeChanges(changes, s.edges) }));
     },
     onConnect: (conn) => {
+      if (get().allLocked) return;
       get().markHistory();
       const edge: FlowEdge = {
         id: uid('edge'),
@@ -316,7 +339,8 @@ export const useGraphStore = create<FlowStore>()(
         future: [],
       })),
 
-    undo: () =>
+    undo: () => {
+      if (get().allLocked) return;
       set((s) => {
         if (!s.past.length) return s;
         const prev = s.past[s.past.length - 1];
@@ -330,9 +354,11 @@ export const useGraphStore = create<FlowStore>()(
           edges: prev.edges,
           viewport: prev.viewport,
         };
-      }),
+      });
+    },
 
-    redo: () =>
+    redo: () => {
+      if (get().allLocked) return;
       set((s) => {
         if (!s.future.length) return s;
         const next = s.future[s.future.length - 1];
@@ -346,9 +372,11 @@ export const useGraphStore = create<FlowStore>()(
           edges: next.edges,
           viewport: next.viewport,
         };
-      }),
+      });
+    },
 
-    jumpTo: (index) =>
+    jumpTo: (index) => {
+      if (get().allLocked) return;
       set((s) => {
         if (index < 0 || index >= s.past.length) return s;
         const target = s.past[index];
@@ -362,12 +390,14 @@ export const useGraphStore = create<FlowStore>()(
           edges: target.edges,
           viewport: target.viewport,
         };
-      }),
+      });
+    },
 
     canUndo: () => get().past.length > 0,
     canRedo: () => get().future.length > 0,
 
     addNode: (data, position) => {
+      if (get().allLocked) return '';
       get().markHistory();
       const node = createDefaultNode(position ?? { x: 80, y: 80 });
       if (data) node.data = { ...node.data, ...data };
@@ -375,6 +405,7 @@ export const useGraphStore = create<FlowStore>()(
       return node.id;
     },
     updateNode: (id, patch) => {
+      if (get().allLocked) return;
       get().markHistory();
       set((s) => ({
         nodes: s.nodes.map((n) =>
@@ -383,6 +414,7 @@ export const useGraphStore = create<FlowStore>()(
       }));
     },
     deleteNode: (id) => {
+      if (get().allLocked) return;
       get().markHistory();
       set((s) => ({
         nodes: s.nodes.filter((n) => n.id !== id),
@@ -391,6 +423,7 @@ export const useGraphStore = create<FlowStore>()(
       }));
     },
     duplicateNode: (id) => {
+      if (get().allLocked) return;
       get().markHistory();
       const src = get().nodes.find((n) => n.id === id);
       if (!src) return;
@@ -409,6 +442,7 @@ export const useGraphStore = create<FlowStore>()(
     },
 
     updateEdge: (id, patch) => {
+      if (get().allLocked) return;
       get().markHistory();
       set((s) => ({
         edges: s.edges.map((e) =>
@@ -422,6 +456,7 @@ export const useGraphStore = create<FlowStore>()(
       }));
     },
     deleteEdge: (id) => {
+      if (get().allLocked) return;
       get().markHistory();
       set((s) => ({
         edges: s.edges.filter((e) => e.id !== id),
@@ -430,6 +465,7 @@ export const useGraphStore = create<FlowStore>()(
     },
 
     setArtifact: (edgeId, artifact) => {
+      if (get().allLocked) return;
       get().markHistory();
       set((s) => ({
         edges: s.edges.map((e) =>
@@ -443,6 +479,7 @@ export const useGraphStore = create<FlowStore>()(
       }));
     },
     updateArtifact: (edgeId, patch) => {
+      if (get().allLocked) return;
       get().markHistory();
       set((s) => ({
         edges: s.edges.map((e) =>
@@ -462,11 +499,13 @@ export const useGraphStore = create<FlowStore>()(
     fitGraph: () => set({ selected: null }),
 
     clearGraph: () => {
+      if (get().allLocked) return;
       get().markHistory();
       set({ nodes: [], edges: [] });
     },
 
     loadGraph: (data) => {
+      if (get().allLocked) return;
       get().markHistory();
       set({
         nodes: data.nodes,
@@ -477,6 +516,7 @@ export const useGraphStore = create<FlowStore>()(
     },
 
     newDocument: () => {
+      if (get().allLocked) return;
       get().markHistory();
       set({
         nodes: [],

@@ -19,10 +19,11 @@ interface CommitFieldProps {
   placeholder?: string;
   multiline?: boolean;
   rows?: number;
+  disabled?: boolean;
 }
 
 /** 失焦/回车时提交,避免每个按键都产生历史记录 */
-function CommitField({ value, onCommit, placeholder, multiline, rows = 2 }: CommitFieldProps) {
+function CommitField({ value, onCommit, placeholder, multiline, rows = 2, disabled }: CommitFieldProps) {
   const [draft, setDraft] = useState(value);
   useEffect(() => setDraft(value), [value]);
   const commit = () => {
@@ -34,6 +35,7 @@ function CommitField({ value, onCommit, placeholder, multiline, rows = 2 }: Comm
         value={draft}
         rows={rows}
         placeholder={placeholder}
+        disabled={disabled}
         onChange={(e) => setDraft(e.target.value)}
         onBlur={commit}
       />
@@ -43,6 +45,7 @@ function CommitField({ value, onCommit, placeholder, multiline, rows = 2 }: Comm
     <input
       value={draft}
       placeholder={placeholder}
+      disabled={disabled}
       onChange={(e) => setDraft(e.target.value)}
       onBlur={commit}
       onKeyDown={(e) => {
@@ -97,10 +100,13 @@ function NodeProperties({ nodeId }: { nodeId: string }) {
   const updateNode = useGraphStore((s) => s.updateNode);
   const deleteNode = useGraphStore((s) => s.deleteNode);
   const duplicateNode = useGraphStore((s) => s.duplicateNode);
+  const allLocked = useGraphStore((s) => s.allLocked);
   const setSelected = useGraphStore((s) => s.setSelected);
 
   if (!node) return <MissingNotice />;
   const d = node.data;
+  const locked = !!d.locked;
+  const disabled = locked || allLocked;
 
   const setPorts = (inputs: FlowNodeData['inputs'], outputs: FlowNodeData['outputs']) =>
     updateNode(nodeId, { inputs, outputs });
@@ -120,9 +126,50 @@ function NodeProperties({ nodeId }: { nodeId: string }) {
 
   return (
     <div>
+      {allLocked && (
+        <div
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: 6,
+            padding: '8px 10px',
+            background: 'rgba(232, 176, 40, 0.1)',
+            border: '1px solid rgba(232, 176, 40, 0.35)',
+            borderRadius: 8,
+            marginBottom: 12,
+            fontSize: 11.5,
+          }}
+        >
+          <span>🔒 演示模式已锁定全部内容,此处只读</span>
+        </div>
+      )}
+      {locked && !allLocked && (
+        <div
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: 6,
+            padding: '8px 10px',
+            background: 'rgba(232, 176, 40, 0.1)',
+            border: '1px solid rgba(232, 176, 40, 0.35)',
+            borderRadius: 8,
+            marginBottom: 12,
+            fontSize: 11.5,
+          }}
+        >
+          <span>🔒 该节点已锁定,以下内容不可修改</span>
+          <button
+            className="tb-btn"
+            style={{ marginLeft: 'auto', padding: '2px 8px', fontSize: 11.5 }}
+            onClick={() => updateNode(nodeId, { locked: false })}
+          >
+            解锁
+          </button>
+        </div>
+      )}
       <div className="field">
         <label>节点名称</label>
-        <CommitField value={d.label} onCommit={(v) => updateNode(nodeId, { label: v })} placeholder="节点名称" />
+        <CommitField value={d.label} onCommit={(v) => updateNode(nodeId, { label: v })} placeholder="节点名称" disabled={disabled} />
       </div>
       <Field label="动作描述" hint="用简短文字说明该节点要完成的动作">
         <CommitField
@@ -131,6 +178,7 @@ function NodeProperties({ nodeId }: { nodeId: string }) {
           placeholder="描述该节点的动作…"
           multiline
           rows={4}
+          disabled={disabled}
         />
       </Field>
 
@@ -142,6 +190,7 @@ function NodeProperties({ nodeId }: { nodeId: string }) {
               <button
                 key={a}
                 className={d.actor === a ? 'active' : ''}
+                disabled={disabled}
                 onClick={() => updateNode(nodeId, { actor: a })}
               >
                 <span style={{ fontSize: 16 }}>{meta.icon}</span>
@@ -156,13 +205,13 @@ function NodeProperties({ nodeId }: { nodeId: string }) {
         {d.inputs.length === 0 && <div className="helper">暂无输入端口</div>}
         {d.inputs.map((p) => (
           <div key={p.id} className="field-row" style={{ marginBottom: 6 }}>
-            <CommitField value={p.name} onCommit={(v) => renameInput(p.id, v)} placeholder="端口名" />
-            <button className="tb-btn" title="删除该端口" onClick={() => removeInput(p.id)}>
+            <CommitField value={p.name} onCommit={(v) => renameInput(p.id, v)} placeholder="端口名" disabled={disabled} />
+            <button className="tb-btn" title="删除该端口" disabled={disabled} onClick={() => removeInput(p.id)}>
               ✕
             </button>
           </div>
         ))}
-        <button className="tb-btn" style={{ width: '100%', justifyContent: 'center' }} onClick={addInput}>
+        <button className="tb-btn" style={{ width: '100%', justifyContent: 'center' }} disabled={disabled} onClick={addInput}>
           + 添加输入
         </button>
       </Section>
@@ -171,25 +220,31 @@ function NodeProperties({ nodeId }: { nodeId: string }) {
         {d.outputs.length === 0 && <div className="helper">暂无输出端口</div>}
         {d.outputs.map((p) => (
           <div key={p.id} className="field-row" style={{ marginBottom: 6 }}>
-            <CommitField value={p.name} onCommit={(v) => renameOutput(p.id, v)} placeholder="端口名" />
-            <button className="tb-btn" title="删除该端口" onClick={() => removeOutput(p.id)}>
+            <CommitField value={p.name} onCommit={(v) => renameOutput(p.id, v)} placeholder="端口名" disabled={disabled} />
+            <button className="tb-btn" title="删除该端口" disabled={disabled} onClick={() => removeOutput(p.id)}>
               ✕
             </button>
           </div>
         ))}
-        <button className="tb-btn" style={{ width: '100%', justifyContent: 'center' }} onClick={addOutput}>
+        <button className="tb-btn" style={{ width: '100%', justifyContent: 'center' }} disabled={disabled} onClick={addOutput}>
           + 添加输出
         </button>
       </Section>
 
       <Section title="操作">
         <div className="field-row">
-          <button className="tb-btn" style={{ flex: 1, justifyContent: 'center' }} onClick={() => duplicateNode(nodeId)}>
+          <button
+            className="tb-btn"
+            style={{ flex: 1, justifyContent: 'center' }}
+            disabled={disabled}
+            onClick={() => duplicateNode(nodeId)}
+          >
             ⧉ 复制节点
           </button>
           <button
             className="tb-btn danger"
             style={{ flex: 1, justifyContent: 'center' }}
+            disabled={disabled}
             onClick={() => {
               if (confirm('确定删除该节点?其所有连线也会被删除。')) {
                 deleteNode(nodeId);
@@ -211,6 +266,7 @@ function ArtifactProperties({ edgeId }: { edgeId: string }) {
   const edge = useGraphStore((s) => s.edges.find((e) => e.id === edgeId));
   const updateArtifact = useGraphStore((s) => s.updateArtifact);
   const setArtifact = useGraphStore((s) => s.setArtifact);
+  const allLocked = useGraphStore((s) => s.allLocked);
   const setSelected = useGraphStore((s) => s.setSelected);
 
   if (!edge?.data?.artifact) return <MissingNotice />;
@@ -241,6 +297,7 @@ function ArtifactProperties({ edgeId }: { edgeId: string }) {
       <Field label="产物类型">
         <select
           value={art.kind}
+          disabled={allLocked}
           onChange={(e) => updateArtifact(edgeId, { kind: e.target.value as ArtifactKind })}
         >
           {ARTIFACT_KINDS.map((k) => (
@@ -251,7 +308,12 @@ function ArtifactProperties({ edgeId }: { edgeId: string }) {
         </select>
       </Field>
       <Field label="名称">
-        <CommitField value={art.label} onCommit={(v) => updateArtifact(edgeId, { label: v })} placeholder="中间产物名称" />
+        <CommitField
+          value={art.label}
+          onCommit={(v) => updateArtifact(edgeId, { label: v })}
+          placeholder="中间产物名称"
+          disabled={allLocked}
+        />
       </Field>
       <Field label="文字说明">
         <CommitField
@@ -260,6 +322,7 @@ function ArtifactProperties({ edgeId }: { edgeId: string }) {
           placeholder="说明该中间产物的内容…"
           multiline
           rows={4}
+          disabled={allLocked}
         />
       </Field>
 
@@ -275,6 +338,7 @@ function ArtifactProperties({ edgeId }: { edgeId: string }) {
           <button
             className="tb-btn danger"
             style={{ flex: 1, justifyContent: 'center' }}
+            disabled={allLocked}
             onClick={() => {
               if (confirm('移除该中间产物?')) {
                 setArtifact(edgeId, null);
@@ -297,6 +361,7 @@ function EdgeProperties({ edgeId }: { edgeId: string }) {
   const updateEdge = useGraphStore((s) => s.updateEdge);
   const deleteEdge = useGraphStore((s) => s.deleteEdge);
   const setArtifact = useGraphStore((s) => s.setArtifact);
+  const allLocked = useGraphStore((s) => s.allLocked);
   const setSelected = useGraphStore((s) => s.setSelected);
   const nodes = useGraphStore((s) => s.nodes);
 
@@ -329,7 +394,12 @@ function EdgeProperties({ edgeId }: { edgeId: string }) {
       </div>
 
       <Field label="连线说明文字" hint="显示在连线上的说明">
-        <CommitField value={edge.data?.label ?? ''} onCommit={(v) => updateEdge(edgeId, { label: v })} placeholder="如:质检通过后移交" />
+        <CommitField
+          value={edge.data?.label ?? ''}
+          onCommit={(v) => updateEdge(edgeId, { label: v })}
+          placeholder="如:质检通过后移交"
+          disabled={allLocked}
+        />
       </Field>
 
       <Section title="中间产物">
@@ -357,6 +427,7 @@ function EdgeProperties({ edgeId }: { edgeId: string }) {
           <button
             className="tb-btn danger"
             style={{ width: '100%', justifyContent: 'center' }}
+            disabled={allLocked}
             onClick={() => setArtifact(edgeId, null)}
           >
             🗑 移除中间产物
@@ -365,6 +436,7 @@ function EdgeProperties({ edgeId }: { edgeId: string }) {
           <button
             className="tb-btn primary"
             style={{ width: '100%', justifyContent: 'center' }}
+            disabled={allLocked}
             onClick={() => {
               const artifactId = uid('art');
               setArtifact(edgeId, { id: artifactId, kind: 'other', label: '新中间产物', description: '' });
@@ -380,6 +452,7 @@ function EdgeProperties({ edgeId }: { edgeId: string }) {
         <button
           className="tb-btn danger"
           style={{ width: '100%', justifyContent: 'center' }}
+          disabled={allLocked}
           onClick={() => {
             if (confirm('确定删除这条连线?')) {
               deleteEdge(edgeId);
@@ -407,6 +480,7 @@ function MissingNotice() {
 
 export default function PropertiesPanel({ onClose }: { onClose: () => void }) {
   const selected = useGraphStore((s) => s.selected);
+  const allLocked = useGraphStore((s) => s.allLocked);
   const setSelected = useGraphStore((s) => s.setSelected);
 
   let title = '属性';
@@ -438,7 +512,12 @@ export default function PropertiesPanel({ onClose }: { onClose: () => void }) {
           ×
         </button>
       </div>
-      <div className="panel-body">{body}</div>
+      <div className="panel-body">
+        {allLocked && (
+          <div className="lock-all-banner">🔒 演示模式已锁定全部内容,点击工具栏按钮解锁</div>
+        )}
+        {body}
+      </div>
     </aside>
   );
 }
