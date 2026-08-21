@@ -4,7 +4,10 @@
   "version": "0.0.1",
   "description": "跨平台通用节点式流程绘图工具",
   "main": "dist-electron/main.js",
-  "author": "NodeFlow Team",
+  "author": {
+    "name": "cosmosdeng",
+    "email": "dycosmos@gmail.com"
+  },
   "license": "MIT",
   "scripts": {
     "dev": "vite",
