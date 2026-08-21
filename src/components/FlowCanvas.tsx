@@ -12,6 +12,8 @@ import {
   type EdgeMouseHandler,
   type NodeTypes,
   type EdgeTypes,
+  type Connection,
+  type FinalConnectionState,
 } from '@xyflow/react';
 import FlowNodeComponent from './FlowNodeComponent';
 import FlowEdgeComponent from './FlowEdgeComponent';
@@ -112,6 +114,61 @@ export default function FlowCanvas() {
   );
 
   const handleNodeDragStop = useCallback(() => markHistory(), [markHistory]);
+
+  /**
+   * 从端口拖出连线到画布空白处(未连接到有效端口)时,自动创建新节点并连接:
+   * - 从输出端口拖出 → 新节点作为目标(连到其输入端口)
+   * - 从输入端口拖出 → 新节点作为源(从其输出端口连出)
+   * 新节点创建在松开鼠标的位置。
+   */
+  const handleConnectEnd = useCallback(
+    (event: MouseEvent | TouchEvent, connectionState: FinalConnectionState) => {
+      // 已成功连接到目标节点端口,由 onConnect 处理,这里跳过
+      if (connectionState.toNode) return;
+      if (allLocked) return;
+      const fromNode = connectionState.fromNode;
+      const fromHandle = connectionState.fromHandle;
+      if (!fromNode || !fromHandle) return;
+      // 支持鼠标与触摸事件;触摸用 changedTouches 取坐标
+      let clientX = 0;
+      let clientY = 0;
+      if ('clientX' in event) {
+        clientX = event.clientX;
+        clientY = event.clientY;
+      } else {
+        const t = event.changedTouches?.[0];
+        clientX = t?.clientX ?? 0;
+        clientY = t?.clientY ?? 0;
+      }
+      const pos = screenToFlowPosition({ x: clientX, y: clientY });
+      const st = useGraphStore.getState();
+      // 内部画布中新建节点时加入所属组合,主画布直接新建
+      const comp =
+        st.activeTabId !== 'main' ? st.nodes.find((n) => n.id === st.activeTabId) : null;
+      const newId = comp?.data?.composite
+        ? addNodeToComposite(comp.id, { x: pos.x - 115, y: pos.y - 60 })
+        : addNode(undefined, { x: pos.x - 115, y: pos.y - 60 });
+      if (!newId) return;
+      // 从输出端口(source)拖出 → 连到新节点输入;从输入端口(target)拖出 → 从新节点输出连出
+      const conn: Connection =
+        fromHandle.type === 'source'
+          ? {
+              source: fromNode.id,
+              sourceHandle: fromHandle.id ?? null,
+              target: newId,
+              targetHandle: 'in_1',
+            }
+          : {
+              source: newId,
+              sourceHandle: 'out_1',
+              target: fromNode.id,
+              targetHandle: fromHandle.id ?? null,
+            };
+      st.onConnect(conn);
+      setSelected({ kind: 'node', id: newId });
+    },
+    [addNode, addNodeToComposite, allLocked, screenToFlowPosition, setSelected],
+  );
 
   /** 画布空白处右键:弹出画布菜单 */
   const handlePaneContextMenu = useCallback(
@@ -353,6 +410,7 @@ export default function FlowCanvas() {
         onNodesChange={onNodesChange}
         onEdgesChange={onEdgesChange}
         onConnect={onConnect}
+        onConnectEnd={handleConnectEnd}
         onNodeClick={handleNodeClick}
         onEdgeClick={handleEdgeClick}
         onPaneClick={handlePaneClick}
