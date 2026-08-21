@@ -98,6 +98,7 @@ interface Artifact {
   - `src/components/FlowNodeComponent.tsx` — 节点三种形态(普通 / 展开虚线框 / 塌缩)
   - `src/components/FlowCanvas.tsx` — 主画布与内部画布切换、右键菜单入口、交互
   - `src/components/ContextMenu.tsx` — 通用右键上下文菜单
+  - `src/components/ConfirmDialog.tsx` — 通用确认对话框(删除确认等)
   - `src/components/ActorIcon.tsx` — 执行主体图标(基于 `assets/actors/` PNG)
   - `src/components/CompositePopupView.tsx` — 组合节点弹窗编辑
 
@@ -109,6 +110,9 @@ interface Artifact {
 - 画布菜单:添加节点 / 锁定全部 / 连线风格 / 显示全部节点 / 保存 / 另存为(导出 JSON)。
 - 执行主体图标用 `assets/actors/` 下的角色图(戴眼镜小人 / 机器人 / 人机协同合影),由 `ActorIcon` 渲染为圆形裁剪。
 - **连线快速建节点**:从输出端口拖线到画布空白 → 创建新节点并连到其输入;从输入端口拖线到空白 → 创建新节点并从其输出连回(经 `onConnectEnd` 实现,新节点在拖放位置并自动选中)。
+- **删除确认**:右键菜单删除与 Delete/Backspace 键删除均经 `ConfirmDialog` 模态确认(Delete 键通过 `onBeforeDelete` Promise);演示模式禁用。
+- **端口颜色**:端口连接状态按「节点 id + 端口 id」精确匹配(`connectedHandles`),未连接桔色 / 已连接绿色;同名默认端口(`in_1`/`out_1`)不会跨节点误判。
+- **撤销删除还原连线**:React Flow 删除节点先删边(`onEdgesChange`)后删节点(`onNodesChange`),用 `edgeDeleteHistoryPending` 同步标志合并为一次「删除前含连线」快照,撤销可完整还原节点及连线。
 
 ## 已知问题
 
