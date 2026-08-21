@@ -3,6 +3,8 @@ import path from 'node:path';
 
 const isDev = Boolean(process.env.ELECTRON_START_URL) || !app.isPackaged;
 
+const appIcon = path.join(__dirname, '..', 'assets', 'icon.png');
+
 function createWindow(): void {
   const win = new BrowserWindow({
     width: 1440,
@@ -10,6 +12,7 @@ function createWindow(): void {
     minWidth: 980,
     minHeight: 620,
     title: 'NodeFlow - 节点式流程绘图',
+    icon: appIcon,
     backgroundColor: '#17181c',
     autoHideMenuBar: process.platform === 'win32' || process.platform === 'linux',
     webPreferences: {
@@ -31,6 +34,7 @@ function createWindow(): void {
           width: 1200,
           height: 820,
           title: 'NodeFlow - 组合节点内部画布',
+          icon: appIcon,
           backgroundColor: '#17181c',
           autoHideMenuBar: process.platform === 'win32' || process.platform === 'linux',
           webPreferences: {

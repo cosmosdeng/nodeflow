@@ -1,4 +1,4 @@
-import { useMemo } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
   ReactFlow,
   Background,
@@ -9,7 +9,11 @@ import {
   type NodeTypes,
 } from '@xyflow/react';
 import type { FlowEdge, FlowNode } from '../types';
-import { loadCompositeSnapshot } from '../lib/compositePopup';
+import {
+  COMPOSITE_POPUP_KEY,
+  loadCompositeSnapshot,
+  type CompositeSnapshot,
+} from '../lib/compositePopup';
 import FlowNodeComponent from './FlowNodeComponent';
 import FlowEdgeComponent from './FlowEdgeComponent';
 
@@ -19,9 +23,35 @@ const edgeTypes: EdgeTypes = { flow: FlowEdgeComponent };
 /**
  * 组合节点内部画布的独立窗口视图。
  * 通过 ?composite=<id> 加载,从 localStorage 读取主窗口写入的快照,只读展示。
+ * 通过监听 storage 事件实时接收主窗口对快照的更新,无需手动刷新。
  */
 export default function CompositePopupView({ id }: { id: string }) {
-  const snapshot = useMemo(() => loadCompositeSnapshot(id), [id]);
+  const [snapshot, setSnapshot] = useState<CompositeSnapshot | null>(() =>
+    loadCompositeSnapshot(id),
+  );
+
+  // 主窗口更新快照时,storage 事件会广播到本独立窗口,据此实时刷新
+  useEffect(() => {
+    const key = COMPOSITE_POPUP_KEY + id;
+    const onStorage = (e: StorageEvent) => {
+      if (e.key !== key && !(e.key === null && e.storageArea === localStorage)) return;
+      setSnapshot(loadCompositeSnapshot(id));
+    };
+    window.addEventListener('storage', onStorage);
+    return () => window.removeEventListener('storage', onStorage);
+  }, [id]);
+
+  // 主窗口重新弹出时,快照可能被覆盖写入,轮询兜底以防 storage 事件遗漏
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setSnapshot((prev) => {
+        const next = loadCompositeSnapshot(id);
+        if (!next || JSON.stringify(next.nodes) === JSON.stringify(prev?.nodes)) return prev;
+        return next;
+      });
+    }, 2000);
+    return () => clearInterval(timer);
+  }, [id]);
 
   if (!snapshot || snapshot.nodes.length === 0) {
     return (

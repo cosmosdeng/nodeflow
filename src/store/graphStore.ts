@@ -19,6 +19,7 @@ import {
   type FlowEdgeData,
   type EdgeStyle,
   type ThemeMode,
+  type ActorType,
   createDefaultNode,
   uid,
 } from '../types';
@@ -33,6 +34,29 @@ import {
 const SAVE_KEY = 'nodeflow:graph:v1';
 const PREFS_KEY = 'nodeflow:prefs:v1';
 const SAVE_DELAY = 600;
+
+/**
+ * 按多数派推断一组节点的执行主体。
+ * 统计 human / machine / hybrid 出现次数,返回出现最多的;平手时按
+ * human → machine → hybrid 优先级取靠前者;全为空时默认 human。
+ */
+function majorityActor(nodes: FlowNode[]): ActorType {
+  const order: ActorType[] = ['human', 'machine', 'hybrid'];
+  const counts: Record<ActorType, number> = { human: 0, machine: 0, hybrid: 0 };
+  for (const n of nodes) {
+    const a = n.data?.actor;
+    if (a === 'human' || a === 'machine' || a === 'hybrid') counts[a] += 1;
+  }
+  let best: ActorType = 'human';
+  let bestCount = -1;
+  for (const a of order) {
+    if (counts[a] > bestCount) {
+      best = a;
+      bestCount = counts[a];
+    }
+  }
+  return best;
+}
 
 export type Selection =
   | { kind: 'node'; id: string }
@@ -566,11 +590,23 @@ function removeChildFromComposites(
   if (changed) set({ nodes });
 }
 
-/** 历史恢复后同步标签:仅保留节点数组中仍存在的组合标签 */
-function syncTabsWithNodes(s: FlowStore, nodes: FlowNode[]) {
-  const compositeTabs = s.compositeTabs.filter((t) => nodes.some((n) => n.id === t));
+/**
+ * 历史恢复后同步标签页:
+ * - 优先使用快照中记录的 compositeTabs / activeTabId(撤销/重做时完整恢复打开过的内部画布标签)
+ * - 旧快照无标签字段时,回退为仅保留节点数组中仍存在的组合标签
+ * - 无论何种来源,最终都剔除指向已不存在组合节点的标签,并保证 activeTabId 合法
+ */
+function restoreTabsFromSnapshot(
+  s: FlowStore,
+  snapshot: Pick<GraphSnapshot, 'nodes' | 'compositeTabs' | 'activeTabId'>,
+) {
+  const nodeIds = new Set(snapshot.nodes.map((n) => n.id));
+  const snapTabs = snapshot.compositeTabs ?? s.compositeTabs;
+  // 仅保留仍存在的组合节点标签;对无标签字段的旧快照回退到当前标签并按节点过滤
+  const compositeTabs = snapTabs.filter((t) => nodeIds.has(t));
+  const snapActive = snapshot.activeTabId ?? s.activeTabId;
   const activeTabId =
-    compositeTabs.includes(s.activeTabId) ? s.activeTabId : 'main';
+    snapActive === 'main' || compositeTabs.includes(snapActive) ? snapActive : 'main';
   return { compositeTabs, activeTabId };
 }
 
@@ -694,7 +730,14 @@ export const useGraphStore = create<FlowStore>()(
       set((s) => ({
         past: [
           ...s.past.slice(-99),
-          { nodes: s.nodes, edges: s.edges, viewport: s.viewport, at: Date.now() },
+          {
+            nodes: s.nodes,
+            edges: s.edges,
+            viewport: s.viewport,
+            compositeTabs: s.compositeTabs,
+            activeTabId: s.activeTabId,
+            at: Date.now(),
+          },
         ],
         future: [],
       })),
@@ -708,12 +751,19 @@ export const useGraphStore = create<FlowStore>()(
           past: s.past.slice(0, -1),
           future: [
             ...s.future,
-            { nodes: s.nodes, edges: s.edges, viewport: s.viewport, at: Date.now() },
+            {
+              nodes: s.nodes,
+              edges: s.edges,
+              viewport: s.viewport,
+              compositeTabs: s.compositeTabs,
+              activeTabId: s.activeTabId,
+              at: Date.now(),
+            },
           ],
           nodes: prev.nodes,
           edges: prev.edges,
           viewport: prev.viewport,
-          ...syncTabsWithNodes(s, prev.nodes),
+          ...restoreTabsFromSnapshot(s, prev),
         };
       });
     },
@@ -727,12 +777,19 @@ export const useGraphStore = create<FlowStore>()(
           future: s.future.slice(0, -1),
           past: [
             ...s.past,
-            { nodes: s.nodes, edges: s.edges, viewport: s.viewport, at: Date.now() },
+            {
+              nodes: s.nodes,
+              edges: s.edges,
+              viewport: s.viewport,
+              compositeTabs: s.compositeTabs,
+              activeTabId: s.activeTabId,
+              at: Date.now(),
+            },
           ],
           nodes: next.nodes,
           edges: next.edges,
           viewport: next.viewport,
-          ...syncTabsWithNodes(s, next.nodes),
+          ...restoreTabsFromSnapshot(s, next),
         };
       });
     },
@@ -746,12 +803,19 @@ export const useGraphStore = create<FlowStore>()(
           past: s.past.slice(0, index),
           future: [
             ...s.future,
-            { nodes: s.nodes, edges: s.edges, viewport: s.viewport, at: Date.now() },
+            {
+              nodes: s.nodes,
+              edges: s.edges,
+              viewport: s.viewport,
+              compositeTabs: s.compositeTabs,
+              activeTabId: s.activeTabId,
+              at: Date.now(),
+            },
           ],
           nodes: target.nodes,
           edges: target.edges,
           viewport: target.viewport,
-          ...syncTabsWithNodes(s, target.nodes),
+          ...restoreTabsFromSnapshot(s, target),
         };
       });
     },
@@ -980,6 +1044,9 @@ export const useGraphStore = create<FlowStore>()(
             y: Math.round(bounds.y + bounds.height / 2 - 120),
           }
         : { x: 100, y: 100 };
+      // 按子节点多数派推断组合节点的执行主体与标题
+      const actor = majorityActor(selectedNodes);
+      const majority = actor === 'human' ? '人工' : actor === 'machine' ? '机器' : '人机协同';
       const nodes = s.nodes.map((n) => (n.selected ? { ...n, selected: false } : n));
       const compNode: FlowNode = {
         id,
@@ -987,9 +1054,9 @@ export const useGraphStore = create<FlowStore>()(
         position: pos,
         selected: true,
         data: {
-          label: `组合(${selectedNodes.length})`,
+          label: `${majority}协作流程(${selectedNodes.length})`,
           description: `${selectedNodes.length} 个节点组合而成,可展开编辑内部流程`,
-          actor: 'human',
+          actor,
           locked: false,
           inputs: [],
           outputs: [],

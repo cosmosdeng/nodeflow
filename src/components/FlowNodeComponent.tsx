@@ -104,8 +104,9 @@ function FlowNodeComponent({ id, data, selected }: NodeProps<FlowNode>) {
     () => (composite ? allNodes.filter((n) => composite.childIds.includes(n.id)) : []),
     [composite, allNodes],
   );
+  // 组合节点无论展开/塌缩都实时计算聚合端口:展开态用于对外连线,塌缩态用于展示聚合端口
   const aggPorts = useMemo(
-    () => (composite && !composite.expanded ? computeCompositePorts(children, edges) : null),
+    () => (composite ? computeCompositePorts(children, edges) : null),
     [composite, children, edges],
   );
 
@@ -360,6 +361,35 @@ function FlowNodeComponent({ id, data, selected }: NodeProps<FlowNode>) {
           </div>
         </div>
         <div className="composite-frame-hint">{children.length} 个内部节点</div>
+        {/* 展开态也提供聚合端口,便于直接对外连线(端口 id 为 cid: 编码,与塌缩态一致) */}
+        <div className="composite-frame-ports">
+          <div className="nf-ports-in">
+            {(aggPorts?.inputs ?? []).map((p) => (
+              <Handle
+                key={p.id}
+                id={p.id}
+                type="target"
+                position={Position.Left}
+                isConnectable
+                className={handleClass('i', p.id)}
+                title={`${p.name} · 来自内部节点`}
+              />
+            ))}
+          </div>
+          <div className="nf-ports-out">
+            {(aggPorts?.outputs ?? []).map((p) => (
+              <Handle
+                key={p.id}
+                id={p.id}
+                type="source"
+                position={Position.Right}
+                isConnectable
+                className={handleClass('o', p.id)}
+                title={`${p.name} · 来自内部节点`}
+              />
+            ))}
+          </div>
+        </div>
       </div>
     );
   }

@@ -811,6 +811,39 @@ body,
   color: var(--text-faint);
 }
 
+/* 展开态:左右边缘的聚合端口(供对外连线),垂直居中均匀分布 */
+.nf-composite-frame .composite-frame-ports {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  pointer-events: none;
+  overflow: visible;
+}
+
+.nf-composite-frame .nf-ports-in,
+.nf-composite-frame .nf-ports-out {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 18px;
+  pointer-events: auto;
+}
+
+.nf-composite-frame .nf-ports-in {
+  left: 0;
+  transform: translateX(-50%);
+}
+
+.nf-composite-frame .nf-ports-out {
+  right: 0;
+  transform: translateX(50%);
+}
+
 /* ---------- 标签页(主画布 + 内部画布) ---------- */
 .tab-bar {
   display: flex;

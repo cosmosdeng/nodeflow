@@ -38,6 +38,13 @@ export function getNodeSize(n: FlowNode): { w: number; h: number } {
  * 输入端口 = 内部节点中没有内部连线连入的输入端口
  * 输出端口 = 内部节点中没有内部连线连出的输出端口
  */
+/**
+ * 计算塌缩态组合节点的聚合端口:
+ * 输入端口 = 内部节点中没有内部连线连入的输入端口
+ * 输出端口 = 内部节点中没有内部连线连出的输出端口
+ *
+ * 重名端口按「节点名.端口名」降级命名,避免聚合后无法区分来源。
+ */
 export function computeCompositePorts(
   children: FlowNode[],
   edges: FlowEdge[],
@@ -47,21 +54,44 @@ export function computeCompositePorts(
   const inTargets = new Set(innerEdges.map((e) => `${e.target}:${e.targetHandle}`));
   const outSources = new Set(innerEdges.map((e) => `${e.source}:${e.sourceHandle}`));
 
-  const inputs: PortDef[] = [];
-  const outputs: PortDef[] = [];
+  // 收集候选端口,先算出原始展示名,再处理重名
+  const candidates: { kind: 'input' | 'output'; ref: string; name: string; node: FlowNode }[] = [];
   for (const child of children) {
     for (const p of child.data.inputs ?? []) {
       if (!inTargets.has(`${child.id}:${p.id}`)) {
-        inputs.push({ id: encodeCompositePort(child.id, p.id), name: p.name });
+        candidates.push({
+          kind: 'input',
+          ref: encodeCompositePort(child.id, p.id),
+          name: p.name,
+          node: child,
+        });
       }
     }
     for (const p of child.data.outputs ?? []) {
       if (!outSources.has(`${child.id}:${p.id}`)) {
-        outputs.push({ id: encodeCompositePort(child.id, p.id), name: p.name });
+        candidates.push({
+          kind: 'output',
+          ref: encodeCompositePort(child.id, p.id),
+          name: p.name,
+          node: child,
+        });
       }
     }
   }
-  return { inputs, outputs };
+
+  // 对每个方向内统计重名,重名的端口用「节点名.端口名」区分
+  const disambiguate = (kind: 'input' | 'output'): PortDef[] => {
+    const group = candidates.filter((c) => c.kind === kind);
+    const nameCount = new Map<string, number>();
+    for (const c of group) nameCount.set(c.name, (nameCount.get(c.name) ?? 0) + 1);
+    return group.map((c) => {
+      const dup = (nameCount.get(c.name) ?? 0) > 1;
+      const name = dup && c.node.data.label ? `${c.node.data.label}.${c.name}` : c.name;
+      return { id: c.ref, name };
+    });
+  };
+
+  return { inputs: disambiguate('input'), outputs: disambiguate('output') };
 }
 
 /** 计算一组子节点的包围盒(用于展开态虚线框的定位与尺寸) */

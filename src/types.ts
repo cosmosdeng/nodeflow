@@ -80,6 +80,10 @@ export interface GraphSnapshot {
   nodes: FlowNode[];
   edges: FlowEdge[];
   viewport: ViewportState;
+  /** 快照创建时的组合标签页状态(用于撤销/重做时联动恢复) */
+  compositeTabs?: string[];
+  /** 快照创建时的激活标签页 id */
+  activeTabId?: string;
   /** 快照创建时间戳 */
   at?: number;
 }
