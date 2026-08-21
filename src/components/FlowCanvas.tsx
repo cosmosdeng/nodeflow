@@ -63,27 +63,42 @@ export default function FlowCanvas() {
   // 删除确认对话框
   const [confirmDialog, setConfirmDialog] = useState<ConfirmDialogState | null>(null);
   const closeConfirmDialog = useCallback(() => setConfirmDialog(null), []);
+  // 画布容器 ref,用于原生双击检测
+  const flowAreaRef = useRef<HTMLDivElement>(null);
 
-  // Delete / Backspace 删除前确认:通过 Promise 弹自定义对话框,确认才删除
+  // Delete / Backspace 删除前确认。
+  // React Flow 12 的 onBeforeDelete 对 Promise<boolean> 返回值处理不可靠(多选删除会失效),
+  // 因此此处始终返回 false 阻止 React Flow 自动删除,改为确认后手动删除待删除节点。
+  const pendingDeleteRef = useRef<FlowNode[]>([]);
   const handleBeforeDelete = useCallback(
     ({ nodes }: { nodes: FlowNode[] }) => {
       if (allLocked) return Promise.resolve(false);
-      if (!nodes.length) return Promise.resolve(true);
+      if (!nodes.length) return Promise.resolve(false);
+      pendingDeleteRef.current = nodes;
       const label =
         nodes.length > 1
           ? `确定删除选中的 ${nodes.length} 个节点?`
           : `确定删除节点「${nodes[0].data.label || '未命名'}」?`;
-      return new Promise<boolean>((resolve) => {
-        setConfirmDialog({
-          title: '删除确认',
-          message: `${label}\n撤销删除(Ctrl+Z)可还原节点及其连线关系。`,
-          confirmLabel: '删除',
-          cancelLabel: '取消',
-          danger: true,
-          onConfirm: () => resolve(true),
-          onCancel: () => resolve(false),
-        });
+      setConfirmDialog({
+        title: '删除确认',
+        message: `${label}\n撤销删除(Ctrl+Z)可还原节点及其连线关系。`,
+        confirmLabel: '删除',
+        cancelLabel: '取消',
+        danger: true,
+        onConfirm: () => {
+          // 确认后手动删除(store 会清理关联连线,撤销可完整还原)
+          const toDelete = pendingDeleteRef.current;
+          pendingDeleteRef.current = [];
+          toDelete.forEach((n) => {
+            const st = useGraphStore.getState();
+            if (st.nodes.some((x) => x.id === n.id)) st.deleteNode(n.id);
+          });
+        },
+        onCancel: () => {
+          pendingDeleteRef.current = [];
+        },
       });
+      return Promise.resolve(false); // 阻止 React Flow 自动删除,由 onConfirm 手动处理
     },
     [allLocked, setConfirmDialog],
   );
@@ -94,27 +109,7 @@ export default function FlowCanvas() {
   const { screenToFlowPosition, fitView } = useReactFlow();
   const isDark = theme === 'dark';
 
-  const handlePaneClick = useCallback(
-    (e: React.MouseEvent) => {
-      if (e.detail === 2) {
-        // 演示锁定时禁止双击新建节点
-        if (allLocked) return;
-        const pos = screenToFlowPosition({ x: e.clientX, y: e.clientY });
-        const st = useGraphStore.getState();
-        // 内部画布中新建节点时,原子地加入所属组合(创建 + childIds + 塌缩隐藏,
-        // 一次性记录历史,避免 addNode 后 setState 直改 hidden 绕过撤销栈)
-        const comp =
-          st.activeTabId !== 'main' ? st.nodes.find((n) => n.id === st.activeTabId) : null;
-        const id = comp?.data?.composite
-          ? addNodeToComposite(comp.id, pos)
-          : addNode(undefined, pos);
-        if (id) setSelected({ kind: 'node', id });
-      } else {
-        setSelected(null);
-      }
-    },
-    [addNode, addNodeToComposite, allLocked, setSelected, screenToFlowPosition],
-  );
+  const handlePaneClick = useCallback(() => setSelected(null), [setSelected]);
 
   /** 根据当前标签页过滤出实际渲染的节点与连线 */
   const { displayNodes, displayEdges } = useMemo(() => {
@@ -427,8 +422,49 @@ export default function FlowCanvas() {
     };
   }, []);
 
+  // 双击画布空白处创建节点:
+  // 用原生捕获阶段监听 pointerdown 计数(selectionOnDrag 会拦截 click/dblclick 事件,
+  // 导致 onPaneClick detail 与 onDoubleClick 均失效,但捕获阶段的 pointerdown 仍能收到)
+  useEffect(() => {
+    const el = flowAreaRef.current;
+    if (!el) return;
+    let last = 0;
+    let lastX = 0;
+    let lastY = 0;
+    const onPointerDown = (e: PointerEvent) => {
+      if (e.button !== 0) return;
+      // 排除节点内部(节点双击是编辑/选中)
+      if ((e.target as HTMLElement | null)?.closest?.('.react-flow__node')) {
+        last = 0;
+        return;
+      }
+      const now = Date.now();
+      const dx = Math.abs(e.clientX - lastX);
+      const dy = Math.abs(e.clientY - lastY);
+      if (now - last < 350 && dx < 6 && dy < 6) {
+        // 判定为双击画布
+        last = 0;
+        if (allLocked) return;
+        const pos = screenToFlowPosition({ x: e.clientX, y: e.clientY });
+        const st = useGraphStore.getState();
+        const comp =
+          st.activeTabId !== 'main' ? st.nodes.find((n) => n.id === st.activeTabId) : null;
+        const id = comp?.data?.composite
+          ? addNodeToComposite(comp.id, pos)
+          : addNode(undefined, pos);
+        if (id) setSelected({ kind: 'node', id });
+      } else {
+        last = now;
+        lastX = e.clientX;
+        lastY = e.clientY;
+      }
+    };
+    el.addEventListener('pointerdown', onPointerDown, true);
+    return () => el.removeEventListener('pointerdown', onPointerDown, true);
+  }, [addNode, addNodeToComposite, allLocked, screenToFlowPosition, setSelected]);
+
   return (
-    <div className="flow-area" onContextMenu={handleFlowContextMenu}>
+    <div ref={flowAreaRef} className="flow-area" onContextMenu={handleFlowContextMenu}>
       <ReactFlow<FlowNode, FlowEdge>
         key={activeTabId}
         nodes={displayNodes}
