@@ -36,7 +36,7 @@ jobs:
         run: bun run build
 
       - name: Package installers
-        run: node node_modules/electron-builder/out/cli/cli.js ${{ matrix.args }}
+        run: node node_modules/electron-builder/out/cli/cli.js --publish never ${{ matrix.args }}
         env:
           CSC_IDENTITY_AUTO_DISCOVERY: "false"
 
