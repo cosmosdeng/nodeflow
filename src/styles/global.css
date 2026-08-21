@@ -15,6 +15,35 @@
   --danger: #f0645a;
   --shadow: 0 6px 24px rgba(0, 0, 0, 0.45);
   --radius: 10px;
+  --dot: rgba(255, 255, 255, 0.055);
+  --edge-stroke: #7d8494;
+  --border-hover: #5a5f6e;
+  --handle-border: #0f1420;
+  --chip-bg: rgba(23, 24, 28, 0.92);
+  --chip-bg-strong: rgba(23, 24, 28, 0.96);
+}
+
+/* 浅色配色 */
+[data-theme='light'] {
+  --bg: #f4f5f8;
+  --bg-panel: #ffffff;
+  --bg-panel-2: #eceef3;
+  --bg-hover: #e3e6ec;
+  --border: #dcdfe6;
+  --border-strong: #c3c8d2;
+  --text: #1d2129;
+  --text-dim: #555d6b;
+  --text-faint: #8a91a0;
+  --accent: #2563eb;
+  --accent-soft: rgba(37, 99, 235, 0.12);
+  --danger: #dc2626;
+  --shadow: 0 6px 24px rgba(30, 40, 60, 0.14);
+  --dot: rgba(20, 25, 40, 0.09);
+  --edge-stroke: #9aa2b0;
+  --border-hover: #b6bdc9;
+  --handle-border: #ffffff;
+  --chip-bg: rgba(255, 255, 255, 0.95);
+  --chip-bg-strong: rgba(255, 255, 255, 0.97);
 }
 
 * {
@@ -131,7 +160,7 @@ body,
 
 .tb-btn.active {
   background: var(--accent-soft);
-  border-color: rgba(78, 161, 255, 0.5);
+  border-color: color-mix(in srgb, var(--accent) 50%, transparent);
   color: var(--accent);
 }
 
@@ -335,7 +364,7 @@ body,
 
 .list-item.selected {
   background: var(--accent-soft);
-  border-color: rgba(78, 161, 255, 0.45);
+  border-color: color-mix(in srgb, var(--accent) 45%, transparent);
 }
 
 .list-item .icon-wrap {
@@ -419,8 +448,7 @@ body,
 
 /* ---------- React Flow 画布覆盖 ---------- */
 .react-flow {
-  background:
-    radial-gradient(circle at 1px 1px, rgba(255, 255, 255, 0.055) 1px, transparent 0);
+  background: radial-gradient(circle at 1px 1px, var(--dot) 1px, transparent 0);
   background-size: 24px 24px;
   background-color: var(--bg);
 }
@@ -453,7 +481,7 @@ body,
 }
 
 .react-flow__edge-path {
-  stroke: #7d8494;
+  stroke: var(--edge-stroke);
   stroke-width: 2;
 }
 
@@ -488,12 +516,12 @@ body,
 }
 
 .nf-node:hover {
-  border-color: #5a5f6e;
+  border-color: var(--border-hover);
 }
 
 .nf-node.selected {
   border-color: var(--accent);
-  box-shadow: 0 0 0 2px rgba(78, 161, 255, 0.28), var(--shadow);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 28%, transparent), var(--shadow);
 }
 
 .nf-node .node-header {
@@ -601,11 +629,37 @@ body,
   margin-bottom: 2px;
 }
 
+/* 端口快捷添加按钮 */
+.nf-node .port-add {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: var(--bg-panel-2);
+  border: 1px dashed var(--border-strong);
+  color: var(--text-faint);
+  font-size: 13px;
+  line-height: 1;
+  cursor: pointer;
+  padding: 0;
+  margin: 2px auto 0;
+  transition: all 0.12s;
+}
+
+.nf-node .port-add:hover {
+  background: var(--accent);
+  border-color: var(--accent);
+  border-style: solid;
+  color: #0b1220;
+}
+
 .react-flow__handle {
   width: 10px;
   height: 10px;
   background: var(--accent);
-  border: 2px solid #0f1420;
+  border: 2px solid var(--handle-border);
   border-radius: 50%;
   transition: transform 0.12s;
 }
@@ -618,7 +672,7 @@ body,
 .nf-edge-label {
   font-size: 11px;
   color: var(--text-dim);
-  background: rgba(23, 24, 28, 0.92);
+  background: var(--chip-bg);
   border: 1px solid var(--border-strong);
   padding: 3px 8px;
   border-radius: 999px;
@@ -648,7 +702,7 @@ body,
   display: flex;
   align-items: center;
   gap: 6px;
-  background: rgba(23, 24, 28, 0.96);
+  background: var(--chip-bg-strong);
   border: 1px solid var(--border-strong);
   border-radius: 9px;
   padding: 4px 10px;

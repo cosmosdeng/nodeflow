@@ -17,11 +17,14 @@ import {
   type Artifact,
   type FlowNodeData,
   type FlowEdgeData,
+  type EdgeStyle,
+  type ThemeMode,
   createDefaultNode,
   uid,
 } from '../types';
 
 const SAVE_KEY = 'nodeflow:graph:v1';
+const PREFS_KEY = 'nodeflow:prefs:v1';
 const SAVE_DELAY = 600;
 
 export type Selection =
@@ -75,6 +78,12 @@ interface FlowStore extends GraphState {
   newDocument: () => void;
   saveNow: () => void;
   exportJson: () => string;
+
+  // ---- 全局偏好 ----
+  edgeStyle: EdgeStyle;
+  theme: ThemeMode;
+  setEdgeStyle: (style: EdgeStyle) => void;
+  setTheme: (theme: ThemeMode) => void;
 }
 
 /* ------------------------------------------------------------------ */
@@ -225,9 +234,36 @@ function loadSaved(): Partial<GraphSnapshot> | null {
   }
 }
 
+function loadPrefs(): { edgeStyle: EdgeStyle; theme: ThemeMode } | null {
+  try {
+    const raw = localStorage.getItem(PREFS_KEY);
+    if (!raw) return null;
+    const data = JSON.parse(raw);
+    if (data && (data.edgeStyle === 'smoothstep' || data.edgeStyle === 'bezier')) {
+      return {
+        edgeStyle: data.edgeStyle as EdgeStyle,
+        theme: data.theme === 'light' ? 'light' : 'dark',
+      };
+    }
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+function savePrefs() {
+  const { edgeStyle, theme } = useGraphStore.getState();
+  try {
+    localStorage.setItem(PREFS_KEY, JSON.stringify({ edgeStyle, theme }));
+  } catch {
+    /* 存储失败静默处理 */
+  }
+}
+
 let saveTimer: ReturnType<typeof setTimeout> | null = null;
 const stored = loadSaved();
 const seedGraph = buildSeedGraph();
+const prefs = loadPrefs();
 
 /* ------------------------------------------------------------------ */
 /* Store                                                               */
@@ -242,6 +278,8 @@ export const useGraphStore = create<FlowStore>()(
     selected: null,
     lastSavedAt: stored ? Date.now() : null,
     dirty: false,
+    edgeStyle: prefs?.edgeStyle ?? 'smoothstep',
+    theme: prefs?.theme ?? 'dark',
 
     onNodesChange: (changes) => {
       if (changes.some((c) => c.type === 'remove')) get().markHistory();
@@ -465,6 +503,15 @@ export const useGraphStore = create<FlowStore>()(
         null,
         2,
       );
+    },
+
+    setEdgeStyle: (style) => {
+      set({ edgeStyle: style });
+      savePrefs();
+    },
+    setTheme: (theme) => {
+      set({ theme });
+      savePrefs();
     },
   })),
 );

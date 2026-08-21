@@ -17,6 +17,12 @@ export default function App() {
   const nodesCount = useGraphStore((s) => s.nodes.length);
   const edgesCount = useGraphStore((s) => s.edges.length);
   const zoom = useGraphStore((s) => s.viewport.zoom);
+  const theme = useGraphStore((s) => s.theme);
+
+  // 应用全局配色主题到根元素
+  useEffect(() => {
+    document.documentElement.dataset.theme = theme;
+  }, [theme]);
 
   // 全局快捷键:撤销 / 重做 / 保存
   useEffect(() => {

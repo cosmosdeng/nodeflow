@@ -1,11 +1,26 @@
 import { memo } from 'react';
 import { Handle, Position, type NodeProps } from '@xyflow/react';
-import { ACTOR_META, type FlowNode } from '../types';
+import { ACTOR_META, uid, type FlowNode } from '../types';
 import { useGraphStore } from '../store/graphStore';
 
 function FlowNodeComponent({ id, data, selected }: NodeProps<FlowNode>) {
   const actor = ACTOR_META[data.actor];
   const setSelected = useGraphStore((s) => s.setSelected);
+  const updateNode = useGraphStore((s) => s.updateNode);
+
+  const addInput = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    updateNode(id, {
+      inputs: [...data.inputs, { id: uid('in'), name: `输入${data.inputs.length + 1}` }],
+    });
+  };
+
+  const addOutput = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    updateNode(id, {
+      outputs: [...data.outputs, { id: uid('out'), name: `输出${data.outputs.length + 1}` }],
+    });
+  };
 
   return (
     <div
@@ -53,6 +68,13 @@ function FlowNodeComponent({ id, data, selected }: NodeProps<FlowNode>) {
               <span className="port-label">{p.name || '输入'}</span>
             </div>
           ))}
+          <button
+            className="port-add"
+            title="添加输入端口"
+            onClick={addInput}
+          >
+            +
+          </button>
         </div>
         <div className="node-ports">
           {data.outputs.length > 0 && (
@@ -71,6 +93,13 @@ function FlowNodeComponent({ id, data, selected }: NodeProps<FlowNode>) {
               />
             </div>
           ))}
+          <button
+            className="port-add"
+            title="添加输出端口"
+            onClick={addOutput}
+          >
+            +
+          </button>
         </div>
       </div>
     </div>

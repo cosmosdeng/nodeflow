@@ -6,6 +6,22 @@ export type ActorType = 'human' | 'machine' | 'hybrid';
 /** 中间产物类型 */
 export type ArtifactKind = 'document' | 'image' | 'video' | 'audio' | 'code' | 'data' | 'other';
 
+/** 连线显示风格 */
+export type EdgeStyle = 'smoothstep' | 'bezier';
+
+/** 画布配色主题 */
+export type ThemeMode = 'dark' | 'light';
+
+export const EDGE_STYLE_LABELS: Record<EdgeStyle, string> = {
+  smoothstep: '直角',
+  bezier: '弧线',
+};
+
+export const THEME_LABELS: Record<ThemeMode, string> = {
+  dark: '深色',
+  light: '浅色',
+};
+
 /** 节点的输入/输出端口描述 */
 export interface PortDef {
   id: string;

@@ -1,7 +1,13 @@
 import { useRef, useState } from 'react';
 import { useReactFlow } from '@xyflow/react';
 import { useGraphStore } from '../store/graphStore';
-import type { GraphSnapshot } from '../types';
+import {
+  EDGE_STYLE_LABELS,
+  THEME_LABELS,
+  type EdgeStyle,
+  type GraphSnapshot,
+  type ThemeMode,
+} from '../types';
 
 interface Props {
   showOutline: boolean;
@@ -27,6 +33,20 @@ export default function Toolbar({
   const futureLen = useGraphStore((s) => s.future.length);
   const dirty = useGraphStore((s) => s.dirty);
   const lastSavedAt = useGraphStore((s) => s.lastSavedAt);
+  const edgeStyle = useGraphStore((s) => s.edgeStyle);
+  const setEdgeStyle = useGraphStore((s) => s.setEdgeStyle);
+  const theme = useGraphStore((s) => s.theme);
+  const setTheme = useGraphStore((s) => s.setTheme);
+
+  const cycleEdgeStyle = () => {
+    const next: EdgeStyle = edgeStyle === 'smoothstep' ? 'bezier' : 'smoothstep';
+    setEdgeStyle(next);
+  };
+
+  const cycleTheme = () => {
+    const next: ThemeMode = theme === 'dark' ? 'light' : 'dark';
+    setTheme(next);
+  };
 
   const undo = useGraphStore((s) => s.undo);
   const redo = useGraphStore((s) => s.redo);
@@ -168,6 +188,19 @@ export default function Toolbar({
       </button>
       <button className={`tb-btn ${showHistory ? 'active' : ''}`} onClick={onToggleHistory}>
         🕘 历史
+      </button>
+
+      <span className="sep" />
+
+      <button
+        className="tb-btn"
+        title="切换连线风格(直角/弧线)"
+        onClick={cycleEdgeStyle}
+      >
+        {edgeStyle === 'bezier' ? '〰' : '⤢'} {EDGE_STYLE_LABELS[edgeStyle]}
+      </button>
+      <button className="tb-btn" title="切换画布配色" onClick={cycleTheme}>
+        {theme === 'dark' ? '🌙' : '☀️'} {THEME_LABELS[theme]}
       </button>
 
       <div className="toolbar-right">

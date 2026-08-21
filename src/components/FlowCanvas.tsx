@@ -30,8 +30,10 @@ export default function FlowCanvas() {
   const setSelected = useGraphStore((s) => s.setSelected);
   const addNode = useGraphStore((s) => s.addNode);
   const markHistory = useGraphStore((s) => s.markHistory);
+  const theme = useGraphStore((s) => s.theme);
 
   const { screenToFlowPosition } = useReactFlow();
+  const isDark = theme === 'dark';
 
   const handlePaneClick = useCallback(
     (e: React.MouseEvent) => {
@@ -82,7 +84,12 @@ export default function FlowCanvas() {
         maxZoom={3}
         proOptions={{ hideAttribution: true }}
       >
-        <Background variant={BackgroundVariant.Dots} gap={24} size={1} color="#2c2f38" />
+        <Background
+          variant={BackgroundVariant.Dots}
+          gap={24}
+          size={1}
+          color={isDark ? '#2c2f38' : '#c9cdd6'}
+        />
         <Controls position="bottom-right" />
         <MiniMap
           position="bottom-left"
@@ -94,8 +101,8 @@ export default function FlowCanvas() {
             if (actor === 'hybrid') return '#9d6bff';
             return '#4ea1ff';
           }}
-          nodeStrokeColor="#9aa0ad"
-          maskColor="rgba(23,24,28,0.7)"
+          nodeStrokeColor={isDark ? '#9aa0ad' : '#7d8590'}
+          maskColor={isDark ? 'rgba(23,24,28,0.7)' : 'rgba(220,225,235,0.75)'}
         />
       </ReactFlow>
     </div>

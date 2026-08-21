@@ -434,7 +434,7 @@ export default function PropertiesPanel({ onClose }: { onClose: () => void }) {
     <aside className="panel right" style={{ width: 300 }}>
       <div className="panel-header">
         <span>{title}</span>
-        <button className="panel-close" onClick={() => setSelected(null)} title="关闭属性面板">
+        <button className="panel-close" onClick={onClose} title="关闭属性面板">
           ×
         </button>
       </div>

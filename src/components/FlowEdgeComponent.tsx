@@ -3,6 +3,7 @@ import {
   BaseEdge,
   EdgeLabelRenderer,
   getSmoothStepPath,
+  getBezierPath,
   type EdgeProps,
 } from '@xyflow/react';
 import { ARTIFACT_META, uid, type FlowEdge } from '../types';
@@ -21,17 +22,29 @@ function FlowEdgeComponent({
 }: EdgeProps<FlowEdge>) {
   const setSelected = useGraphStore((s) => s.setSelected);
   const setArtifact = useGraphStore((s) => s.setArtifact);
+  const edgeStyle = useGraphStore((s) => s.edgeStyle);
   const artifact = data?.artifact ?? null;
 
-  const [path, labelX, labelY] = getSmoothStepPath({
-    sourceX,
-    sourceY,
-    sourcePosition,
-    targetX,
-    targetY,
-    targetPosition,
-    borderRadius: 12,
-  });
+  const [path, labelX, labelY] =
+    edgeStyle === 'bezier'
+      ? getBezierPath({
+          sourceX,
+          sourceY,
+          sourcePosition,
+          targetX,
+          targetY,
+          targetPosition,
+          curvature: 0.45,
+        })
+      : getSmoothStepPath({
+          sourceX,
+          sourceY,
+          sourcePosition,
+          targetX,
+          targetY,
+          targetPosition,
+          borderRadius: 12,
+        });
 
   const label = data?.label ?? '';
   const isEdgeActive = selected;
