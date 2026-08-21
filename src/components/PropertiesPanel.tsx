@@ -11,6 +11,7 @@ import {
 } from '../types';
 import { useGraphStore } from '../store/graphStore';
 import { computeCompositePorts } from '../lib/composite';
+import ActorIcon from './ActorIcon';
 
 /* ---------------- 基础控件 ---------------- */
 
@@ -217,7 +218,7 @@ function NodeProperties({ nodeId }: { nodeId: string }) {
                 disabled={disabled}
                 onClick={() => updateNode(nodeId, { actor: a })}
               >
-                <span style={{ fontSize: 16 }}>{meta.icon}</span>
+                <ActorIcon actor={a} size={22} />
                 {meta.label}
               </button>
             );

@@ -393,15 +393,13 @@ body,
   border-color: color-mix(in srgb, var(--accent) 45%, transparent);
 }
 
+/* 由 ActorIcon 组件控制尺寸,保留背景与对齐 */
 .list-item .icon-wrap {
-  width: 28px;
-  height: 28px;
-  border-radius: 7px;
-  display: flex;
+  display: inline-flex;
   align-items: center;
   justify-content: center;
-  font-size: 14px;
   flex-shrink: 0;
+  border-radius: 7px;
 }
 
 .list-item .li-main {
@@ -479,10 +477,15 @@ body,
 }
 
 /* ---------- React Flow 画布覆盖 ---------- */
+/* 只保留纯背景色,点阵由 <Background variant={Dots}> 组件渲染(随缩放正确变换)。
+   移除固定的 radial-gradient 点阵,避免出现两层点阵(一层固定、一层随缩放)叠加。 */
 .react-flow {
-  background: radial-gradient(circle at 1px 1px, var(--dot) 1px, transparent 0);
-  background-size: 24px 24px;
   background-color: var(--bg);
+}
+
+/* 节点默认禁止选中文字,保证单击拖拽节点不会误选文字;contentEditable 编辑态内部仍可正常选择 */
+.react-flow__node {
+  user-select: none;
 }
 
 .react-flow__minimap {
@@ -583,14 +586,11 @@ body,
   border-bottom: 1px solid var(--border);
 }
 
+/* 由 ActorIcon 组件控制尺寸,仅保留 flex 对齐 */
 .nf-node .node-actor {
-  width: 26px;
-  height: 26px;
-  border-radius: 7px;
-  display: flex;
+  display: inline-flex;
   align-items: center;
   justify-content: center;
-  font-size: 14px;
   flex-shrink: 0;
 }
 
@@ -623,16 +623,14 @@ body,
 }
 
 .nf-node .node-actor-btn {
-  width: 24px;
-  height: 24px;
+  padding: 2px;
   border-radius: 7px;
   border: 1px solid transparent;
-  display: flex;
+  background: transparent;
+  display: inline-flex;
   align-items: center;
   justify-content: center;
-  font-size: 13px;
   cursor: pointer;
-  padding: 0;
   transition: transform 0.12s, box-shadow 0.12s;
 }
 
@@ -1022,7 +1020,7 @@ body,
 /* ---------- 内联编辑文本 ---------- */
 .nf-editable {
   outline: none;
-  cursor: text;
+  cursor: default;
   border-radius: 5px;
 }
 
@@ -1033,6 +1031,8 @@ body,
   white-space: pre-wrap;
   overflow: visible;
   text-overflow: clip;
+  /* 编辑态允许选择文字(父级 .react-flow__node 为 user-select:none) */
+  user-select: text;
 }
 
 .nf-editable:empty::before {
@@ -1245,6 +1245,27 @@ body,
   gap: 4px;
 }
 
+/* ---------- 执行主体图标(基于 assets/actors/ PNG) ---------- */
+.actor-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  overflow: hidden;
+  flex-shrink: 0;
+  vertical-align: middle;
+  line-height: 0;
+  background: transparent;
+}
+
+.actor-icon img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+  pointer-events: none;
+}
+
 /* ---------- 导入导出菜单 ---------- */
 .file-actions {
   position: absolute;
@@ -1286,4 +1307,139 @@ body,
 
 .file-actions button:disabled:hover {
   background: none;
+}
+
+/* ---------- 左上角半透明操作提示框 ---------- */
+.nf-hint {
+  width: 212px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--bg-panel-2) 82%, transparent);
+  border: 1px solid var(--border);
+  box-shadow: var(--shadow);
+  backdrop-filter: blur(6px);
+  font-size: 11.5px;
+  color: var(--text-dim);
+  user-select: none;
+}
+
+.nf-hint-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 6px;
+}
+
+.nf-hint-title {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text);
+}
+
+.nf-hint-btn {
+  width: 20px;
+  height: 20px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-dim);
+  font-size: 12px;
+  line-height: 1;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.nf-hint-btn:hover {
+  background: var(--bg-hover);
+  color: var(--text);
+}
+
+.nf-hint-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.nf-hint-list b {
+  color: var(--text);
+  font-weight: 600;
+}
+
+/* 缩小后的触发胶囊 */
+.nf-hint-trigger {
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  border: 1px solid var(--border);
+  background: color-mix(in srgb, var(--bg-panel-2) 82%, transparent);
+  backdrop-filter: blur(6px);
+  box-shadow: var(--shadow);
+  color: var(--text);
+  font-size: 14px;
+  font-weight: 700;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.nf-hint-trigger:hover {
+  background: var(--bg-hover);
+}
+
+/* ---------- 右键上下文菜单 ---------- */
+.nf-context-menu {
+  position: fixed;
+  z-index: 1000;
+  min-width: 172px;
+  padding: 5px;
+  background: var(--bg-panel-2);
+  border: 1px solid var(--border-strong);
+  border-radius: 10px;
+  box-shadow: var(--shadow-lg, 0 8px 24px rgba(0, 0, 0, 0.35));
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  user-select: none;
+}
+
+.nf-context-item {
+  border: none;
+  background: transparent;
+  color: var(--text);
+  font-size: 12.5px;
+  text-align: left;
+  padding: 7px 10px;
+  border-radius: 6px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.nf-context-item:hover:not(:disabled) {
+  background: var(--bg-hover);
+}
+
+.nf-context-item:disabled {
+  color: var(--text-faint);
+  cursor: default;
+  opacity: 0.55;
+}
+
+.nf-context-item.danger {
+  color: #e5484d;
+}
+
+.nf-context-item.danger:hover:not(:disabled) {
+  background: color-mix(in srgb, #e5484d 14%, transparent);
+}
+
+.nf-context-divider {
+  height: 1px;
+  margin: 4px 6px;
+  background: var(--border);
 }

@@ -91,6 +91,8 @@ interface FlowStore extends GraphState {
   // ---- 节点操作 ----
   addNode: (data?: Partial<FlowNodeData>, position?: { x: number; y: number }) => string;
   updateNode: (id: string, patch: Partial<FlowNodeData>) => void;
+  /** 设置节点是否可拖拽(用于内联编辑态临时禁用拖拽,不写历史) */
+  setNodeDraggable: (id: string, draggable: boolean) => void;
   deleteNode: (id: string) => void;
   duplicateNode: (id: string) => void;
 
@@ -870,6 +872,12 @@ export const useGraphStore = create<FlowStore>()(
         nodes: s.nodes.map((n) =>
           n.id === id ? { ...n, data: { ...n.data, ...patch } } : n,
         ),
+      }));
+    },
+    setNodeDraggable: (id, draggable) => {
+      // 编辑临时态,不写历史、不检查锁定(锁定态本就不可拖)
+      set((s) => ({
+        nodes: s.nodes.map((n) => (n.id === id ? { ...n, draggable } : n)),
       }));
     },
     deleteNode: (id) => {

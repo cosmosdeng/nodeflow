@@ -1,9 +1,10 @@
-import { memo, useEffect, useMemo, useRef } from 'react';
+import { memo, useEffect, useMemo, useRef, useState } from 'react';
 import { Handle, Position, type NodeProps } from '@xyflow/react';
 import { ACTOR_META, uid, type ActorType, type FlowNode, type PortDef } from '../types';
 import { computeCompositePorts } from '../lib/composite';
 import { openCompositePopup } from '../lib/compositePopup';
 import { useGraphStore } from '../store/graphStore';
+import ActorIcon from './ActorIcon';
 
 /* ------------------------------------------------------------------ */
 /* 可内联编辑的文本:单击进入编辑(显示外框),光标可定位,失焦/回车提交       */
@@ -16,6 +17,8 @@ interface EditableTextProps {
   disabled?: boolean;
   className?: string;
   title?: string;
+  /** 进入/退出编辑态时回调(供节点临时禁用拖拽,避免编辑时拖动选择文字误拖节点) */
+  onEditingChange?: (editing: boolean) => void;
 }
 
 function EditableText({
@@ -26,19 +29,25 @@ function EditableText({
   disabled,
   className,
   title,
+  onEditingChange,
 }: EditableTextProps) {
   const ref = useRef<HTMLDivElement>(null);
-  const editingRef = useRef(false);
+  const [editing, setEditing] = useState(false);
 
   // 外部值变化且当前不在编辑时,把最新值同步进 DOM(contentEditable 不受控)
   useEffect(() => {
-    if (ref.current && !editingRef.current && ref.current.innerText !== value) {
+    if (ref.current && !editing && ref.current.innerText !== value) {
       ref.current.innerText = value;
     }
-  }, [value]);
+  }, [value, editing]);
+
+  const exitEditing = () => {
+    setEditing(false);
+    onEditingChange?.(false);
+  };
 
   const commit = () => {
-    editingRef.current = false;
+    exitEditing();
     const el = ref.current;
     if (!el) return;
     let next = el.innerText;
@@ -50,32 +59,67 @@ function EditableText({
     if (next !== value) onCommit(next);
     // 无论是否提交,把 DOM 重置为最终值,清掉编辑留下的多余空行/占位符
     el.innerText = next;
+    el.blur();
   };
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
     if (e.key === 'Enter' && !multiline) {
       e.preventDefault();
-      e.currentTarget.blur();
+      commit();
     } else if (e.key === 'Escape') {
       e.preventDefault();
       const el = e.currentTarget;
       el.innerText = value;
+      exitEditing();
       el.blur();
     }
   };
+
+  /**
+   * 双击进入编辑:切换 contentEditable 并聚焦,把光标定位到点击处。
+   * 未进入编辑(单击)时不做任何阻止,让 pointerdown 正常冒泡给节点以便拖拽。
+   */
+  const handleDoubleClick = (e: React.MouseEvent<HTMLDivElement>) => {
+    if (disabled) return;
+    e.stopPropagation();
+    const el = ref.current;
+    if (!el) return;
+    setEditing(true);
+    onEditingChange?.(true);
+    // contentEditable 变为 true 后聚焦并保留双击选择
+    el.focus();
+  };
+
+  // 原生捕获阶段拦截 pointerdown,阻止 React Flow 的 d3 节点拖拽启动
+  // (React 合成事件的 stopPropagation 无法阻止 d3 原生监听,捕获阶段可以):
+  // - 单击:第一次 pointerdown 放行,节点可拖拽
+  // - 双击第二下:检测到 300ms 内的快速连点,拦截该 pointerdown,阻止 d3 启动节点拖拽,
+  //   从而双击进入编辑后按住拖动只选择文字,不会拖节点
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    let lastDown = 0;
+    const onDown = (e: PointerEvent) => {
+      const now = Date.now();
+      if (now - lastDown < 300) {
+        e.stopPropagation();
+      }
+      lastDown = now;
+    };
+    el.addEventListener('pointerdown', onDown, true);
+    return () => el.removeEventListener('pointerdown', onDown, true);
+  }, []);
 
   return (
     <div
       ref={ref}
       className={[className, 'nf-editable'].filter(Boolean).join(' ')}
-      contentEditable={!disabled}
+      contentEditable={editing && !disabled}
       suppressContentEditableWarning
       data-placeholder={placeholder}
       title={title}
       spellCheck={false}
-      onFocus={() => {
-        editingRef.current = true;
-      }}
+      onDoubleClick={handleDoubleClick}
       onBlur={commit}
       onKeyDown={handleKeyDown}
     />
@@ -92,6 +136,7 @@ function FlowNodeComponent({ id, data, selected }: NodeProps<FlowNode>) {
   const disabled = locked || allLocked;
   const setSelected = useGraphStore((s) => s.setSelected);
   const updateNode = useGraphStore((s) => s.updateNode);
+  const setNodeDraggable = useGraphStore((s) => s.setNodeDraggable);
   const edges = useGraphStore((s) => s.edges);
   const allNodes = useGraphStore((s) => s.nodes);
   const toggleComposite = useGraphStore((s) => s.toggleComposite);
@@ -189,30 +234,25 @@ function FlowNodeComponent({ id, data, selected }: NodeProps<FlowNode>) {
       >
         {/* 头部:主体图标 + 可编辑标题 + 右上角主体轮换按钮/锁定按钮 */}
         <div className="node-header">
-          <span
-            className="node-actor"
-            style={{ background: actor.bg, color: actor.color }}
-            title={`执行主体:${actor.label}`}
-          >
-            {actor.icon}
-          </span>
+          <ActorIcon actor={data.actor} size={22} className="node-actor" title={`执行主体:${actor.label}`} />
           <EditableText
             className="node-title"
             value={data.label}
             placeholder="未命名节点"
             disabled={disabled}
             onCommit={(v) => updateNode(id, { label: v })}
+            onEditingChange={(editing) => setNodeDraggable(id, !editing)}
             title={data.label || '未命名节点'}
           />
           <div className="node-actions">
             <button
               className="node-actor-btn"
-              style={{ background: actor.bg, color: actor.color }}
+              style={{ color: actor.color }}
               onClick={cycleActor}
               disabled={disabled}
               title={disabled ? '演示模式已锁定' : `执行主体:${actor.label} · 点击轮换`}
             >
-              {actor.icon}
+              <ActorIcon actor={data.actor} size={19} />
             </button>
             <button
               className={`node-lock-btn ${locked ? 'locked' : ''}`}
@@ -225,7 +265,7 @@ function FlowNodeComponent({ id, data, selected }: NodeProps<FlowNode>) {
           </div>
         </div>
 
-        {/* 描述:单击直接编辑 */}
+        {/* 描述:双击编辑 */}
         <EditableText
           className="node-desc"
           value={data.description}
@@ -233,7 +273,8 @@ function FlowNodeComponent({ id, data, selected }: NodeProps<FlowNode>) {
           multiline
           disabled={disabled}
           onCommit={(v) => updateNode(id, { description: v })}
-          title={disabled ? undefined : '单击编辑描述'}
+          onEditingChange={(editing) => setNodeDraggable(id, !editing)}
+          title={disabled ? undefined : '双击编辑描述'}
         />
 
         {/* 端口区:输入在左,输出在右 */}
@@ -255,6 +296,7 @@ function FlowNodeComponent({ id, data, selected }: NodeProps<FlowNode>) {
                   placeholder="输入"
                   disabled={disabled}
                   onCommit={(v) => renameInput(p.id, v)}
+                  onEditingChange={(editing) => setNodeDraggable(id, !editing)}
                 />
               </div>
             ))}
@@ -281,6 +323,7 @@ function FlowNodeComponent({ id, data, selected }: NodeProps<FlowNode>) {
                   placeholder="输出"
                   disabled={disabled}
                   onCommit={(v) => renameOutput(p.id, v)}
+                  onEditingChange={(editing) => setNodeDraggable(id, !editing)}
                 />
                 <Handle
                   id={p.id}
@@ -414,17 +457,18 @@ function FlowNodeComponent({ id, data, selected }: NodeProps<FlowNode>) {
           placeholder="未命名组合"
           disabled={disabled}
           onCommit={(v) => updateNode(id, { label: v })}
+          onEditingChange={(editing) => setNodeDraggable(id, !editing)}
           title={data.label || '未命名组合'}
         />
         <div className="node-actions">
           <button
             className="node-actor-btn"
-            style={{ background: actor.bg, color: actor.color }}
+            style={{ color: actor.color }}
             onClick={cycleActor}
             disabled={disabled}
             title={disabled ? '演示模式已锁定' : `执行主体:${actor.label} · 点击轮换`}
           >
-            {actor.icon}
+            <ActorIcon actor={data.actor} size={19} />
           </button>
           <button
             className="node-ctl-btn"
@@ -460,7 +504,8 @@ function FlowNodeComponent({ id, data, selected }: NodeProps<FlowNode>) {
         multiline
         disabled={disabled}
         onCommit={(v) => updateNode(id, { description: v })}
-        title={disabled ? undefined : '单击编辑描述'}
+        onEditingChange={(editing) => setNodeDraggable(id, !editing)}
+        title={disabled ? undefined : '双击编辑描述'}
       />
 
       {/* 聚合端口:自动来自内部节点,只读显示 */}

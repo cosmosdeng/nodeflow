@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react';
 import { useReactFlow } from '@xyflow/react';
 import { ACTOR_META, ACTOR_KINDS, type ActorType } from '../types';
 import { useGraphStore } from '../store/graphStore';
+import ActorIcon from './ActorIcon';
 
 interface Props {
   onClose: () => void;
@@ -42,7 +43,7 @@ export default function OutlinePanel({ onClose }: Props) {
     const comps = filtered.filter((n) => n.data.composite);
     const actorGroups = ACTOR_KINDS.map((a: ActorType) => ({
       key: a as string,
-      title: `${ACTOR_META[a].icon} ${ACTOR_META[a].label}节点`,
+      title: `${ACTOR_META[a].label}节点`,
       items: filtered.filter((n) => n.data.actor === a && !n.data.composite),
     })).filter((g) => g.items.length > 0);
     if (comps.length)
@@ -130,10 +131,10 @@ export default function OutlinePanel({ onClose }: Props) {
                     style={
                       composite
                         ? { background: 'color-mix(in srgb, var(--accent) 20%, transparent)', color: 'var(--accent)' }
-                        : { background: actor.bg, color: actor.color }
+                        : undefined
                     }
                   >
-                    {composite ? '⧉' : actor.icon}
+                    {composite ? '⧉' : <ActorIcon actor={n.data.actor} size={22} />}
                   </span>
                   <span className="li-main">
                     <span className="li-title">{n.data.label || '未命名节点'}</span>

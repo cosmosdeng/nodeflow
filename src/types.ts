@@ -97,11 +97,11 @@ export interface GraphState {
 /** 人工 / 机器 / 人机协同 标签的图标与颜色配置 */
 export const ACTOR_META: Record<
   ActorType,
-  { label: string; color: string; bg: string; icon: string }
+  { label: string; color: string; bg: string }
 > = {
-  human: { label: '人工', color: '#e8b028', bg: 'rgba(232,176,40,.14)', icon: '👤' },
-  machine: { label: '机器', color: '#4ea1ff', bg: 'rgba(78,161,255,.14)', icon: '🤖' },
-  hybrid: { label: '人机协同', color: '#9d6bff', bg: 'rgba(157,107,255,.14)', icon: '🤝' },
+  human: { label: '人工', color: '#e8b028', bg: 'rgba(232,176,40,.14)' },
+  machine: { label: '机器', color: '#4ea1ff', bg: 'rgba(78,161,255,.14)' },
+  hybrid: { label: '人机协同', color: '#9d6bff', bg: 'rgba(157,107,255,.14)' },
 };
 
 /** 中间产物类型的元信息 */
