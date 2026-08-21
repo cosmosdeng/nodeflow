@@ -101,8 +101,8 @@ interface Artifact {
 
 ## 已知问题
 
-1. **属性面板聚合端口为快照**:塌缩组合写入 `data.inputs/outputs` 的是聚合端口快照;内部画布新增/删除内部连线后,`refreshCompositeHidden` 会同步刷新,但极端时序下可能与画布实时计算值不一致。
-2. **删除子节点可能遗留悬空外部连线**:塌缩状态下删除某子节点后,指向其 `cid:` 端口的外部连线不会被自动清理(连线已改写为指向组合节点)。
-3. **内部画布新建节点的隐藏状态绕开历史**:在内部画布双击新建节点时,通过 `useGraphStore.setState` 直接修改 `hidden`,不单独记录历史条目。
+1. ~~**属性面板聚合端口为快照**~~(已修复):属性面板聚合输入/输出已改为实时调用 `computeCompositePorts`,与画布展示统一为单一数据源。
+2. ~~**删除子节点可能遗留悬空外部连线**~~(已修复):`deleteNode` 与删除连线过滤逻辑通过 `edgeReferencesNode` 解码 `cid:` 端口,引用被删子节点的悬空连线会自动清理。
+3. ~~**内部画布新建节点的隐藏状态绕开历史**~~(已修复):内部画布双击新建节点改走 `addNodeToComposite` action,「创建节点 + 加入 childIds + 塌缩态隐藏」合并为一次原子历史记录。
 4. **展开态组合节点无自身端口**:展开为虚线框时不渲染聚合 Handle,此时无法从画布直接对外连线;需塌缩后才可通过聚合端口连接。
-5. **聚合端口快照与实时计算双源**:`collapseComposite` 写入 `data.inputs/outputs`,而节点渲染与折叠判定使用 `computeCompositePorts` 实时结果,二者以实时计算为准,写入仅用于属性面板展示。
+5. **聚合端口快照冗余写入**:`collapseComposite` / `refreshCompositeHidden` 仍向 `data.inputs/outputs` 写入聚合端口快照,现仅作数据冗余与导出兼容,展示与画布均以 `computeCompositePorts` 实时计算为准;可逐步移除快照写入。

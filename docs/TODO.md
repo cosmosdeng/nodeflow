@@ -4,17 +4,15 @@
 
 ## P0 · 正确性缺陷
 
-- [ ] **塌缩状态删除子节点后清理悬空外部连线**
-  场景:组合塌缩后,通过内部画布/外部操作删除某子节点,指向其 `cid:` 端口的连线(已改写为指向组合节点)不会自动清理。
-  方案:删除节点时,遍历 `edges` 解码 `cid:` 端口,若 childId 已被删除则一并移除该连线。
+- [x] **塌缩状态删除子节点后清理悬空外部连线**(已完成)
+  - 修复:`graphStore.ts` 新增 `edgeReferencesNode` 辅助函数,`deleteNode` 与 `onNodesChange` 删除分支在过滤连线时解码 `cid:` 端口,引用被删子节点的悬空连线一并清理;删除后统一 `refreshCompositeHidden` 刷新聚合端口与隐藏状态。
 
-- [ ] **聚合端口快照与实时计算的一致性**
-  场景:`collapseComposite` 写入 `data.inputs/outputs` 快照供属性面板展示,画布渲染用 `computeCompositePorts` 实时计算;内部画布增删连线后若未及时 `refreshCompositeHidden`,二者会不一致。
-  方案:统一以实时计算为唯一数据源,属性面板改为直接调用 `computeCompositePorts`,逐步移除快照写入。
+- [x] **聚合端口快照与实时计算的一致性**(已完成,展示侧)
+  - 修复:`PropertiesPanel.tsx` 聚合输入/输出改为实时调用 `computeCompositePorts`,与画布展示统一为单一数据源。
+  - 遗留(后续清理):`collapseComposite` / `refreshCompositeHidden` 仍向 `data.inputs/outputs` 写入快照,现仅作数据冗余与导出兼容,可逐步移除。
 
-- [ ] **内部画布新建节点绕开历史记录**
-  场景:内部画布双击新建节点通过 `useGraphStore.setState` 直接修改 `hidden`,不产生历史条目,撤销行为不一致。
-  方案:统一走历史记录的 actions(如 `addNode` + 隐藏标记)。
+- [x] **内部画布新建节点绕开历史记录**(已完成)
+  - 修复:新增 store action `addNodeToComposite(compositeId, position)`,原子完成「创建节点 + 加入 childIds + 塌缩态隐藏」并一次性记录历史;`FlowCanvas` 内部画布双击新建改走该 action,不再 `setState` 直改 `hidden`。
 
 ## P1 · 体验与健壮性
 

@@ -49,10 +49,8 @@ decodeCompositePort(portId)         // => { childId, portId } | null
 
 ### 3.2 快照与实时计算
 
-- `collapseComposite` 会把聚合端口写入 `data.inputs / data.outputs`(**快照**,供属性面板只读展示)。
-- 画布渲染时用 `computeCompositePorts` **实时计算**聚合端口。
-- 二者可能短暂不同步:内部画布增删连线后,`refreshCompositeHidden` 会同步刷新快照。
-- **以实时计算为准**,快照仅用于展示。
+- 画布渲染(`FlowNodeComponent`)与属性面板(`PropertiesPanel`)均通过 `computeCompositePorts` **实时计算**聚合端口,二者使用同一数据源,不会不一致。
+- `collapseComposite` / `refreshCompositeHidden` 仍会向 `data.inputs / data.outputs` 写入聚合端口**快照**,但现仅作数据冗余与导出兼容,**不再参与展示**;可逐步移除。
 
 ## 4. 状态转换
 
@@ -113,7 +111,7 @@ decodeCompositePort(portId)         // => { childId, portId } | null
 | 弹窗 (Popup) | 独立窗口 | `openCompositePopup`,通过 localStorage 快照只读展示 |
 
 - 内部画布同样使用 `FlowCanvas` + ReactFlow,渲染 `childIds` 对应的子节点与内部连线。
-- 在内部画布新建节点时,节点需标记 `hidden: true`(在主画布隐藏),并写入组合的 `childIds`。
+- 在内部画布新建节点通过 store action `addNodeToComposite(compositeId, position)` 原子完成:创建节点、写入组合 `childIds`、塌缩态自动标记 `hidden: true`(在主画布隐藏),并合并为一次历史记录。
 - 标签页与历史联动:撤销 / 重做 / 跳转历史时同步重置 `compositeTabs / activeTabId`,避免指向不存在的组合。
 
 ## 6. 设计原则(汇总)
