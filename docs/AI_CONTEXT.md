@@ -110,7 +110,8 @@ interface Artifact {
 - 画布菜单:添加节点 / 锁定全部 / 连线风格 / 显示全部节点 / 保存 / 另存为(导出 JSON)。
 - 执行主体图标用 `assets/actors/` 下的角色图(戴眼镜小人 / 机器人 / 人机协同合影),由 `ActorIcon` 渲染为圆形裁剪。
 - **连线快速建节点**:从输出端口拖线到画布空白 → 创建新节点并连到其输入;从输入端口拖线到空白 → 创建新节点并从其输出连回(经 `onConnectEnd` 实现,新节点在拖放位置并自动选中)。
-- **删除确认**:右键菜单删除与 Delete/Backspace 键删除均经 `ConfirmDialog` 模态确认(Delete 键通过 `onBeforeDelete` Promise);演示模式禁用。
+- **删除确认**:右键菜单删除与 Delete/Backspace 键删除均经 `ConfirmDialog` 模态确认。Delete 键经 `onBeforeDelete` 始终返回 false 阻止 React Flow 自动删除,确认后手动调用 `deleteNode` 逐个删除(React Flow 12 的 `onBeforeDelete` Promise<boolean> 返回值多选删除不可靠);演示模式禁用。
+- **双击画布建节点**:`selectionOnDrag` 会拦截 pane 的 click/dblclick,改用画布容器原生捕获阶段监听 `pointerdown` 计数检测双击;双击节点文字仍进入编辑。
 - **端口颜色**:端口连接状态按「节点 id + 端口 id」精确匹配(`connectedHandles`),未连接桔色 / 已连接绿色;同名默认端口(`in_1`/`out_1`)不会跨节点误判。
 - **撤销删除还原连线**:React Flow 删除节点先删边(`onEdgesChange`)后删节点(`onNodesChange`),用 `edgeDeleteHistoryPending` 同步标志合并为一次「删除前含连线」快照,撤销可完整还原节点及连线。
 
