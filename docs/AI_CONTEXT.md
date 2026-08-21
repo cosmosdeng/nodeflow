@@ -96,8 +96,18 @@ interface Artifact {
   - `src/store/graphStore.ts` — 状态、历史、组合节点逻辑(`collapseComposite` / `expandComposite` / `refreshCompositeHidden`)
   - `src/lib/composite.ts` — 端口编码与聚合计算
   - `src/components/FlowNodeComponent.tsx` — 节点三种形态(普通 / 展开虚线框 / 塌缩)
-  - `src/components/FlowCanvas.tsx` — 主画布与内部画布切换
+  - `src/components/FlowCanvas.tsx` — 主画布与内部画布切换、右键菜单入口、交互
+  - `src/components/ContextMenu.tsx` — 通用右键上下文菜单
+  - `src/components/ActorIcon.tsx` — 执行主体图标(基于 `assets/actors/` PNG)
   - `src/components/CompositePopupView.tsx` — 组合节点弹窗编辑
+
+### 画布交互(重要)
+
+- **左键拖拽节点**移动;左键画布空白拖拽**框选**多个节点;左键**双击文字**进入内联编辑(编辑中拖动仅选择文字,不拖节点)。
+- **右键按住拖拽**平移画布;右键**单击**弹出上下文菜单(画布菜单 / 节点菜单 / 复合节点菜单)。
+- 节点菜单:复制 / 锁定 / 编组为复合节点 / 删除(二次确认);复合节点额外含「解除编组」。
+- 画布菜单:添加节点 / 锁定全部 / 连线风格 / 显示全部节点 / 保存 / 另存为(导出 JSON)。
+- 执行主体图标用 `assets/actors/` 下的角色图(戴眼镜小人 / 机器人 / 人机协同合影),由 `ActorIcon` 渲染为圆形裁剪。
 
 ## 已知问题
 
