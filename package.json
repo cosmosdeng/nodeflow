@@ -1,21 +1,21 @@
 {
   "name": "nodeflow",
   "productName": "NodeFlow",
-  "version": "0.1.0",
+  "version": "0.0.1",
   "description": "跨平台通用节点式流程绘图工具",
   "main": "dist-electron/main.js",
   "author": "NodeFlow Team",
   "license": "MIT",
   "scripts": {
     "dev": "vite",
-    "build": "tsc && vite build && npm run build:electron",
+    "build": "tsc && vite build && tsc -p tsconfig.electron.json",
     "build:electron": "tsc -p tsconfig.electron.json",
     "preview": "vite preview",
-    "start": "npm run build && electron .",
-    "dist": "npm run build && electron-builder",
-    "dist:mac": "npm run build && electron-builder --mac",
-    "dist:win": "npm run build && electron-builder --win",
-    "dist:linux": "npm run build && electron-builder --linux"
+    "start": "bun run build && electron .",
+    "dist": "bun run build && electron-builder",
+    "dist:mac": "bun run build && electron-builder --mac",
+    "dist:win": "bun run build && electron-builder --win",
+    "dist:linux": "bun run build && electron-builder --linux"
   },
   "dependencies": {
     "@xyflow/react": "^12.3.5",
@@ -43,12 +43,18 @@
       "dist/**/*",
       "dist-electron/**/*"
     ],
+    "publish": {
+      "provider": "github",
+      "owner": "cosmosdeng",
+      "repo": "nodeflow"
+    },
     "mac": {
       "target": ["dmg", "zip"],
       "category": "public.app-category.graphics-design"
     },
     "win": {
-      "target": ["nsis", "zip"]
+      "target": ["nsis", "zip"],
+      "signAndEditExecutable": false
     },
     "linux": {
       "target": ["AppImage", "deb"],
