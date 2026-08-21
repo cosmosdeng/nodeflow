@@ -1,0 +1,58 @@
+{
+  "name": "nodeflow",
+  "productName": "NodeFlow",
+  "version": "0.1.0",
+  "description": "跨平台通用节点式流程绘图工具",
+  "main": "dist-electron/main.js",
+  "author": "NodeFlow Team",
+  "license": "MIT",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc && vite build && npm run build:electron",
+    "build:electron": "tsc -p tsconfig.electron.json",
+    "preview": "vite preview",
+    "start": "npm run build && electron .",
+    "dist": "npm run build && electron-builder",
+    "dist:mac": "npm run build && electron-builder --mac",
+    "dist:win": "npm run build && electron-builder --win",
+    "dist:linux": "npm run build && electron-builder --linux"
+  },
+  "dependencies": {
+    "@xyflow/react": "^12.3.5",
+    "zustand": "^5.0.2"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.1",
+    "@types/react": "^18.3.12",
+    "@types/react-dom": "^18.3.1",
+    "@vitejs/plugin-react": "^4.3.4",
+    "electron": "^33.2.1",
+    "electron-builder": "^25.1.8",
+    "typescript": "^5.7.2",
+    "vite": "^6.0.3",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1"
+  },
+  "build": {
+    "appId": "com.nodeflow.app",
+    "productName": "NodeFlow",
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "dist/**/*",
+      "dist-electron/**/*"
+    ],
+    "mac": {
+      "target": ["dmg", "zip"],
+      "category": "public.app-category.graphics-design"
+    },
+    "win": {
+      "target": ["nsis", "zip"]
+    },
+    "linux": {
+      "target": ["AppImage", "deb"],
+      "category": "Graphics"
+    }
+  }
+}

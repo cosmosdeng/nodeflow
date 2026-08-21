@@ -1,0 +1,444 @@
+import { useEffect, useState, type ReactNode } from 'react';
+import {
+  ACTOR_META,
+  ACTOR_KINDS,
+  ARTIFACT_KINDS,
+  ARTIFACT_META,
+  type ActorType,
+  type ArtifactKind,
+  type FlowNodeData,
+  uid,
+} from '../types';
+import { useGraphStore } from '../store/graphStore';
+
+/* ---------------- 基础控件 ---------------- */
+
+interface CommitFieldProps {
+  value: string;
+  onCommit: (v: string) => void;
+  placeholder?: string;
+  multiline?: boolean;
+  rows?: number;
+}
+
+/** 失焦/回车时提交,避免每个按键都产生历史记录 */
+function CommitField({ value, onCommit, placeholder, multiline, rows = 2 }: CommitFieldProps) {
+  const [draft, setDraft] = useState(value);
+  useEffect(() => setDraft(value), [value]);
+  const commit = () => {
+    if (draft !== value) onCommit(draft);
+  };
+  if (multiline) {
+    return (
+      <textarea
+        value={draft}
+        rows={rows}
+        placeholder={placeholder}
+        onChange={(e) => setDraft(e.target.value)}
+        onBlur={commit}
+      />
+    );
+  }
+  return (
+    <input
+      value={draft}
+      placeholder={placeholder}
+      onChange={(e) => setDraft(e.target.value)}
+      onBlur={commit}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter') (e.target as HTMLInputElement).blur();
+      }}
+    />
+  );
+}
+
+function Field({
+  label,
+  children,
+  hint,
+}: {
+  label: string;
+  children: ReactNode;
+  hint?: string;
+}) {
+  return (
+    <div className="field">
+      <label>{label}</label>
+      {children}
+      {hint && <span className="helper">{hint}</span>}
+    </div>
+  );
+}
+
+function Section({ title, children }: { title: string; children: ReactNode }) {
+  return (
+    <div style={{ marginTop: 14 }}>
+      <div
+        style={{
+          fontSize: 11,
+          color: 'var(--text-faint)',
+          fontWeight: 700,
+          textTransform: 'uppercase',
+          letterSpacing: 0.6,
+          marginBottom: 8,
+        }}
+      >
+        {title}
+      </div>
+      {children}
+    </div>
+  );
+}
+
+/* ---------------- 节点属性 ---------------- */
+
+function NodeProperties({ nodeId }: { nodeId: string }) {
+  const node = useGraphStore((s) => s.nodes.find((n) => n.id === nodeId));
+  const updateNode = useGraphStore((s) => s.updateNode);
+  const deleteNode = useGraphStore((s) => s.deleteNode);
+  const duplicateNode = useGraphStore((s) => s.duplicateNode);
+  const setSelected = useGraphStore((s) => s.setSelected);
+
+  if (!node) return <MissingNotice />;
+  const d = node.data;
+
+  const setPorts = (inputs: FlowNodeData['inputs'], outputs: FlowNodeData['outputs']) =>
+    updateNode(nodeId, { inputs, outputs });
+
+  const addInput = () =>
+    setPorts([...d.inputs, { id: uid('in'), name: `输入 ${d.inputs.length + 1}` }], d.outputs);
+  const addOutput = () =>
+    setPorts(d.inputs, [...d.outputs, { id: uid('out'), name: `输出 ${d.outputs.length + 1}` }]);
+  const removeInput = (pid: string) =>
+    setPorts(d.inputs.filter((p) => p.id !== pid), d.outputs);
+  const removeOutput = (pid: string) =>
+    setPorts(d.inputs, d.outputs.filter((p) => p.id !== pid));
+  const renameInput = (pid: string, name: string) =>
+    setPorts(d.inputs.map((p) => (p.id === pid ? { ...p, name } : p)), d.outputs);
+  const renameOutput = (pid: string, name: string) =>
+    setPorts(d.inputs, d.outputs.map((p) => (p.id === pid ? { ...p, name } : p)));
+
+  return (
+    <div>
+      <div className="field">
+        <label>节点名称</label>
+        <CommitField value={d.label} onCommit={(v) => updateNode(nodeId, { label: v })} placeholder="节点名称" />
+      </div>
+      <Field label="动作描述" hint="用简短文字说明该节点要完成的动作">
+        <CommitField
+          value={d.description}
+          onCommit={(v) => updateNode(nodeId, { description: v })}
+          placeholder="描述该节点的动作…"
+          multiline
+          rows={4}
+        />
+      </Field>
+
+      <Section title="执行主体">
+        <div className="seg">
+          {ACTOR_KINDS.map((a: ActorType) => {
+            const meta = ACTOR_META[a];
+            return (
+              <button
+                key={a}
+                className={d.actor === a ? 'active' : ''}
+                onClick={() => updateNode(nodeId, { actor: a })}
+              >
+                <span style={{ fontSize: 16 }}>{meta.icon}</span>
+                {meta.label}
+              </button>
+            );
+          })}
+        </div>
+      </Section>
+
+      <Section title={`输入端口 (${d.inputs.length})`}>
+        {d.inputs.length === 0 && <div className="helper">暂无输入端口</div>}
+        {d.inputs.map((p) => (
+          <div key={p.id} className="field-row" style={{ marginBottom: 6 }}>
+            <CommitField value={p.name} onCommit={(v) => renameInput(p.id, v)} placeholder="端口名" />
+            <button className="tb-btn" title="删除该端口" onClick={() => removeInput(p.id)}>
+              ✕
+            </button>
+          </div>
+        ))}
+        <button className="tb-btn" style={{ width: '100%', justifyContent: 'center' }} onClick={addInput}>
+          + 添加输入
+        </button>
+      </Section>
+
+      <Section title={`输出端口 (${d.outputs.length})`}>
+        {d.outputs.length === 0 && <div className="helper">暂无输出端口</div>}
+        {d.outputs.map((p) => (
+          <div key={p.id} className="field-row" style={{ marginBottom: 6 }}>
+            <CommitField value={p.name} onCommit={(v) => renameOutput(p.id, v)} placeholder="端口名" />
+            <button className="tb-btn" title="删除该端口" onClick={() => removeOutput(p.id)}>
+              ✕
+            </button>
+          </div>
+        ))}
+        <button className="tb-btn" style={{ width: '100%', justifyContent: 'center' }} onClick={addOutput}>
+          + 添加输出
+        </button>
+      </Section>
+
+      <Section title="操作">
+        <div className="field-row">
+          <button className="tb-btn" style={{ flex: 1, justifyContent: 'center' }} onClick={() => duplicateNode(nodeId)}>
+            ⧉ 复制节点
+          </button>
+          <button
+            className="tb-btn danger"
+            style={{ flex: 1, justifyContent: 'center' }}
+            onClick={() => {
+              if (confirm('确定删除该节点?其所有连线也会被删除。')) {
+                deleteNode(nodeId);
+                setSelected(null);
+              }
+            }}
+          >
+            🗑 删除节点
+          </button>
+        </div>
+      </Section>
+    </div>
+  );
+}
+
+/* ---------------- 中间产物属性 ---------------- */
+
+function ArtifactProperties({ edgeId }: { edgeId: string }) {
+  const edge = useGraphStore((s) => s.edges.find((e) => e.id === edgeId));
+  const updateArtifact = useGraphStore((s) => s.updateArtifact);
+  const setArtifact = useGraphStore((s) => s.setArtifact);
+  const setSelected = useGraphStore((s) => s.setSelected);
+
+  if (!edge?.data?.artifact) return <MissingNotice />;
+  const art = edge.data.artifact;
+  const meta = ARTIFACT_META[art.kind];
+
+  return (
+    <div>
+      <div
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: 10,
+          padding: '10px 12px',
+          borderRadius: 10,
+          background: 'var(--bg)',
+          border: '1px solid var(--border)',
+          marginBottom: 14,
+        }}
+      >
+        <span style={{ fontSize: 28 }}>{meta.icon}</span>
+        <div style={{ minWidth: 0 }}>
+          <div style={{ fontWeight: 700 }}>{art.label || '未命名产物'}</div>
+          <div style={{ fontSize: 11, color: 'var(--text-faint)' }}>{meta.label}</div>
+        </div>
+      </div>
+
+      <Field label="产物类型">
+        <select
+          value={art.kind}
+          onChange={(e) => updateArtifact(edgeId, { kind: e.target.value as ArtifactKind })}
+        >
+          {ARTIFACT_KINDS.map((k) => (
+            <option key={k} value={k}>
+              {ARTIFACT_META[k].icon} {ARTIFACT_META[k].label}
+            </option>
+          ))}
+        </select>
+      </Field>
+      <Field label="名称">
+        <CommitField value={art.label} onCommit={(v) => updateArtifact(edgeId, { label: v })} placeholder="中间产物名称" />
+      </Field>
+      <Field label="文字说明">
+        <CommitField
+          value={art.description}
+          onCommit={(v) => updateArtifact(edgeId, { description: v })}
+          placeholder="说明该中间产物的内容…"
+          multiline
+          rows={4}
+        />
+      </Field>
+
+      <Section title="操作">
+        <div className="field-row">
+          <button
+            className="tb-btn"
+            style={{ flex: 1, justifyContent: 'center' }}
+            onClick={() => setSelected({ kind: 'edge', id: edgeId })}
+          >
+            ← 查看连线
+          </button>
+          <button
+            className="tb-btn danger"
+            style={{ flex: 1, justifyContent: 'center' }}
+            onClick={() => {
+              if (confirm('移除该中间产物?')) {
+                setArtifact(edgeId, null);
+                setSelected({ kind: 'edge', id: edgeId });
+              }
+            }}
+          >
+            🗑 移除产物
+          </button>
+        </div>
+      </Section>
+    </div>
+  );
+}
+
+/* ---------------- 连线属性 ---------------- */
+
+function EdgeProperties({ edgeId }: { edgeId: string }) {
+  const edge = useGraphStore((s) => s.edges.find((e) => e.id === edgeId));
+  const updateEdge = useGraphStore((s) => s.updateEdge);
+  const deleteEdge = useGraphStore((s) => s.deleteEdge);
+  const setArtifact = useGraphStore((s) => s.setArtifact);
+  const setSelected = useGraphStore((s) => s.setSelected);
+  const nodes = useGraphStore((s) => s.nodes);
+
+  if (!edge) return <MissingNotice />;
+  const src = nodes.find((n) => n.id === edge.source);
+  const dst = nodes.find((n) => n.id === edge.target);
+  const art = edge.data?.artifact ?? null;
+
+  return (
+    <div>
+      <div
+        style={{
+          fontSize: 12,
+          color: 'var(--text-dim)',
+          padding: '8px 10px',
+          background: 'var(--bg)',
+          border: '1px solid var(--border)',
+          borderRadius: 8,
+          marginBottom: 14,
+          lineHeight: 1.6,
+        }}
+      >
+        <span style={{ fontWeight: 600, color: 'var(--text)' }}>
+          {src?.data.label ?? '?'}
+        </span>{' '}
+        ⟶{' '}
+        <span style={{ fontWeight: 600, color: 'var(--text)' }}>
+          {dst?.data.label ?? '?'}
+        </span>
+      </div>
+
+      <Field label="连线说明文字" hint="显示在连线上的说明">
+        <CommitField value={edge.data?.label ?? ''} onCommit={(v) => updateEdge(edgeId, { label: v })} placeholder="如:质检通过后移交" />
+      </Field>
+
+      <Section title="中间产物">
+        {art ? (
+          <button
+            className="list-item"
+            style={{ marginBottom: 6 }}
+            onClick={() => setSelected({ kind: 'artifact', edgeId })}
+          >
+            <span className="icon-wrap" style={{ background: 'var(--bg-hover)' }}>
+              {ARTIFACT_META[art.kind].icon}
+            </span>
+            <span className="li-main">
+              <span className="li-title">{art.label || '未命名产物'}</span>
+              <span className="li-sub">{art.description || '点击编辑详情'}</span>
+            </span>
+            <span style={{ color: 'var(--accent)', fontSize: 11 }}>编辑 ›</span>
+          </button>
+        ) : (
+          <div className="helper" style={{ marginBottom: 8 }}>
+            这条连线上还没有中间产物,可添加一个文档、图像、视频等对象。
+          </div>
+        )}
+        {art ? (
+          <button
+            className="tb-btn danger"
+            style={{ width: '100%', justifyContent: 'center' }}
+            onClick={() => setArtifact(edgeId, null)}
+          >
+            🗑 移除中间产物
+          </button>
+        ) : (
+          <button
+            className="tb-btn primary"
+            style={{ width: '100%', justifyContent: 'center' }}
+            onClick={() => {
+              const artifactId = uid('art');
+              setArtifact(edgeId, { id: artifactId, kind: 'other', label: '新中间产物', description: '' });
+              setSelected({ kind: 'artifact', edgeId });
+            }}
+          >
+            + 添加中间产物
+          </button>
+        )}
+      </Section>
+
+      <Section title="操作">
+        <button
+          className="tb-btn danger"
+          style={{ width: '100%', justifyContent: 'center' }}
+          onClick={() => {
+            if (confirm('确定删除这条连线?')) {
+              deleteEdge(edgeId);
+              setSelected(null);
+            }
+          }}
+        >
+          🗑 删除连线
+        </button>
+      </Section>
+    </div>
+  );
+}
+
+function MissingNotice() {
+  return (
+    <div className="empty-tip">
+      <div className="big">🫥</div>
+      所选对象已不存在
+    </div>
+  );
+}
+
+/* ---------------- 主面板 ---------------- */
+
+export default function PropertiesPanel({ onClose }: { onClose: () => void }) {
+  const selected = useGraphStore((s) => s.selected);
+  const setSelected = useGraphStore((s) => s.setSelected);
+
+  let title = '属性';
+  let body: ReactNode = (
+    <div className="empty-tip">
+      <div className="big">🖱️</div>
+      在画布中选中一个节点、连线或中间产物,
+      <br />
+      即可在这里编辑它的属性。
+    </div>
+  );
+
+  if (selected?.kind === 'node') {
+    title = '节点属性';
+    body = <NodeProperties nodeId={selected.id} />;
+  } else if (selected?.kind === 'edge') {
+    title = '连线属性';
+    body = <EdgeProperties edgeId={selected.id} />;
+  } else if (selected?.kind === 'artifact') {
+    title = '中间产物属性';
+    body = <ArtifactProperties edgeId={selected.edgeId} />;
+  }
+
+  return (
+    <aside className="panel right" style={{ width: 300 }}>
+      <div className="panel-header">
+        <span>{title}</span>
+        <button className="panel-close" onClick={() => setSelected(null)} title="关闭属性面板">
+          ×
+        </button>
+      </div>
+      <div className="panel-body">{body}</div>
+    </aside>
+  );
+}
