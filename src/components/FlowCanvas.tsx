@@ -29,6 +29,10 @@ export default function FlowCanvas() {
   // 左上角操作提示框:默认展开,可缩小为小胶囊
   const [hintOpen, setHintOpen] = useState(true);
 
+  // mac/触控板与 Windows/鼠标在平移缩放方式及快捷键符号上不同,提示内容按平台区分
+  const isMac =
+    typeof navigator !== 'undefined' && /Mac|iPhone|iPad|iPod/i.test(navigator.platform || '');
+
   const nodes = useGraphStore((s) => s.nodes);
   const edges = useGraphStore((s) => s.edges);
   const viewport = useGraphStore((s) => s.viewport);
@@ -37,6 +41,7 @@ export default function FlowCanvas() {
   const onConnect = useGraphStore((s) => s.onConnect);
   const onViewportChange = useGraphStore((s) => s.onViewportChange);
   const setSelected = useGraphStore((s) => s.setSelected);
+  const pendingAutoEdit = useGraphStore((s) => s.pendingAutoEdit);
   const addNode = useGraphStore((s) => s.addNode);
   const addNodeToComposite = useGraphStore((s) => s.addNodeToComposite);
   const markHistory = useGraphStore((s) => s.markHistory);
@@ -48,8 +53,10 @@ export default function FlowCanvas() {
   const setEdgeStyle = useGraphStore((s) => s.setEdgeStyle);
   const saveNow = useGraphStore((s) => s.saveNow);
   const exportJson = useGraphStore((s) => s.exportJson);
-  const duplicateNode = useGraphStore((s) => s.duplicateNode);
+  const copySelection = useGraphStore((s) => s.copySelection);
+  const pasteClipboard = useGraphStore((s) => s.pasteClipboard);
   const deleteNode = useGraphStore((s) => s.deleteNode);
+  const deleteEdge = useGraphStore((s) => s.deleteEdge);
   const groupSelected = useGraphStore((s) => s.groupSelected);
   const ungroup = useGraphStore((s) => s.ungroup);
   const toggleLock = (id: string) => {
@@ -65,37 +72,42 @@ export default function FlowCanvas() {
   const closeConfirmDialog = useCallback(() => setConfirmDialog(null), []);
   // 画布容器 ref,用于原生双击检测
   const flowAreaRef = useRef<HTMLDivElement>(null);
+  // 拖拽节点中:临时将连线提升到节点之上,便于看清连线关系(方案 C)
+  const [isNodeDragging, setIsNodeDragging] = useState(false);
 
   // Delete / Backspace 删除前确认。
   // React Flow 12 的 onBeforeDelete 对 Promise<boolean> 返回值处理不可靠(多选删除会失效),
-  // 因此此处始终返回 false 阻止 React Flow 自动删除,改为确认后手动删除待删除节点。
-  const pendingDeleteRef = useRef<FlowNode[]>([]);
+  // 因此此处始终返回 false 阻止 React Flow 自动删除,改为确认后手动删除待删除的节点与连线。
+  const pendingDeleteRef = useRef<{ nodes: FlowNode[]; edges: FlowEdge[] }>({ nodes: [], edges: [] });
   const handleBeforeDelete = useCallback(
-    ({ nodes }: { nodes: FlowNode[] }) => {
+    ({ nodes, edges }: { nodes: FlowNode[]; edges: FlowEdge[] }) => {
       if (allLocked) return Promise.resolve(false);
-      if (!nodes.length) return Promise.resolve(false);
-      pendingDeleteRef.current = nodes;
-      const label =
-        nodes.length > 1
-          ? `确定删除选中的 ${nodes.length} 个节点?`
-          : `确定删除节点「${nodes[0].data.label || '未命名'}」?`;
+      if (!nodes.length && !edges.length) return Promise.resolve(false);
+      pendingDeleteRef.current = { nodes, edges };
+      const parts: string[] = [];
+      if (nodes.length) parts.push(`${nodes.length} 个节点`);
+      if (edges.length) parts.push(`${edges.length} 条连线`);
+      const label = `确定删除选中的 ${parts.join(' 和 ')}?`;
       setConfirmDialog({
         title: '删除确认',
-        message: `${label}\n撤销删除(Ctrl+Z)可还原节点及其连线关系。`,
+        message: `${label}\n撤销删除(Ctrl+Z)可还原。`,
         confirmLabel: '删除',
         cancelLabel: '取消',
         danger: true,
         onConfirm: () => {
-          // 确认后手动删除(store 会清理关联连线,撤销可完整还原)
-          const toDelete = pendingDeleteRef.current;
-          pendingDeleteRef.current = [];
-          toDelete.forEach((n) => {
-            const st = useGraphStore.getState();
+          const { nodes: dn, edges: de } = pendingDeleteRef.current;
+          pendingDeleteRef.current = { nodes: [], edges: [] };
+          const st = useGraphStore.getState();
+          // 删除连线(需在删节点前,避免悬空)
+          de.forEach((e) => {
+            if (st.edges.some((x) => x.id === e.id)) st.deleteEdge(e.id);
+          });
+          dn.forEach((n) => {
             if (st.nodes.some((x) => x.id === n.id)) st.deleteNode(n.id);
           });
         },
         onCancel: () => {
-          pendingDeleteRef.current = [];
+          pendingDeleteRef.current = { nodes: [], edges: [] };
         },
       });
       return Promise.resolve(false); // 阻止 React Flow 自动删除,由 onConfirm 手动处理
@@ -106,7 +118,7 @@ export default function FlowCanvas() {
   // 记录「右键是否处于拖拽平移中」,用于右键松开时不弹菜单
   const rightDragRef = useRef(false);
 
-  const { screenToFlowPosition, fitView } = useReactFlow();
+  const { screenToFlowPosition, fitView, getViewport, setViewport } = useReactFlow();
   const isDark = theme === 'dark';
 
   const handlePaneClick = useCallback(() => setSelected(null), [setSelected]);
@@ -127,8 +139,12 @@ export default function FlowCanvas() {
   }, [activeTabId, nodes, edges]);
 
   const handleNodeClick: NodeMouseHandler = useCallback(
-    (_, node) => setSelected({ kind: 'node', id: node.id }),
-    [setSelected],
+    (_, node) => {
+      // 刚创建连线、正处于连线 label 编辑时,忽略本次节点点击(防止把选中切回节点)
+      if (pendingAutoEdit?.kind === 'edge-label') return;
+      setSelected({ kind: 'node', id: node.id });
+    },
+    [setSelected, pendingAutoEdit],
   );
 
   const handleEdgeClick: EdgeMouseHandler = useCallback(
@@ -136,7 +152,11 @@ export default function FlowCanvas() {
     [setSelected],
   );
 
-  const handleNodeDragStop = useCallback(() => markHistory(), [markHistory]);
+  const handleNodeDragStart = useCallback(() => setIsNodeDragging(true), []);
+  const handleNodeDragStop = useCallback(() => {
+    setIsNodeDragging(false);
+    markHistory();
+  }, [markHistory]);
 
   /**
    * 从端口拖出连线到画布空白处(未连接到有效端口)时,自动创建新节点并连接:
@@ -189,6 +209,8 @@ export default function FlowCanvas() {
             };
       st.onConnect(conn);
       setSelected({ kind: 'node', id: newId });
+      // onConnect 会触发连线 label 编辑,这里覆盖为编辑新节点标题
+      useGraphStore.getState().requestAutoEdit({ kind: 'node-title', id: newId });
     },
     [addNode, addNodeToComposite, allLocked, screenToFlowPosition, setSelected],
   );
@@ -289,9 +311,27 @@ export default function FlowCanvas() {
         items: [
           {
             label: multi ? `复制 (${targets.length})` : '复制',
-            disabled: isComposite || targets.some((n) => !!n.data.composite),
-            hint: isComposite ? '组合节点不支持复制' : undefined,
-            onClick: () => targets.forEach((n) => !n.data.composite && duplicateNode(n.id)),
+            disabled: allLocked,
+            hint: '复制到剪贴板,可在其它画布/项目粘贴',
+            onClick: () => {
+              // 确保 targets 被标记为选中后再复制
+              const st = useGraphStore.getState();
+              if (!selectedNodes.some((n) => n.id === node.id)) {
+                st.setSelected({ kind: 'node', id: node.id });
+              }
+              copySelection();
+            },
+          },
+          {
+            label: '粘贴',
+            disabled: allLocked || !useGraphStore.getState().clipboard,
+            hint: '粘贴剪贴板内容到当前画布',
+            onClick: () => {
+              // 把右键菜单的屏幕坐标转换为画布流坐标,作为粘贴定位点
+              const fp = screenToFlowPosition({ x: e.clientX, y: e.clientY });
+              pasteClipboard(fp);
+              setContextMenu(null);
+            },
           },
           {
             label: multi ? `锁定选中 (${targets.length})` : '锁定节点',
@@ -305,16 +345,8 @@ export default function FlowCanvas() {
           },
           {
             label: multi ? `编组为复合节点 (${targets.length})` : '编组为复合节点',
-            disabled:
-              allLocked ||
-              targets.length < 2 ||
-              targets.some((n) => !!n.data.composite),
-            hint:
-              targets.length < 2
-                ? '需至少选中 2 个节点'
-                : targets.some((n) => !!n.data.composite)
-                  ? '组合节点不能再次编组'
-                  : undefined,
+            disabled: allLocked || targets.length < 2,
+            hint: targets.length < 2 ? '需至少选中 2 个节点' : undefined,
             onClick: () => {
               const id = groupSelected();
               if (id) setSelected({ kind: 'node', id });
@@ -355,36 +387,50 @@ export default function FlowCanvas() {
         ],
       });
     },
-    [deleteNode, duplicateNode, groupSelected, setSelected, setConfirmDialog, ungroup, allLocked],
+    [deleteNode, groupSelected, setSelected, setConfirmDialog, ungroup, allLocked],
   );
 
-  /**
-   * 统一右键入口:通过事件目标判断在节点上还是画布空白处。
-   * 用 .flow-area 原生 contextmenu(React Flow 的 onPaneContextMenu 在 panOnDrag 含右键时会被拦截)。
-   * 若正在右键拖拽平移画布,则右键单击弹菜单;拖拽平移时不弹。
-   */
-  const handleFlowContextMenu = useCallback(
-    (e: React.MouseEvent) => {
-      e.preventDefault();
-      // 右键拖拽平移中,不弹菜单
-      if (rightDragRef.current) return;
-      const nodeEl = (e.target as HTMLElement | null)?.closest?.('.react-flow__node');
+  /** 判断事件目标是否在节点上,若是则弹出节点菜单,否则弹画布菜单 */
+  const openContextMenuAt = useCallback(
+    (clientX: number, clientY: number, target: EventTarget | null) => {
+      const el = target as HTMLElement | null;
+      const nodeEl = el?.closest?.('.react-flow__node');
       if (nodeEl) {
         const nid = nodeEl.getAttribute('data-id');
         const node = useGraphStore.getState().nodes.find((n) => n.id === nid);
         if (node) {
-          handleNodeContextMenu(e, node);
+          // 构造一个兼容 handleNodeContextMenu / handlePaneContextMenu 的事件对象
+          const ev = {
+            clientX,
+            clientY,
+            preventDefault: () => {},
+            stopPropagation: () => {},
+          } as unknown as React.MouseEvent;
+          handleNodeContextMenu(ev, node);
           return;
         }
       }
-      handlePaneContextMenu(e);
+      handlePaneContextMenu({ clientX, clientY, preventDefault: () => {} } as React.MouseEvent);
     },
     [handleNodeContextMenu, handlePaneContextMenu],
   );
 
+  /**
+   * 统一右键入口:仅阻止浏览器原生右键菜单。
+   * 自定义右键菜单不在 contextmenu 中弹出,而是在右键松开(pointerup)时判断:
+   * 若未发生拖拽位移则视为右键单击,弹出菜单;正在拖拽平移则不弹。
+   * 这样可避免外接三键鼠标/部分平台「右键按下即触发 contextmenu」导致拖拽时误弹菜单。
+   */
+  const handleFlowContextMenu = useCallback((e: React.MouseEvent) => {
+    e.preventDefault();
+  }, []);
+
   const closeContextMenu = useCallback(() => setContextMenu(null), []);
 
-  // 全局检测右键拖拽:右键按下并移动超过阈值 → 标记为拖拽平移,松开后不再弹菜单
+  // 全局检测右键拖拽:右键按下并移动超过阈值 → 标记为拖拽平移。
+  // 右键松开时:若未发生拖拽位移则视为右键单击,弹出自定义菜单(此时浏览器 contextmenu
+  // 已被阻止);若已拖拽平移则不弹菜单。这样可避免三键鼠标/部分平台右键按下即触发
+  // contextmenu 导致拖拽时误弹菜单。
   useEffect(() => {
     let downX = 0;
     let downY = 0;
@@ -407,10 +453,15 @@ export default function FlowCanvas() {
     const onUp = (e: PointerEvent) => {
       if (e.button !== 2) return;
       tracking = false;
-      // 松开后延迟重置,避免 contextmenu(可能在松开时触发)误判为单击
+      const wasDrag = rightDragRef.current;
+      // 松开后延迟重置,避免后续 contextmenu(可能在松开时触发)误判
       setTimeout(() => {
         rightDragRef.current = false;
       }, 80);
+      // 未拖拽 → 右键单击,弹出自定义菜单
+      if (!wasDrag) {
+        openContextMenuAt(e.clientX, e.clientY, e.target);
+      }
     };
     window.addEventListener('pointerdown', onDown);
     window.addEventListener('pointermove', onMove);
@@ -420,7 +471,43 @@ export default function FlowCanvas() {
       window.removeEventListener('pointermove', onMove);
       window.removeEventListener('pointerup', onUp);
     };
-  }, []);
+  }, [openContextMenuAt]);
+
+  // 触控板 / 滚轮交互:用原生捕获阶段监听 wheel,统一控制缩放与平移,
+  // 并阻止事件继续传播,确保 React Flow 内部不会重复处理。
+  // - 触控板两指捏合(ctrlKey)→ 缩放
+  // - 鼠标滚轮(deltaMode===1 或 deltaY 较大)→ 缩放(与 Windows 逻辑一致)
+  // - 触控板两指滑动(像素级小 delta)→ 平移画布
+  useEffect(() => {
+    const el = flowAreaRef.current;
+    if (!el) return;
+    const onWheel = (e: WheelEvent) => {
+      // 排除画布内部可滚动元素(如属性面板 / 历史面板等不在 flow-area 内,无需处理)
+      e.preventDefault();
+      e.stopPropagation();
+      const { x, y, zoom } = getViewport();
+      // 判断来源:捏合缩放 / 鼠标滚轮缩放 / 触控板两指滑动平移
+      const isPinch = e.ctrlKey;
+      const isMouseWheel = e.deltaMode === 1 || Math.abs(e.deltaY) > 20;
+      if (isPinch || isMouseWheel) {
+        // 以光标为中心缩放:先取光标处的 flow 坐标,再反推相对容器的屏幕坐标,
+        // 保证缩放前后光标下的画布点位置不变。
+        const flowPoint = screenToFlowPosition({ x: e.clientX, y: e.clientY });
+        const factor = e.deltaY < 0 ? 1.1 : 1 / 1.1;
+        const nextZoom = Math.min(3, Math.max(0.1, zoom * factor));
+        const screenRelX = flowPoint.x * zoom + x;
+        const screenRelY = flowPoint.y * zoom + y;
+        const nextX = screenRelX - flowPoint.x * nextZoom;
+        const nextY = screenRelY - flowPoint.y * nextZoom;
+        setViewport({ x: nextX, y: nextY, zoom: nextZoom }, { duration: 0 });
+      } else {
+        // 触控板两指滑动 → 平移画布
+        setViewport({ x: x - e.deltaX, y: y - e.deltaY, zoom }, { duration: 0 });
+      }
+    };
+    el.addEventListener('wheel', onWheel, { passive: false, capture: true });
+    return () => el.removeEventListener('wheel', onWheel, { capture: true } as EventListenerOptions);
+  }, [getViewport, setViewport, screenToFlowPosition]);
 
   // 双击画布空白处创建节点:
   // 用原生捕获阶段监听 pointerdown 计数(selectionOnDrag 会拦截 click/dblclick 事件,
@@ -433,8 +520,14 @@ export default function FlowCanvas() {
     let lastY = 0;
     const onPointerDown = (e: PointerEvent) => {
       if (e.button !== 0) return;
+      const t = e.target as HTMLElement | null;
       // 排除节点内部(节点双击是编辑/选中)
-      if ((e.target as HTMLElement | null)?.closest?.('.react-flow__node')) {
+      if (t?.closest?.('.react-flow__node')) {
+        last = 0;
+        return;
+      }
+      // 排除连线说明 / 中间产物 / 添加产物等浮层,避免双击它们时误建节点
+      if (t?.closest?.('.nf-edge-label, .nf-artifact-chip, .nf-add-artifact')) {
         last = 0;
         return;
       }
@@ -464,7 +557,11 @@ export default function FlowCanvas() {
   }, [addNode, addNodeToComposite, allLocked, screenToFlowPosition, setSelected]);
 
   return (
-    <div ref={flowAreaRef} className="flow-area" onContextMenu={handleFlowContextMenu}>
+    <div
+      ref={flowAreaRef}
+      className={`flow-area ${isNodeDragging ? 'dragging-edge' : ''}`}
+      onContextMenu={handleFlowContextMenu}
+    >
       <ReactFlow<FlowNode, FlowEdge>
         key={activeTabId}
         nodes={displayNodes}
@@ -485,6 +582,7 @@ export default function FlowCanvas() {
         onNodeClick={handleNodeClick}
         onEdgeClick={handleEdgeClick}
         onPaneClick={handlePaneClick}
+        onNodeDragStart={handleNodeDragStart}
         onNodeDragStop={handleNodeDragStop}
         onBeforeDelete={handleBeforeDelete}
         onNodeDoubleClick={(_, node) => setSelected({ kind: 'node', id: node.id })}
@@ -497,7 +595,12 @@ export default function FlowCanvas() {
         panOnDrag={[2]}
         selectionOnDrag={!allLocked}
         selectionMode={SelectionMode.Partial}
-        connectionRadius={28}
+        // 触控板/滚轮交互由原生捕获阶段 wheel 监听统一处理(见 handleWheelEffect),
+        // 因此关闭 React Flow 自身的滚轮缩放与平移,避免抢占事件。
+        zoomOnScroll={false}
+        panOnScroll={false}
+        zoomOnPinch={false}
+        connectionRadius={40}
         minZoom={0.1}
         maxZoom={3}
         // 不使用 noDragClassName / noPanClassName 全局配置(会导致节点无法拖拽);
@@ -544,12 +647,22 @@ export default function FlowCanvas() {
               <ul className="nf-hint-list">
                 <li><b>拖拽节点</b> · 左键按住节点移动</li>
                 <li><b>框选</b> · 左键画布空白拖拽选中多个节点</li>
-                <li><b>平移画布</b> · 右键按住拖动</li>
-                <li><b>缩放</b> · 滚轮 / 右下角控件</li>
+                <li>
+                  <b>平移画布</b>
+                  {isMac
+                    ? ' · 触控板两指滑动 / 鼠标右键按住拖动'
+                    : ' · 鼠标右键按住拖动'}
+                </li>
+                <li><b>缩放</b> · 鼠标滚轮 / 两指捏合 / 右下角控件</li>
                 <li><b>编辑文字</b> · 双击节点标题 / 描述 / 端口名</li>
                 <li><b>连线</b> · 从端口拖出到另一节点端口</li>
                 <li><b>新建节点</b> · 双击画布空白处</li>
-                <li><b>删除</b> · 选中后按 Delete / Backspace</li>
+                <li>
+                  <b>撤销 / 重做</b> · {isMac ? '⌘Z / ⇧⌘Z' : 'Ctrl+Z / Ctrl+Shift+Z'}
+                </li>
+                <li>
+                  <b>删除</b> · 选中后按 Delete / Backspace
+                </li>
               </ul>
             </div>
           ) : (

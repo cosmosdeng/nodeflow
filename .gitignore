@@ -4,3 +4,5 @@ dist-electron/
 release/
 *.log
 .DS_Store
+.playwright-cli/
+package-lock.json

@@ -1,9 +1,53 @@
-import { app, BrowserWindow, Menu, shell } from 'electron';
+import { app, BrowserWindow, Menu, shell, ipcMain } from 'electron';
+import fs from 'node:fs';
 import path from 'node:path';
 
 const isDev = Boolean(process.env.ELECTRON_START_URL) || !app.isPackaged;
 
 const appIcon = path.join(__dirname, '..', 'assets', 'icon.png');
+
+// 待打开的项目文件路径(双击 .nodeflow 打开)
+const pendingFiles: string[] = [];
+
+// 单实例:双击文件(Windows/Linux)会触发 second-instance,而不是再开一个实例
+const gotLock = app.requestSingleInstanceLock();
+if (!gotLock) {
+  app.quit();
+} else {
+  app.on('second-instance', (_event, argv) => {
+    collectArgvFiles(argv);
+    // 聚焦已有主窗口
+    const win = BrowserWindow.getAllWindows()[0];
+    if (win) {
+      if (win.isMinimized()) win.restore();
+      win.focus();
+      flushPendingFiles(win);
+    }
+  });
+}
+
+/** 从命令行参数中提取 .nodeflow 文件路径 */
+function collectArgvFiles(argv: string[]): void {
+  for (const a of argv) {
+    if (a.endsWith('.nodeflow')) pendingFiles.push(a);
+  }
+}
+
+/** 把待打开文件内容发送给渲染进程(去重) */
+function flushPendingFiles(win: BrowserWindow): void {
+  const seen = new Set<string>();
+  while (pendingFiles.length) {
+    const filePath = pendingFiles.shift()!;
+    if (seen.has(filePath)) continue;
+    seen.add(filePath);
+    try {
+      const content = fs.readFileSync(filePath, 'utf-8');
+      win.webContents.send('open-project-file', { filePath, content });
+    } catch {
+      /* 文件读取失败则忽略 */
+    }
+  }
+}
 
 function createWindow(): void {
   const win = new BrowserWindow({
@@ -22,6 +66,9 @@ function createWindow(): void {
       sandbox: true,
     },
   });
+
+  // 渲染进程就绪后,把启动时携带的项目文件发过去
+  win.webContents.on('did-finish-load', () => flushPendingFiles(win));
 
   // 应用内弹窗(组合节点内部画布)创建独立窗体,其余外链交给系统浏览器
   win.webContents.setWindowOpenHandler(({ url }) => {
@@ -115,9 +162,27 @@ function buildMenu(): void {
   Menu.setApplicationMenu(Menu.buildFromTemplate(template));
 }
 
+// macOS:双击文件时会触发 open-file 事件(必须在 whenReady 之前注册)
+app.on('open-file', (event, filePath) => {
+  event.preventDefault();
+  if (filePath.endsWith('.nodeflow')) {
+    pendingFiles.push(filePath);
+    const win = BrowserWindow.getAllWindows()[0];
+    if (win) flushPendingFiles(win);
+  }
+});
+
 app.whenReady().then(() => {
   buildMenu();
+  // 记录 IPC 处理器(供渲染进程询问是否带文件启动;当前主要靠主进程推送)
+  ipcMain.on('open-project-file:ack', () => {
+    /* 渲染进程已收到,无需处理 */
+  });
+
   createWindow();
+
+  // Windows/Linux:启动时若双击了 .nodeflow 文件,argv 里会带路径
+  collectArgvFiles(process.argv);
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow();

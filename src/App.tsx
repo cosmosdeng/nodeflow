@@ -7,6 +7,7 @@ import HistoryPanel from './components/HistoryPanel';
 import CompositePopupView from './components/CompositePopupView';
 import { openCompositePopup } from './lib/compositePopup';
 import { useGraphStore } from './store/graphStore';
+import { confirmAndCloseDocument } from './lib/closeProject';
 
 function MainApp() {
   const [showOutline, setShowOutline] = useState(false);
@@ -16,6 +17,7 @@ function MainApp() {
   const undo = useGraphStore((s) => s.undo);
   const redo = useGraphStore((s) => s.redo);
   const saveNow = useGraphStore((s) => s.saveNow);
+  const saveDocument = useGraphStore((s) => s.saveDocument);
   const allLocked = useGraphStore((s) => s.allLocked);
   const nodesCount = useGraphStore((s) => s.nodes.length);
   const edgesCount = useGraphStore((s) => s.edges.length);
@@ -26,11 +28,37 @@ function MainApp() {
   const activeTabId = useGraphStore((s) => s.activeTabId);
   const setActiveTab = useGraphStore((s) => s.setActiveTab);
   const closeCompositeTab = useGraphStore((s) => s.closeCompositeTab);
+  const documents = useGraphStore((s) => s.documents);
+  const activeDocumentId = useGraphStore((s) => s.activeDocumentId);
+  const switchDocument = useGraphStore((s) => s.switchDocument);
+  const closeDocument = useGraphStore((s) => s.closeDocument);
+  const createDocument = useGraphStore((s) => s.createDocument);
+  const loadProject = useGraphStore((s) => s.loadProject);
+  const copySelection = useGraphStore((s) => s.copySelection);
+  const pasteClipboard = useGraphStore((s) => s.pasteClipboard);
 
   // 应用全局配色主题到根元素
   useEffect(() => {
     document.documentElement.dataset.theme = theme;
   }, [theme]);
+
+  // 桌面端:双击 .nodeflow 文件 → 自动打开项目(主进程通过 IPC 推送文件内容)
+  useEffect(() => {
+    const nf = window.nodeflow;
+    if (!nf?.onOpenProjectFile) return;
+    const off = nf.onOpenProjectFile(({ content }) => {
+      const ok = loadProject(content);
+      if (ok) {
+        // 项目作为新文档打开后,适配到全图
+        setTimeout(() => {
+          useGraphStore.getState().fitGraph?.();
+        }, 120);
+      } else {
+        alert('无法打开该项目文件,请确认是 NodeFlow 保存的项目。');
+      }
+    });
+    return off;
+  }, [loadProject]);
 
   // 全局快捷键:撤销 / 重做 / 保存
   useEffect(() => {
@@ -46,7 +74,7 @@ function MainApp() {
         saveNow();
         return;
       }
-      // 演示锁定时禁止撤销/重做,避免误触修改内容
+      // 演示锁定时禁止撤销/重做/复制/粘贴,避免误触修改内容
       if (allLocked) return;
       if (key === 'z') {
         e.preventDefault();
@@ -55,11 +83,23 @@ function MainApp() {
       } else if (key === 'y') {
         e.preventDefault();
         redo();
+      } else if (key === 'c') {
+        // 复制选中节点/组合到剪贴板(跨画布/跨项目共享)
+        e.preventDefault();
+        const n = copySelection();
+        if (n === 0) alert('未选中任何节点,无法复制。请先点击选中一个或多个节点。');
+      } else if (key === 'v') {
+        // 粘贴到当前画布
+        e.preventDefault();
+        const n = pasteClipboard();
+        if (n === 0 && !useGraphStore.getState().clipboard) {
+          alert('剪贴板为空,请先选中节点后按 ⌘/Ctrl+C 复制。');
+        }
       }
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [allLocked, undo, redo, saveNow]);
+  }, [allLocked, undo, redo, saveNow, copySelection, pasteClipboard]);
 
   return (
     <div className="app">
@@ -72,8 +112,36 @@ function MainApp() {
         onToggleHistory={() => setShowHistory((v) => !v)}
       />
 
-      {/* 标签页:主画布 + 各组合节点的内部画布 */}
+      {/* 标签栏:项目文档标签 + 当前项目内(主画布 + 组合内部画布)标签 */}
       <div className="tab-bar">
+        {documents.map((doc) => (
+          <div
+            key={doc.id}
+            className={`tab doc ${activeDocumentId === doc.id ? 'active' : ''}`}
+            onClick={() => switchDocument(doc.id)}
+            title={`项目:${doc.name}`}
+          >
+            <span className="doc-dot" style={{ background: doc.color }} />
+            <span className="tab-label">{doc.name}</span>
+            <button
+              className="tab-btn"
+              title="关闭该项目"
+              onClick={(e) => {
+                e.stopPropagation();
+                confirmAndCloseDocument(doc, closeDocument, saveDocument);
+              }}
+            >
+              ✕
+            </button>
+          </div>
+        ))}
+        <button className="tab-btn add-doc" title="新建项目" onClick={() => createDocument()}>
+          ＋
+        </button>
+
+        <span className="tab-sep" />
+
+        {/* 当前项目内:主画布 + 各组合节点的内部画布(相邻) */}
         <div
           className={`tab ${activeTabId === 'main' ? 'active' : ''}`}
           onClick={() => setActiveTab('main')}

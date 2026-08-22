@@ -1,7 +1,7 @@
 {
   "name": "nodeflow",
   "productName": "NodeFlow",
-  "version": "0.0.9",
+  "version": "0.1.0",
   "description": "跨平台通用节点式流程绘图工具",
   "main": "dist-electron/main.js",
   "author": {
@@ -14,6 +14,8 @@
     "build": "tsc && vite build && tsc -p tsconfig.electron.json",
     "build:electron": "tsc -p tsconfig.electron.json",
     "preview": "vite preview",
+    "test": "vitest run",
+    "test:watch": "vitest",
     "start": "bun run build && electron .",
     "dist": "bun run build && electron-builder",
     "dist:mac": "bun run build && electron-builder --mac",
@@ -22,6 +24,8 @@
   },
   "dependencies": {
     "@xyflow/react": "^12.3.5",
+    "html-to-image": "^1.11.13",
+    "jspdf": "^4.2.1",
     "zustand": "^5.0.2"
   },
   "devDependencies": {
@@ -31,10 +35,11 @@
     "@vitejs/plugin-react": "^4.3.4",
     "electron": "^33.2.1",
     "electron-builder": "^25.1.8",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
     "typescript": "^5.7.2",
     "vite": "^6.0.3",
-    "react": "^18.3.1",
-    "react-dom": "^18.3.1"
+    "vitest": "^4.1.11"
   },
   "build": {
     "appId": "com.nodeflow.app",
@@ -48,21 +53,40 @@
       "dist-electron/**/*",
       "assets/**/*"
     ],
+    "fileAssociations": [
+      {
+        "ext": "nodeflow",
+        "name": "NodeFlow 项目",
+        "description": "NodeFlow 项目文件",
+        "role": "Editor",
+        "mimeType": "application/json",
+        "icon": "assets/icon.png"
+      }
+    ],
     "publish": {
       "provider": "github",
       "owner": "cosmosdeng",
       "repo": "nodeflow"
     },
     "mac": {
-      "target": ["dmg", "zip"],
+      "target": [
+        "dmg",
+        "zip"
+      ],
       "category": "public.app-category.graphics-design"
     },
     "win": {
-      "target": ["nsis", "zip"],
+      "target": [
+        "nsis",
+        "zip"
+      ],
       "signAndEditExecutable": false
     },
     "linux": {
-      "target": ["AppImage", "deb"],
+      "target": [
+        "AppImage",
+        "deb"
+      ],
       "category": "Graphics"
     }
   }

@@ -522,7 +522,9 @@ body,
 
 .react-flow__edge.selected .react-flow__edge-path {
   stroke: var(--accent);
-  stroke-width: 2.5;
+  stroke-width: 4;
+  filter: drop-shadow(0 0 5px color-mix(in srgb, var(--accent) 70%, transparent))
+    drop-shadow(0 0 12px color-mix(in srgb, var(--accent) 40%, transparent));
 }
 
 .react-flow__connection-path {
@@ -530,18 +532,25 @@ body,
   stroke-width: 2;
 }
 
-/* 连线始终在节点之上,确保连到端口的部分不被节点遮挡 */
-.react-flow__edges {
-  z-index: 4;
-}
-
+/* 连线的层级:默认节点在上、连线在下(节点清晰)。
+   拖拽节点时(flow-area.dragging-edge)临时把连线与 label 提升到节点之上,便于看清连线关系。 */
 .react-flow__nodes {
+  z-index: 1;
+}
+.react-flow__edges {
+  z-index: 0;
+}
+.react-flow__edgelabel-renderer {
   z-index: 2;
 }
-
-/* 连线端点的 label 保持最高可见性 */
-.react-flow__edgelabel-renderer {
-  z-index: 5;
+.flow-area.dragging-edge .react-flow__nodes {
+  z-index: 0;
+}
+.flow-area.dragging-edge .react-flow__edges {
+  z-index: 100;
+}
+.flow-area.dragging-edge .react-flow__edgelabel-renderer {
+  z-index: 101;
 }
 
 /* 拖拽中的新连接线保持在最上层 */
@@ -574,8 +583,10 @@ body,
 }
 
 .nf-node.selected {
-  border-color: var(--accent);
-  box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 28%, transparent), var(--shadow);
+  /* 选中不改变边框颜色(避免与执行主体色混淆),改为更强的高亮外圈 + 边框提亮 */
+  border-color: color-mix(in srgb, currentColor 78%, #ffffff);
+  box-shadow: 0 0 0 2px color-mix(in srgb, currentColor 45%, transparent),
+    0 0 18px color-mix(in srgb, currentColor 50%, transparent), var(--shadow);
 }
 
 .nf-node .node-header {
@@ -600,9 +611,10 @@ body,
   line-height: 1.25;
   flex: 1;
   min-width: 0;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  /* 长标题不截断、不省略,允许换行成多行;不改变节点宽度 */
+  white-space: normal;
+  overflow-wrap: anywhere;
+  word-break: break-word;
 }
 
 .nf-node .node-actor-tag {
@@ -731,14 +743,10 @@ body,
   opacity: 0.6;
 }
 
-/* 塌缩态:粗边框组合节点 */
+/* 塌缩态:粗边框组合节点(加粗以便与普通节点区分) */
 .nf-composite-node {
-  border-width: 2.5px;
+  border-width: 4px;
   border-color: color-mix(in srgb, var(--accent) 55%, var(--border-strong));
-}
-
-.nf-composite-node.selected {
-  border-color: var(--accent);
 }
 
 /* 聚合端口标签:只读 */
@@ -755,10 +763,10 @@ body,
   font-style: italic;
 }
 
-/* 展开态:虚线框包裹内部节点 */
+/* 展开态:虚线框包裹内部节点(加粗以便与普通节点区分) */
 .nf-composite-frame {
   background: color-mix(in srgb, var(--accent) 6%, transparent);
-  border: 2px dashed color-mix(in srgb, var(--accent) 70%, var(--border-strong));
+  border: 3px dashed color-mix(in srgb, var(--accent) 70%, var(--border-strong));
   border-radius: 14px;
   box-shadow: none;
   overflow: visible;
@@ -892,6 +900,43 @@ body,
   text-overflow: ellipsis;
 }
 
+/* 项目文档标签:颜色点 + 激活态用项目色 */
+.tab.doc .doc-dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+.tab.doc.active {
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 14%, var(--bg-panel));
+}
+
+/* 分隔「项目标签」与「项目内视图标签」 */
+.tab-sep {
+  width: 1px;
+  height: 18px;
+  background: var(--border);
+  margin: 0 2px;
+  flex-shrink: 0;
+}
+
+.tab-bar .add-doc {
+  border: 1px dashed var(--border-strong);
+  background: transparent;
+  color: var(--text-dim);
+  border-radius: 8px;
+  padding: 4px 9px;
+  font-size: 14px;
+  line-height: 1;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+.tab-bar .add-doc:hover {
+  border-color: var(--accent);
+  color: var(--text);
+}
+
 .tab-btn {
   border: none;
   background: transparent;
@@ -1009,6 +1054,38 @@ body,
   margin-right: 2px;
 }
 
+/* 端口删除按钮:作为 flex 项紧贴文字 label,默认透明,悬停端口时显示 */
+.nf-node .port .port-remove {
+  width: 15px;
+  height: 15px;
+  line-height: 13px;
+  padding: 0;
+  flex: none;
+  border: none;
+  border-radius: 50%;
+  background: var(--bg-hover);
+  color: var(--text-dim);
+  font-size: 12px;
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 0.12s, background 0.12s;
+}
+.nf-node .port .port-remove:hover {
+  background: #e5484d;
+  color: #fff;
+}
+.nf-node .port:hover .port-remove {
+  opacity: 1;
+}
+/* 输入端口:Handle 在左,label 居中,删除按钮在 label 右侧紧贴 */
+.nf-node .port.in .port-remove {
+  margin-left: 4px;
+}
+/* 输出端口:删除按钮在 label 左侧紧贴,Handle 在右 */
+.nf-node .port.out .port-remove {
+  margin-left: 4px;
+}
+
 .nf-node .port-group-title {
   font-size: 10px;
   color: var(--text-faint);
@@ -1104,6 +1181,15 @@ body,
   z-index: 1;
 }
 
+/* 扩大端点选中 / 连线交互的命中区域(视觉大小不变,点击/悬停更容易命中) */
+.react-flow__handle::after {
+  content: '';
+  position: absolute;
+  inset: -10px;
+  border-radius: 50%;
+  cursor: pointer;
+}
+
 .react-flow__handle:hover {
   transform: scale(1.35);
 }
@@ -1139,13 +1225,27 @@ body,
   pointer-events: all;
   cursor: pointer;
   max-width: 220px;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
 }
 
 .nf-edge-label:hover {
   border-color: var(--accent);
   color: var(--text);
+}
+
+/* 画布上连线说明内联编辑:编辑态允许换行/扩展,文本元素继承标签样式 */
+.nf-edge-label .nf-edge-label-text {
+  min-width: 0;
+  line-height: 1.4;
+}
+.nf-edge-label.editing {
+  white-space: normal;
+  max-width: 320px;
+}
+.nf-edge-label.editing .nf-edge-label-text:focus {
+  outline-offset: 2px;
 }
 
 .react-flow__edge.selected + .nf-edge-label,
@@ -1198,6 +1298,34 @@ body,
 .nf-artifact-chip .a-kind {
   font-size: 10px;
   color: var(--text-faint);
+}
+
+/* 连线说明 / 中间产物上的删除按钮:右侧贴着,悬停时显示 */
+.nf-edge-label .edge-chip-remove,
+.nf-artifact-chip .edge-chip-remove {
+  flex: none;
+  width: 15px;
+  height: 15px;
+  line-height: 13px;
+  padding: 0;
+  border: none;
+  border-radius: 50%;
+  background: var(--bg-hover);
+  color: var(--text-dim);
+  font-size: 12px;
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 0.12s, background 0.12s;
+  margin-right: -3px;
+}
+.nf-edge-label:hover .edge-chip-remove,
+.nf-artifact-chip:hover .edge-chip-remove {
+  opacity: 1;
+}
+.nf-edge-label .edge-chip-remove:hover,
+.nf-artifact-chip .edge-chip-remove:hover {
+  background: #e5484d;
+  color: #fff;
 }
 
 /* 添加中间产物按钮 */
@@ -1307,6 +1435,56 @@ body,
 
 .file-actions button:disabled:hover {
   background: none;
+}
+
+/* 文件菜单子菜单(导入 / 导出) */
+.file-submenu {
+  position: relative;
+}
+.file-submenu > button {
+  width: 100%;
+}
+.submenu-arrow {
+  margin-left: auto;
+  font-size: 11px;
+  opacity: 0.6;
+}
+.file-submenu-panel {
+  position: absolute;
+  left: calc(100% - 4px);
+  top: -6px;
+  min-width: 180px;
+  background: var(--bg-panel-2);
+  border: 1px solid var(--border-strong);
+  border-radius: 10px;
+  box-shadow: var(--shadow);
+  padding: 6px;
+  display: flex;
+  flex-direction: column;
+  z-index: 21;
+}
+.file-submenu-panel.export-panel {
+  min-width: 200px;
+}
+.file-submenu-panel .active {
+  background: var(--bg-hover);
+}
+.submenu-divider {
+  height: 1px;
+  background: var(--border);
+  margin: 4px 6px;
+}
+.radio-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  border: 1.5px solid var(--text-faint);
+  flex: none;
+}
+.radio-dot.on {
+  border-color: var(--accent);
+  background: var(--accent);
+  box-shadow: inset 0 0 0 2px var(--bg-panel-2);
 }
 
 /* ---------- 左上角半透明操作提示框 ---------- */
@@ -1518,4 +1696,97 @@ body,
 
 .nf-btn.primary.danger:hover {
   opacity: 0.9;
+}
+
+/* ------------------------------------------------------------------ */
+/* 执行主体外框颜色标识:按人/机器/人机协同给节点外框着色                 */
+/* 人-黄 机器-蓝 人机协同-绿;选中态不改变执行主体色,改用提亮+外圈高亮  */
+/* ------------------------------------------------------------------ */
+.nf-node.nf-actor-human {
+  border-color: #e8b028;
+  box-shadow: 0 0 16px rgba(232, 176, 40, 0.42), var(--shadow);
+}
+.nf-node.nf-actor-machine {
+  border-color: #4ea1ff;
+  box-shadow: 0 0 16px rgba(78, 161, 255, 0.42), var(--shadow);
+}
+.nf-node.nf-actor-hybrid {
+  border-color: #22c55e;
+  box-shadow: 0 0 16px rgba(34, 197, 94, 0.42), var(--shadow);
+}
+
+/* hover:在 actor 色基础上轻微提亮,避免回退为默认灰 */
+.nf-node.nf-actor-human:hover {
+  border-color: color-mix(in srgb, #e8b028 82%, #ffffff);
+  box-shadow: 0 0 22px rgba(232, 176, 40, 0.5), var(--shadow);
+}
+.nf-node.nf-actor-machine:hover {
+  border-color: color-mix(in srgb, #4ea1ff 82%, #ffffff);
+  box-shadow: 0 0 22px rgba(78, 161, 255, 0.5), var(--shadow);
+}
+.nf-node.nf-actor-hybrid:hover {
+  border-color: color-mix(in srgb, #22c55e 82%, #ffffff);
+  box-shadow: 0 0 22px rgba(34, 197, 94, 0.5), var(--shadow);
+}
+
+/* 普通节点选中态:不改变边框颜色(保留执行主体色),提亮边框 + 增强外圈高亮使其显眼 */
+.nf-node.nf-actor-human.selected,
+.nf-node.nf-actor-machine.selected,
+.nf-node.nf-actor-hybrid.selected {
+  border-color: color-mix(in srgb, currentColor 78%, #ffffff);
+  box-shadow: 0 0 0 2px color-mix(in srgb, currentColor 45%, transparent),
+    0 0 20px color-mix(in srgb, currentColor 50%, transparent), var(--shadow);
+}
+
+/* 组合节点(塌缩粗边框 / 展开虚线框)按执行主体着色;
+   --nf-frame 在组件根元素上定义,取执行主体 frame 色(人-黄 / 机器-蓝 / 人机协同-绿)。
+   光晕颜色由边框最终颜色(--nf-frame-border)决定,保持与边框完全同色。 */
+.nf-node.nf-composite-node,
+.nf-node.nf-composite-frame {
+  --nf-frame-border: color-mix(in srgb, var(--nf-frame, var(--accent)) 72%, var(--border-strong));
+  border-color: var(--nf-frame-border);
+  /* 外发光 + 向内(inset)光晕,让组合节点更醒目 */
+  box-shadow: 0 0 36px color-mix(in srgb, var(--nf-frame-border) 55%, transparent),
+    inset 0 0 20px color-mix(in srgb, var(--nf-frame-border) 45%, transparent),
+    var(--shadow);
+}
+.nf-node.nf-composite-node:hover,
+.nf-node.nf-composite-frame:hover {
+  box-shadow: 0 0 48px color-mix(in srgb, var(--nf-frame-border) 62%, transparent),
+    inset 0 0 26px color-mix(in srgb, var(--nf-frame-border) 52%, transparent),
+    var(--shadow);
+}
+
+/* 机器(蓝)执行主体的组合节点:使用更纯正的蓝,避免边框/光晕偏青(蓝绿) */
+.nf-node.nf-composite-node.nf-actor-machine,
+.nf-node.nf-composite-frame.nf-actor-machine {
+  --nf-frame-border: #2f6fe0;
+}
+
+/* 组合节点选中态:不改变边框颜色(保留执行主体色),增强光晕 + 提亮边框使其显眼 */
+.nf-node.nf-composite-node.selected,
+.nf-node.nf-composite-frame.selected {
+  border-color: color-mix(in srgb, var(--nf-frame-border, var(--accent)) 82%, #ffffff);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--nf-frame-border, var(--accent)) 50%, transparent),
+    0 0 52px color-mix(in srgb, var(--nf-frame-border, var(--accent)) 65%, transparent),
+    inset 0 0 24px color-mix(in srgb, var(--nf-frame-border, var(--accent)) 52%, transparent),
+    var(--shadow);
+}
+
+/* ------------------------------------------------------------------ */
+/* 组合节点展开 / 塌缩过渡动画:淡入 + 轻微缩放                         */
+/* ------------------------------------------------------------------ */
+.nf-composite-node,
+.nf-composite-frame {
+  animation: nf-composite-pop 0.22s ease;
+}
+@keyframes nf-composite-pop {
+  from {
+    opacity: 0;
+    transform: scale(0.96);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
 }

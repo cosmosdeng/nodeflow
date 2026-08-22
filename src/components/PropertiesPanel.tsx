@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type ReactNode } from 'react';
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import {
   ACTOR_META,
   ACTOR_KINDS,
@@ -10,7 +10,7 @@ import {
   uid,
 } from '../types';
 import { useGraphStore } from '../store/graphStore';
-import { computeCompositePorts } from '../lib/composite';
+import { computeCompositeActor, computeCompositePorts } from '../lib/composite';
 import ActorIcon from './ActorIcon';
 
 /* ---------------- 基础控件 ---------------- */
@@ -22,18 +22,54 @@ interface CommitFieldProps {
   multiline?: boolean;
   rows?: number;
   disabled?: boolean;
+  /** 为 true 时挂载后自动聚焦(用于新连线 label 直接输入) */
+  autoFocus?: boolean;
+  /** autoFocus 生效并聚焦后回调(供外部消费并清除自动编辑标记) */
+  onAutoFocusConsumed?: () => void;
 }
 
 /** 失焦/回车时提交,避免每个按键都产生历史记录 */
-function CommitField({ value, onCommit, placeholder, multiline, rows = 2, disabled }: CommitFieldProps) {
+function CommitField({
+  value,
+  onCommit,
+  placeholder,
+  multiline,
+  rows = 2,
+  disabled,
+  autoFocus,
+  onAutoFocusConsumed,
+}: CommitFieldProps) {
   const [draft, setDraft] = useState(value);
   useEffect(() => setDraft(value), [value]);
+  // autoFocus 时自动聚焦并消费标记
+  const autoFocusRef = useRef<HTMLInputElement | HTMLTextAreaElement>(null);
+  const onAutoFocusConsumedRef = useRef(onAutoFocusConsumed);
+  onAutoFocusConsumedRef.current = onAutoFocusConsumed;
+  useEffect(() => {
+    if (!autoFocus) return;
+    // 等属性面板渲染完成后再聚焦(必要时多帧兜底,避免 ref 尚未就绪)
+    const focusAndConsume = () => {
+      autoFocusRef.current?.focus();
+      // 延迟清除自动编辑标记,给 React Flow 连线结束时的节点点击留出拦截窗口,
+      // 避免 onNodeClick 把刚选中的连线覆盖回节点
+      const consume = onAutoFocusConsumedRef.current;
+      if (consume) setTimeout(consume, 120);
+    };
+    const el = autoFocusRef.current;
+    if (el) {
+      focusAndConsume();
+    } else {
+      const raf = requestAnimationFrame(focusAndConsume);
+      return () => cancelAnimationFrame(raf);
+    }
+  }, [autoFocus]);
   const commit = () => {
     if (draft !== value) onCommit(draft);
   };
   if (multiline) {
     return (
       <textarea
+        ref={autoFocusRef as React.Ref<HTMLTextAreaElement>}
         value={draft}
         rows={rows}
         placeholder={placeholder}
@@ -45,6 +81,7 @@ function CommitField({ value, onCommit, placeholder, multiline, rows = 2, disabl
   }
   return (
     <input
+      ref={autoFocusRef as React.Ref<HTMLInputElement>}
       value={draft}
       placeholder={placeholder}
       disabled={disabled}
@@ -127,11 +164,19 @@ function NodeProperties({ nodeId }: { nodeId: string }) {
   const isComposite = !!composite;
 
   // 组合节点的聚合端口一律实时计算,与画布展示保持一致(单一数据源,不依赖历史快照)
+  const nodesById = useMemo(() => new Map(nodes.map((n) => [n.id, n])), [nodes]);
   const aggPorts = useMemo(() => {
     if (!composite) return null;
     const children = nodes.filter((c) => composite.childIds.includes(c.id));
-    return computeCompositePorts(children, edges);
-  }, [composite, edges, nodes]);
+    return computeCompositePorts(children, edges, nodesById);
+  }, [composite, edges, nodes, nodesById]);
+
+  // 组合节点的执行主体继承自内部节点(全同则同、混杂则人机协同,支持嵌套),不允许手动改
+  const compositeActor = useMemo(() => {
+    if (!composite) return null;
+    const children = nodes.filter((c) => composite.childIds.includes(c.id));
+    return computeCompositeActor(children, nodesById);
+  }, [composite, nodes, nodesById]);
 
   const setPorts = (inputs: FlowNodeData['inputs'], outputs: FlowNodeData['outputs']) =>
     updateNode(nodeId, { inputs, outputs });
@@ -208,22 +253,41 @@ function NodeProperties({ nodeId }: { nodeId: string }) {
       </Field>
 
       <Section title="执行主体">
-        <div className="seg">
-          {ACTOR_KINDS.map((a: ActorType) => {
-            const meta = ACTOR_META[a];
-            return (
-              <button
-                key={a}
-                className={d.actor === a ? 'active' : ''}
-                disabled={disabled}
-                onClick={() => updateNode(nodeId, { actor: a })}
-              >
-                <ActorIcon actor={a} size={22} />
-                {meta.label}
-              </button>
-            );
-          })}
-        </div>
+        {isComposite && compositeActor ? (
+          <>
+            <div className="seg" style={{ opacity: 0.7 }}>
+              {ACTOR_KINDS.map((a: ActorType) => {
+                const meta = ACTOR_META[a];
+                return (
+                  <button key={a} className={compositeActor === a ? 'active' : ''} disabled>
+                    <ActorIcon actor={a} size={22} />
+                    {meta.label}
+                  </button>
+                );
+              })}
+            </div>
+            <div className="helper" style={{ marginTop: 6 }}>
+              ⚙ 组合节点执行主体自动继承自内部节点:全为同一主体显示该主体,混杂显示人机协同。
+            </div>
+          </>
+        ) : (
+          <div className="seg">
+            {ACTOR_KINDS.map((a: ActorType) => {
+              const meta = ACTOR_META[a];
+              return (
+                <button
+                  key={a}
+                  className={d.actor === a ? 'active' : ''}
+                  disabled={disabled}
+                  onClick={() => updateNode(nodeId, { actor: a })}
+                >
+                  <ActorIcon actor={a} size={22} />
+                  {meta.label}
+                </button>
+              );
+            })}
+          </div>
+        )}
       </Section>
 
       {isComposite && (
@@ -508,7 +572,7 @@ function EdgeProperties({ edgeId }: { edgeId: string }) {
         </span>
       </div>
 
-      <Field label="连线说明文字" hint="显示在连线上的说明">
+      <Field label="连线说明文字" hint="双击连线上的文字可在画布上直接编辑">
         <CommitField
           value={edge.data?.label ?? ''}
           onCommit={(v) => updateEdge(edgeId, { label: v })}

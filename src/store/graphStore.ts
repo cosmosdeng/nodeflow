@@ -13,6 +13,7 @@ import {
   type FlowEdge,
   type GraphSnapshot,
   type GraphState,
+  type GraphDocument,
   type ViewportState,
   type Artifact,
   type FlowNodeData,
@@ -20,20 +21,30 @@ import {
   type EdgeStyle,
   type ThemeMode,
   type ActorType,
+  DOCUMENT_COLORS,
   createDefaultNode,
   uid,
 } from '../types';
 import {
   COMPOSITE_PAD,
+  COMPOSITE_PREFIX,
+  computeCompositeActor,
   computeCompositeBounds,
   computeCompositePorts,
   decodeCompositePort,
+  decodeCompositePortPath,
   encodeCompositePort,
+  getNodeSize,
+  isCompositePort,
 } from '../lib/composite';
+import { computeLayout, type LayoutDirection } from '../lib/layout';
 
 const SAVE_KEY = 'nodeflow:graph:v1';
 const PREFS_KEY = 'nodeflow:prefs:v1';
+const DOCS_KEY = 'nodeflow:docs:v1';
 const SAVE_DELAY = 600;
+/** 默认文档 id(迁移旧单文档时使用) */
+const LEGACY_DOC_ID = 'doc_default';
 
 /**
  * 标记「删除连线」是否已由 onEdgesChange 记录历史。
@@ -42,34 +53,22 @@ const SAVE_DELAY = 600;
  */
 let edgeDeleteHistoryPending = false;
 
-/**
- * 按多数派推断一组节点的执行主体。
- * 统计 human / machine / hybrid 出现次数,返回出现最多的;平手时按
- * human → machine → hybrid 优先级取靠前者;全为空时默认 human。
- */
-function majorityActor(nodes: FlowNode[]): ActorType {
-  const order: ActorType[] = ['human', 'machine', 'hybrid'];
-  const counts: Record<ActorType, number> = { human: 0, machine: 0, hybrid: 0 };
-  for (const n of nodes) {
-    const a = n.data?.actor;
-    if (a === 'human' || a === 'machine' || a === 'hybrid') counts[a] += 1;
-  }
-  let best: ActorType = 'human';
-  let bestCount = -1;
-  for (const a of order) {
-    if (counts[a] > bestCount) {
-      best = a;
-      bestCount = counts[a];
-    }
-  }
-  return best;
-}
-
 export type Selection =
   | { kind: 'node'; id: string }
   | { kind: 'edge'; id: string }
   | { kind: 'artifact'; edgeId: string }
   | null;
+
+/**
+ * 待自动进入编辑模式的目标(创建新对象后默认直接编辑)。
+ * - node-title:新节点的标题
+ * - edge-label:新连线的说明文字(在属性面板中编辑)
+ * - port-label:新创建的输入/输出端点标签
+ */
+export type AutoEditTarget =
+  | { kind: 'node-title'; id: string }
+  | { kind: 'edge-label'; id: string }
+  | { kind: 'port-label'; nodeId: string; portId: string };
 
 interface FlowStore extends GraphState {
   past: GraphSnapshot[];
@@ -87,6 +86,12 @@ interface FlowStore extends GraphState {
   // ---- 选中 ----
   setSelected: (sel: Selection) => void;
 
+  // ---- 自动进入编辑模式 ----
+  /** 待自动进入编辑的对象(创建节点/连线/端口后设置,组件消费后清除) */
+  pendingAutoEdit: AutoEditTarget | null;
+  /** 请求在创建后自动进入编辑模式(传入 null 则清除) */
+  requestAutoEdit: (t: AutoEditTarget | null) => void;
+
   // ---- 历史 ----
   markHistory: () => void;
   undo: () => void;
@@ -102,6 +107,21 @@ interface FlowStore extends GraphState {
   setNodeDraggable: (id: string, draggable: boolean) => void;
   deleteNode: (id: string) => void;
   duplicateNode: (id: string) => void;
+  /** 子图剪贴板(跨画布标签 / 跨项目共享):复制选中节点(含组合递归子图)后暂存 */
+  clipboard: { nodes: FlowNode[]; edges: FlowEdge[] } | null;
+  /** 复制当前选中节点及其组合子孙,存入剪贴板;返回复制的节点数 */
+  copySelection: () => number;
+  /** 把剪贴板内容粘贴到当前画布,返回粘贴的节点数 */
+  pasteClipboard: (position?: { x: number; y: number }) => number;
+  /**
+   * 删除节点的某个输入 / 输出端口(该方向至少保留 1 个)。
+   * 会同步删除连到该端口的连线,并记录历史(撤销可恢复端口与连线)。
+   */
+  removePort: (
+    id: string,
+    kind: 'input' | 'output',
+    portId: string,
+  ) => void;
 
   // ---- 连线操作 ----
   updateEdge: (id: string, patch: Partial<FlowEdgeData>) => void;
@@ -117,11 +137,36 @@ interface FlowStore extends GraphState {
   loadGraph: (data: GraphSnapshot) => void;
   newDocument: () => void;
   saveNow: () => void;
+  /** 保存指定文档(含其历史)到 localStorage,用于关闭非活动项目前的保存提示 */
+  saveDocument: (id: string) => void;
   exportJson: () => string;
+  /** 序列化当前活动文档为「项目文件」(含编辑状态与撤销历史,用于保存项目/下次恢复) */
+  serializeProject: () => string;
+  /** 从项目文件 JSON 恢复完整文档(含历史),作为新文档加入并切换到它 */
+  loadProject: (json: string) => boolean;
+
+  // ---- 多文档 ----
+  /** 全部项目文档 */
+  documents: GraphDocument[];
+  /** 当前活动文档 id */
+  activeDocumentId: string;
+  /** 新建一个空文档并切换过去 */
+  createDocument: (name?: string) => string;
+  /** 切换到指定文档(保存并同步活动文档视图) */
+  switchDocument: (id: string) => void;
+  /** 关闭指定文档(删除);若为活动文档则切到相邻文档 */
+  closeDocument: (id: string) => void;
+  /** 重命名文档 */
+  renameDocument: (id: string, name: string) => void;
 
   // ---- 全局偏好 ----
   edgeStyle: EdgeStyle;
   theme: ThemeMode;
+  /** 自动布局方向(横向 / 竖向) */
+  layoutDirection: LayoutDirection;
+  setLayoutDirection: (dir: LayoutDirection) => void;
+  /** 自动布局:对指定范围节点按连线依赖分层排列 */
+  autoLayout: (dir: LayoutDirection, scope?: { compositeId?: string }) => void;
   setEdgeStyle: (style: EdgeStyle) => void;
   setTheme: (theme: ThemeMode) => void;
 
@@ -330,14 +375,273 @@ function savePrefs() {
   }
 }
 
+/* ---------------- 多文档持久化 ---------------- */
+
+interface DocMeta {
+  id: string;
+  name: string;
+  color: string;
+  lastSavedAt: number | null;
+}
+interface DocsIndex {
+  docs: DocMeta[];
+  activeId: string;
+}
+
+function docKey(id: string): string {
+  return `nodeflow:doc:${id}:v1`;
+}
+
+/** 保存单个文档数据(仅图数据 + 内部画布标签) */
+function persistDocument(doc: Pick<GraphDocument, 'id' | 'nodes' | 'edges' | 'viewport' | 'compositeTabs' | 'activeTabId'>) {
+  try {
+    localStorage.setItem(
+      docKey(doc.id),
+      JSON.stringify({
+        nodes: doc.nodes,
+        edges: doc.edges,
+        viewport: doc.viewport,
+        compositeTabs: doc.compositeTabs,
+        activeTabId: doc.activeTabId,
+      }),
+    );
+  } catch {
+    /* 静默 */
+  }
+}
+
+/** 加载单个文档数据,返回不含历史/脏标记的图数据(缺省返回空图) */
+function loadPersistedDocument(id: string): Pick<
+  GraphDocument,
+  'nodes' | 'edges' | 'viewport' | 'compositeTabs' | 'activeTabId'
+> {
+  try {
+    const raw = localStorage.getItem(docKey(id));
+    if (!raw) {
+      return { nodes: [], edges: [], viewport: { x: 0, y: 0, zoom: 1 }, compositeTabs: [], activeTabId: 'main' };
+    }
+    const data = JSON.parse(raw);
+    return {
+      nodes: Array.isArray(data.nodes) ? data.nodes : [],
+      edges: Array.isArray(data.edges) ? data.edges : [],
+      viewport: data.viewport ?? { x: 0, y: 0, zoom: 1 },
+      compositeTabs: Array.isArray(data.compositeTabs) ? data.compositeTabs : [],
+      activeTabId: data.activeTabId ?? 'main',
+    };
+  } catch {
+    return { nodes: [], edges: [], viewport: { x: 0, y: 0, zoom: 1 }, compositeTabs: [], activeTabId: 'main' };
+  }
+}
+
+/** 加载文档注册表 */
+function loadDocsIndex(): DocsIndex | null {
+  try {
+    const raw = localStorage.getItem(DOCS_KEY);
+    if (!raw) return null;
+    const data = JSON.parse(raw);
+    if (!Array.isArray(data.docs)) return null;
+    return {
+      docs: data.docs as DocMeta[],
+      activeId: typeof data.activeId === 'string' ? data.activeId : data.docs[0]?.id ?? '',
+    };
+  } catch {
+    return null;
+  }
+}
+
+/** 保存文档注册表 */
+function persistDocsIndex(index: DocsIndex) {
+  try {
+    localStorage.setItem(DOCS_KEY, JSON.stringify(index));
+  } catch {
+    /* 静默 */
+  }
+}
+
+/**
+ * 启动时构建文档列表:
+ * - 有注册表 → 按注册表加载各文档数据
+ * - 无注册表 → 迁移旧单文档(SAVE_KEY),作为默认文档
+ */
+function buildInitialDocuments(): { docs: GraphDocument[]; activeId: string } {
+  const legacy = loadSaved();
+  const index = loadDocsIndex();
+  if (index && index.docs.length) {
+    const docs = index.docs.map((meta) => {
+      const data = loadPersistedDocument(meta.id);
+      return {
+        id: meta.id,
+        name: meta.name,
+        color: meta.color,
+        nodes: data.nodes,
+        edges: data.edges,
+        viewport: data.viewport,
+        compositeTabs: data.compositeTabs,
+        activeTabId: data.activeTabId,
+        past: [],
+        future: [],
+        lastSavedAt: meta.lastSavedAt,
+        dirty: false,
+      } satisfies GraphDocument;
+    });
+    const activeId = index.docs.some((d) => d.id === index.activeId)
+      ? index.activeId
+      : index.docs[0].id;
+    return { docs, activeId };
+  }
+  // 迁移旧单文档
+  const legacyDoc: GraphDocument = {
+    id: LEGACY_DOC_ID,
+    name: '我的流程',
+    color: DOCUMENT_COLORS[0],
+    nodes: legacy?.nodes ?? seedGraph.nodes,
+    edges: legacy?.edges ?? seedGraph.edges,
+    viewport: legacy?.viewport ?? seedGraph.viewport,
+    compositeTabs: [],
+    activeTabId: 'main',
+    past: [],
+    future: [],
+    lastSavedAt: legacy ? Date.now() : null,
+    dirty: false,
+  };
+  persistDocument(legacyDoc);
+  persistDocsIndex({ docs: [{ id: legacyDoc.id, name: legacyDoc.name, color: legacyDoc.color, lastSavedAt: legacyDoc.lastSavedAt }], activeId: legacyDoc.id });
+  return { docs: [legacyDoc], activeId: legacyDoc.id };
+}
+
 let saveTimer: ReturnType<typeof setTimeout> | null = null;
-const stored = loadSaved();
 const seedGraph = buildSeedGraph();
 const prefs = loadPrefs();
+// 启动时构建文档列表(迁移旧单文档或按注册表加载)
+const initialDocs = buildInitialDocuments();
+const initialActiveDoc = initialDocs.docs.find((d) => d.id === initialDocs.activeId) ?? initialDocs.docs[0];
 
 /* ------------------------------------------------------------------ */
 /* 组合节点(Composite Node)                                             */
 /* ------------------------------------------------------------------ */
+
+/** 构建节点 id → 节点 的 Map */
+function buildNodesById(nodes: FlowNode[]): Map<string, FlowNode> {
+  return new Map(nodes.map((n) => [n.id, n]));
+}
+
+/**
+ * 递归收集一个组合的所有子孙节点 id(含直接子节点与嵌套组合的深层子孙)。
+ */
+/**
+ * 重映射一个端口引用(handle):
+ * - 普通端口:按「ownerNodeId:端口id」查端口映射表换成新 id
+ * - 组合聚合端口(cid: 链):递归重映射链中每个节点 id 与最内层端口 id
+ */
+function remapHandle(
+  handle: string | null | undefined,
+  ownerNodeId: string,
+  nodeMap: Map<string, string>,
+  portMap: Map<string, string>,
+): string | null | undefined {
+  if (!handle) return handle;
+  if (isCompositePort(handle)) {
+    const p = decodeCompositePortPath(handle);
+    if (!p) return handle;
+    const newPath = p.path.map((nid) => nodeMap.get(nid) ?? nid);
+    const last = p.path[p.path.length - 1];
+    const inner = p.portId;
+    const finalPort = isCompositePort(inner)
+      ? (remapHandle(inner, last, nodeMap, portMap) as string)
+      : (portMap.get(`${last}:${inner}`) ?? inner);
+    let ref = finalPort;
+    for (let i = newPath.length - 1; i >= 0; i--) {
+      ref = encodeCompositePort(newPath[i], ref);
+    }
+    return ref;
+  }
+  return portMap.get(`${ownerNodeId}:${handle}`) ?? handle;
+}
+
+function collectAllDescendants(nodes: FlowNode[], compId: string): Set<string> {
+  const byId = buildNodesById(nodes);
+  const out = new Set<string>();
+  const walk = (cid: string) => {
+    const n = byId.get(cid);
+    if (!n?.data?.composite) return;
+    for (const sub of n.data.composite.childIds) {
+      if (out.has(sub)) continue;
+      out.add(sub);
+      if (byId.get(sub)?.data?.composite) walk(sub);
+    }
+  };
+  walk(compId);
+  return out;
+}
+
+/**
+ * 把指向某子孙节点的端口引用,包装成「外层组合聚合端口」的完整引用,
+ * 使其与 computeCompositePorts 生成的聚合端口 id 保持一致。
+ * 例:外层 B,直接子节点 A(组合,聚合端口 id 为 'cid:aSub:in1'),则
+ * 指向 A 的线 handle='cid:aSub:in1' → 'cid:A:cid:aSub:in1'(即 B 的聚合端口 id)。
+ */
+function wrapRefToOuter(
+  nodes: FlowNode[],
+  targetNodeId: string,
+  handle: string,
+  outerId: string,
+): string {
+  // 1. 先编码 targetNodeId 自身,再向上逐层包装祖先组合,直到 outerId 的直接子节点为止(不含 outerId)
+  let ref = encodeCompositePort(targetNodeId, handle);
+  let cur = targetNodeId;
+  const visited = new Set<string>();
+  for (;;) {
+    if (visited.has(cur)) break;
+    visited.add(cur);
+    // 找到包含 cur 的父组合
+    let parentId: string | null = null;
+    for (const n of nodes) {
+      if (n.data?.composite?.childIds.includes(cur)) {
+        parentId = n.id;
+        break;
+      }
+    }
+    if (!parentId || parentId === outerId) break;
+    ref = encodeCompositePort(parentId, ref);
+    cur = parentId;
+  }
+  return ref;
+}
+
+/**
+ * 展开组合节点时,把聚合端口上的引用还原为指向「当前可见」的节点/端口。
+ * 例:'cid:B:cid:A:in1'(B 展开):
+ * - A 塌缩 → 指向 A 的聚合端口 { nodeId:'A', handle:'cid:A:in1' }
+ * - A 展开 → 继续下钻到 { nodeId:'sub', handle:'in1' }
+ */
+function unwrapToVisible(
+  nodesById: Map<string, FlowNode>,
+  ref: string,
+): { nodeId: string; handle: string } | null {
+  // 逐层解析最外层节点与「剩余引用」,保留中间路径(聚合端口 ref 需完整保留)
+  let current = ref;
+  for (;;) {
+    if (!current.startsWith(COMPOSITE_PREFIX)) break;
+    const rest = current.slice(COMPOSITE_PREFIX.length);
+    const idx = rest.indexOf(':');
+    if (idx < 0) break;
+    const nodeId = rest.slice(0, idx);
+    const remaining = rest.slice(idx + 1);
+    const node = nodesById.get(nodeId);
+    if (!node) return null;
+    if (node.data?.composite && !node.data.composite.expanded) {
+      // 该节点是塌缩组合:线指向其聚合端口,handle 为「去掉本层后的完整剩余引用」
+      return { nodeId, handle: remaining };
+    }
+    if (isCompositePort(remaining)) {
+      current = remaining;
+      continue;
+    }
+    // 普通端口 → 指向该节点
+    return { nodeId, handle: remaining };
+  }
+  return null;
+}
 
 /**
  * 塌缩组合节点:
@@ -354,14 +658,17 @@ function collapseComposite(
   const s = get();
   const comp = s.nodes.find((n) => n.id === id);
   if (!comp?.data?.composite) return;
-  const childSet = new Set(comp.data.composite.childIds);
-  const children = s.nodes.filter((n) => childSet.has(n.id));
+  const directChildIds = comp.data.composite.childIds;
+  const childSet = new Set(directChildIds);
+  // 嵌套时收集全部子孙节点(含内层组合的深层子节点)
+  const descendantSet = collectAllDescendants(s.nodes, id);
+  const directChildren = s.nodes.filter((n) => childSet.has(n.id));
 
-  // 聚合输入/输出端口
-  const { inputs, outputs } = computeCompositePorts(children, s.edges);
+  // 聚合输入/输出端口(嵌套时递归展平内层聚合端口)
+  const { inputs, outputs } = computeCompositePorts(directChildren, s.edges, buildNodesById(s.nodes));
 
   // 组合节点定位到子节点群中心
-  const bounds = computeCompositeBounds(children, 0);
+  const bounds = computeCompositeBounds(directChildren, 0);
   const pos = bounds
     ? {
         x: Math.round(bounds.x + bounds.width / 2 - 170),
@@ -386,23 +693,24 @@ function collapseComposite(
         },
       };
     }
-    if (childSet.has(n.id)) return { ...n, hidden: true, selected: false };
+    // 隐藏全部子孙节点(嵌套时递归)
+    if (descendantSet.has(n.id)) return { ...n, hidden: true, selected: false };
     return n;
   });
 
-  // 内部连线(两端都在组合内)仅隐藏、不改写端口,保证内部画布仍可显示;
-  // 外部连线改写为指向组合节点(端口 cid: 编码,可逆)
+  // 内部连线(两端都在子孙内)仅隐藏、不改写端口;
+  // 外部连线指向任一子孙 → 改写到外层组合聚合端口(端口 ref 递归包装,可逆)
   const edges = s.edges.map((e) => {
-    const inside = childSet.has(e.source) && childSet.has(e.target);
+    const inside = descendantSet.has(e.source) && descendantSet.has(e.target);
     if (inside) return { ...e, hidden: true };
     let { source, sourceHandle, target, targetHandle } = e;
-    if (childSet.has(e.source)) {
+    if (descendantSet.has(e.source)) {
       source = id;
-      sourceHandle = encodeCompositePort(e.source, e.sourceHandle ?? '');
+      sourceHandle = wrapRefToOuter(s.nodes, e.source, e.sourceHandle ?? '', id);
     }
-    if (childSet.has(e.target)) {
+    if (descendantSet.has(e.target)) {
       target = id;
-      targetHandle = encodeCompositePort(e.target, e.targetHandle ?? '');
+      targetHandle = wrapRefToOuter(s.nodes, e.target, e.targetHandle ?? '', id);
     }
     return { ...e, source, sourceHandle, target, targetHandle, hidden: false };
   });
@@ -424,42 +732,42 @@ function expandComposite(
   const s = get();
   const comp = s.nodes.find((n) => n.id === id);
   if (!comp?.data?.composite) return;
-  const childSet = new Set(comp.data.composite.childIds);
+  const directChildIds = comp.data.composite.childIds;
+  const childSet = new Set(directChildIds);
+  const byId = buildNodesById(s.nodes);
 
   const nodes = s.nodes.map((n) => {
+    // 恢复直接子节点显示;更深的子孙隐藏状态由 refreshCompositeHidden 递归兜底
     if (childSet.has(n.id)) return { ...n, hidden: false };
     return n;
   });
 
   const edges = s.edges.map((e) => {
-    // 属于其他塌缩组合的连线保持原样,不因本组合展开而改变隐藏状态
-    const inside = childSet.has(e.source) && childSet.has(e.target);
     let { source, sourceHandle, target, targetHandle } = e;
     let touched = false;
     if (source === id && sourceHandle) {
-      const ref = decodeCompositePort(sourceHandle);
-      if (ref) {
-        source = ref.nodeId;
-        sourceHandle = ref.portId;
+      const r = unwrapToVisible(byId, sourceHandle);
+      if (r) {
+        source = r.nodeId;
+        sourceHandle = r.handle;
         touched = true;
       }
     }
     if (target === id && targetHandle) {
-      const ref = decodeCompositePort(targetHandle);
-      if (ref) {
-        target = ref.nodeId;
-        targetHandle = ref.portId;
+      const r = unwrapToVisible(byId, targetHandle);
+      if (r) {
+        target = r.nodeId;
+        targetHandle = r.handle;
         touched = true;
       }
     }
-    // 与本组合相关的边:展开后全部显示(内部连线与外部连线都恢复到子节点端口)
-    if (touched || inside) return { ...e, source, sourceHandle, target, targetHandle, hidden: false };
+    if (touched) return { ...e, source, sourceHandle, target, targetHandle };
     return e;
   });
 
   // 组合节点变为包裹子节点的虚线框
-  const children = nodes.filter((n) => childSet.has(n.id));
-  const bounds = computeCompositeBounds(children, COMPOSITE_PAD);
+  const directChildren = nodes.filter((n) => childSet.has(n.id));
+  const bounds = computeCompositeBounds(directChildren, COMPOSITE_PAD);
   const updated = nodes.map((n) => {
     if (n.id !== id) return n;
     const base: FlowNode = {
@@ -480,6 +788,8 @@ function expandComposite(
   });
 
   set({ nodes: updated, edges });
+  // 展开后统一重算嵌套隐藏状态(内层仍塌缩的组合其子节点保持隐藏)
+  refreshCompositeHidden(get, set);
 }
 
 /** 基于当前节点数组,重算所有展开态组合节点的虚线框包围盒(纯函数) */
@@ -525,14 +835,37 @@ function refreshCompositeHidden(
   const s = get();
   const comps = s.nodes.filter((n) => n.data?.composite);
   if (!comps.length) return;
+  const byId = buildNodesById(s.nodes);
+
+  // 判断节点是否被任一塌缩的组合祖先包裹(不含自身为塌缩组合的情况,由上层处理)
+  const isUnderCollapsedComposite = (nid: string): boolean => {
+    const visited = new Set<string>();
+    let cur = nid;
+    while (cur) {
+      if (visited.has(cur)) break;
+      visited.add(cur);
+      let parentId: string | null = null;
+      for (const c of comps) {
+        if (c.data!.composite!.childIds.includes(cur)) {
+          parentId = c.id;
+          break;
+        }
+      }
+      if (!parentId) break;
+      const pnode = byId.get(parentId);
+      if (pnode?.data?.composite && !pnode.data.composite.expanded) return true;
+      cur = parentId;
+    }
+    return false;
+  };
 
   let changed = false;
   const nodes = s.nodes.map((n) => {
-    // 塌缩组合:重新计算聚合端口,保证属性面板与画布展示一致
     const composite = n.data?.composite;
     if (composite && !composite.expanded) {
+      // 塌缩组合:重新计算聚合端口(嵌套时递归展平)
       const children = s.nodes.filter((c) => composite.childIds.includes(c.id));
-      const { inputs, outputs } = computeCompositePorts(children, s.edges);
+      const { inputs, outputs } = computeCompositePorts(children, s.edges, byId);
       if (
         JSON.stringify(inputs) !== JSON.stringify(n.data.inputs) ||
         JSON.stringify(outputs) !== JSON.stringify(n.data.outputs)
@@ -542,9 +875,8 @@ function refreshCompositeHidden(
       }
       return n;
     }
-    const owner = comps.find((c) => c.data!.composite!.childIds.includes(n.id));
-    if (!owner) return n;
-    const targetHidden = !owner.data!.composite!.expanded;
+    // 普通节点 / 展开组合:是否被塌缩祖先组合包裹
+    const targetHidden = isUnderCollapsedComposite(n.id);
     if (!!n.hidden !== targetHidden) {
       changed = true;
       return { ...n, hidden: targetHidden };
@@ -552,12 +884,10 @@ function refreshCompositeHidden(
     return n;
   });
   const edges = s.edges.map((e) => {
-    const owner = comps.find((c) => {
-      const ids = c.data!.composite!.childIds;
-      return ids.includes(e.source) && ids.includes(e.target);
-    });
-    if (!owner) return e;
-    const targetHidden = !owner.data!.composite!.expanded;
+    // 内部连线是否被塌缩祖先包裹 → 隐藏
+    const srcHidden = isUnderCollapsedComposite(e.source);
+    const tgtHidden = isUnderCollapsedComposite(e.target);
+    const targetHidden = srcHidden || tgtHidden;
     if (!!e.hidden !== targetHidden) {
       changed = true;
       return { ...e, hidden: targetHidden };
@@ -574,10 +904,10 @@ function refreshCompositeHidden(
  */
 function edgeReferencesNode(e: FlowEdge, nodeId: string): boolean {
   if (e.source === nodeId || e.target === nodeId) return true;
-  return (
-    decodeCompositePort(e.sourceHandle)?.nodeId === nodeId ||
-    decodeCompositePort(e.targetHandle)?.nodeId === nodeId
-  );
+  // 嵌套组合时端口引用是链式,需检查路径上是否包含目标节点
+  const srcPath = decodeCompositePortPath(e.sourceHandle)?.path ?? [];
+  const tgtPath = decodeCompositePortPath(e.targetHandle)?.path ?? [];
+  return srcPath.includes(nodeId) || tgtPath.includes(nodeId);
 }
 
 /** 子节点被删除后,从所有组合的 childIds 中移除该 id */
@@ -636,20 +966,57 @@ function closeCompositeTabInState(s: FlowStore, id: string) {
 /* ------------------------------------------------------------------ */
 /* Store                                                               */
 /* ------------------------------------------------------------------ */
+
+/** 把活动文档镜像字段(nodes/edges/...)同步回 documents 中的活动文档 */
+function syncActiveDoc(get: () => FlowStore, rawSet: (p: unknown) => void) {
+  const s = get();
+  const docId = s.activeDocumentId;
+  (rawSet as (fn: (state: FlowStore) => Partial<FlowStore>) => void)((state: FlowStore) => ({
+    documents: state.documents.map((d) =>
+      d.id === docId
+        ? {
+            ...d,
+            nodes: state.nodes,
+            edges: state.edges,
+            viewport: state.viewport,
+            compositeTabs: state.compositeTabs,
+            activeTabId: state.activeTabId,
+            past: state.past,
+            future: state.future,
+            lastSavedAt: state.lastSavedAt,
+            dirty: state.dirty,
+          }
+        : d,
+    ),
+  }));
+}
+
 export const useGraphStore = create<FlowStore>()(
-  subscribeWithSelector((set, get) => ({
-    nodes: stored?.nodes ?? seedGraph.nodes,
-    edges: stored?.edges ?? seedGraph.edges,
-    viewport: stored?.viewport ?? seedGraph.viewport,
-    past: [],
-    future: [],
+  subscribeWithSelector((rawSet, get) => {
+    // 包装 set:每次修改活动文档镜像字段后,同步回 documents。
+    // 所有 action 继续使用「set」变量,即会自动同步文档,无需改动现有 action。
+    const set: typeof rawSet = (partial) => {
+      rawSet(partial as never);
+      syncActiveDoc(get, rawSet as unknown as (p: unknown) => void);
+    };
+    return {
+    documents: initialDocs.docs,
+    activeDocumentId: initialDocs.activeId,
+    nodes: initialActiveDoc?.nodes ?? seedGraph.nodes,
+    edges: initialActiveDoc?.edges ?? seedGraph.edges,
+    viewport: initialActiveDoc?.viewport ?? seedGraph.viewport,
+    past: initialActiveDoc?.past ?? [],
+    future: initialActiveDoc?.future ?? [],
     selected: null,
-    lastSavedAt: stored ? Date.now() : null,
+    pendingAutoEdit: null,
+    clipboard: null,
+    lastSavedAt: initialActiveDoc?.lastSavedAt ?? null,
     dirty: false,
     edgeStyle: prefs?.edgeStyle ?? 'smoothstep',
     theme: prefs?.theme ?? 'dark',
-    compositeTabs: [],
-    activeTabId: 'main',
+    layoutDirection: 'horizontal',
+    compositeTabs: initialActiveDoc?.compositeTabs ?? [],
+    activeTabId: initialActiveDoc?.activeTabId ?? 'main',
     allLocked: false,
     toggleLockAll: () => set((s) => ({ allLocked: !s.allLocked })),
 
@@ -746,10 +1113,14 @@ export const useGraphStore = create<FlowStore>()(
       set((s) => ({ edges: [...s.edges, edge] }));
       // 若在塌缩组合内部画布中新增内部连线,同步隐藏状态
       refreshCompositeHidden(get, set);
+      // 新连线创建后默认进入连线说明(label)编辑模式,并选中该连线以便属性面板显示
+      set({ selected: { kind: 'edge', id: edge.id }, pendingAutoEdit: { kind: 'edge-label', id: edge.id } });
     },
     onViewportChange: (v) => set({ viewport: v }),
 
     setSelected: (sel) => set({ selected: sel }),
+
+    requestAutoEdit: (t) => set({ pendingAutoEdit: t }),
 
     markHistory: () =>
       set((s) => ({
@@ -949,6 +1320,176 @@ export const useGraphStore = create<FlowStore>()(
       };
       set((s) => ({ nodes: [...s.nodes, copy] }));
     },
+    copySelection: () => {
+      if (get().allLocked) return 0;
+      const s = get();
+      // 选中来源:优先 React Flow 节点的 .selected,补充自定义 selected 指向的节点
+      const selNodes = s.nodes.filter((n) => n.selected);
+      const selNodeId = s.selected?.kind === 'node' ? s.selected.id : null;
+      if (selNodes.length === 0 && selNodeId) {
+        const n = s.nodes.find((x) => x.id === selNodeId);
+        if (n) selNodes.push(n);
+      }
+      const selected = selNodes;
+      if (selected.length === 0) return 0;
+      // 收集选中节点 + 所有组合子孙(递归)
+      const ids = new Set<string>();
+      for (const n of selected) {
+        ids.add(n.id);
+        for (const d of collectAllDescendants(s.nodes, n.id)) ids.add(d);
+      }
+      const subNodes = s.nodes
+        .filter((n) => ids.has(n.id))
+        .map((n) => JSON.parse(JSON.stringify(n)) as FlowNode);
+      const subEdges = s.edges
+        .filter((e) => ids.has(e.source) && ids.has(e.target))
+        .map((e) => JSON.parse(JSON.stringify(e)) as FlowEdge);
+      set({ clipboard: { nodes: subNodes, edges: subEdges } });
+      return subNodes.length;
+    },
+    pasteClipboard: (position) => {
+      if (get().allLocked) return 0;
+      const clip = get().clipboard;
+      if (!clip || clip.nodes.length === 0) return 0;
+      get().markHistory();
+
+      // 1. 深拷贝快照(避免污染剪贴板)
+      const srcNodes = JSON.parse(JSON.stringify(clip.nodes)) as FlowNode[];
+      const srcEdges = JSON.parse(JSON.stringify(clip.edges)) as FlowEdge[];
+
+      // 2. 节点 id 重映射
+      const nodeMap = new Map<string, string>();
+      for (const n of srcNodes) nodeMap.set(n.id, uid('node'));
+
+      // 3. 普通节点端口 id 重映射
+      const portMap = new Map<string, string>(); // `${oldNodeId}:${oldPortId}` -> newPortId
+      for (const n of srcNodes) {
+        if (n.data?.composite) continue;
+        const newInputs = (n.data.inputs ?? []).map((p) => {
+          const np = uid('in');
+          portMap.set(`${n.id}:${p.id}`, np);
+          return { ...p, id: np };
+        });
+        const newOutputs = (n.data.outputs ?? []).map((p) => {
+          const np = uid('out');
+          portMap.set(`${n.id}:${p.id}`, np);
+          return { ...p, id: np };
+        });
+        n.data = { ...n.data, inputs: newInputs, outputs: newOutputs };
+      }
+
+      // 4. 组合节点 childIds 重映射 + 节点自身 id 替换
+      for (const n of srcNodes) {
+        const newId = nodeMap.get(n.id)!;
+        if (n.data?.composite) {
+          n.data.composite = {
+            ...n.data.composite,
+            childIds: n.data.composite.childIds.map((cid) => nodeMap.get(cid) ?? cid),
+          };
+        }
+        n.id = newId;
+        n.selected = false;
+        n.hidden = false;
+        n.draggable = true;
+      }
+
+      // 5. 位置偏移:让复制内容的包围盒中心对齐到粘贴点;未指定时定位到当前视口中心(保证可见)
+      let minX = Infinity;
+      let minY = Infinity;
+      let maxX = -Infinity;
+      let maxY = -Infinity;
+      for (const n of srcNodes) {
+        const { w, h } = getNodeSize(n);
+        minX = Math.min(minX, n.position.x);
+        minY = Math.min(minY, n.position.y);
+        maxX = Math.max(maxX, n.position.x + w);
+        maxY = Math.max(maxY, n.position.y + h);
+      }
+      const cx = (minX + maxX) / 2;
+      const cy = (minY + maxY) / 2;
+      let offset: { x: number; y: number };
+      if (position) {
+        offset = { x: position.x - cx, y: position.y - cy };
+      } else if (get().activeTabId === 'main') {
+        // 主画布:取当前视口中心对应的流坐标作为粘贴点
+        const vp = get().viewport;
+        const container = typeof document !== 'undefined'
+          ? document.querySelector('.react-flow')
+          : null;
+        const cw = container?.clientWidth ?? 800;
+        const ch = container?.clientHeight ?? 600;
+        const cx_screen = cw / 2;
+        const cy_screen = ch / 2;
+        const fx = (cx_screen - vp.x) / vp.zoom;
+        const fy = (cy_screen - vp.y) / vp.zoom;
+        offset = { x: fx - cx, y: fy - cy };
+      } else {
+        offset = { x: 40, y: 40 };
+      }
+      for (const n of srcNodes) {
+        n.position = { x: n.position.x + offset.x, y: n.position.y + offset.y };
+      }
+
+      // 6. 连线重映射(source/target 与 handle)
+      const newEdges: FlowEdge[] = srcEdges.map((e) => ({
+        ...e,
+        id: uid('edge'),
+        source: nodeMap.get(e.source) ?? e.source,
+        target: nodeMap.get(e.target) ?? e.target,
+        sourceHandle: remapHandle(e.sourceHandle, e.source, nodeMap, portMap) ?? e.sourceHandle,
+        targetHandle: remapHandle(e.targetHandle, e.target, nodeMap, portMap) ?? e.targetHandle,
+        hidden: false,
+        selected: false,
+      }));
+
+      // 7. 插入当前活动文档
+      set((st) => ({ nodes: [...st.nodes, ...srcNodes], edges: [...st.edges, ...newEdges] }));
+
+      // 8. 重算塌缩组合聚合端口与隐藏状态
+      refreshCompositeHidden(get, set);
+
+      // 9. 选中粘贴出的节点(便于看到并继续操作)
+      if (srcNodes.length) {
+        const firstNewId = srcNodes[0].id;
+        set({ selected: { kind: 'node', id: firstNewId } });
+      }
+      return srcNodes.length;
+    },
+    removePort: (id, kind, portId) => {
+      if (get().allLocked) return;
+      const s = get();
+      const node = s.nodes.find((n) => n.id === id);
+      if (!node) return;
+      const list = kind === 'input' ? node.data.inputs : node.data.outputs;
+      // 每个方向至少保留 1 个端口
+      if (list.length <= 1) return;
+      if (!list.some((p) => p.id === portId)) return;
+      get().markHistory();
+      const patch =
+        kind === 'input'
+          ? { inputs: list.filter((p) => p.id !== portId) }
+          : { outputs: list.filter((p) => p.id !== portId) };
+      set((s2) => ({
+        nodes: s2.nodes.map((n) => (n.id === id ? { ...n, data: { ...n.data, ...patch } } : n)),
+        // 删除连到该端口的连线(普通端口或塌缩聚合端口的 cid: 引用)
+        edges: s2.edges.filter(
+          (e) =>
+            !(
+              e.target === id &&
+              (e.targetHandle === portId ||
+                e.targetHandle === encodeCompositePort(id, portId) ||
+                decodeCompositePortPath(e.targetHandle)?.portId === portId)
+            ) &&
+            !(
+              e.source === id &&
+              (e.sourceHandle === portId ||
+                e.sourceHandle === encodeCompositePort(id, portId) ||
+                decodeCompositePortPath(e.sourceHandle)?.portId === portId)
+            ),
+        ),
+      }));
+      refreshCompositeHidden(get, set);
+    },
 
     updateEdge: (id, patch) => {
       if (get().allLocked) return;
@@ -1040,13 +1581,40 @@ export const useGraphStore = create<FlowStore>()(
     },
 
     saveNow: () => {
-      const { nodes, edges, viewport } = get();
-      try {
-        localStorage.setItem(SAVE_KEY, JSON.stringify({ nodes, edges, viewport }));
-        set({ lastSavedAt: Date.now(), dirty: false });
-      } catch {
-        /* 存储失败时静默,避免打断操作 */
-      }
+      const s = get();
+      const doc = s.documents.find((d) => d.id === s.activeDocumentId);
+      if (!doc) return;
+      persistDocument(doc);
+      const idx = loadDocsIndex() ?? { docs: [], activeId: s.activeDocumentId };
+      persistDocsIndex({
+        docs: idx.docs.map((m) =>
+          m.id === s.activeDocumentId
+            ? { ...m, lastSavedAt: Date.now() }
+            : m,
+        ),
+        activeId: s.activeDocumentId,
+      });
+      set({ lastSavedAt: Date.now(), dirty: false });
+    },
+
+    saveDocument: (id) => {
+      const s = get();
+      const doc = s.documents.find((d) => d.id === id);
+      if (!doc) return;
+      persistDocument(doc);
+      const idx = loadDocsIndex() ?? { docs: [], activeId: id };
+      persistDocsIndex({
+        docs: idx.docs.map((m) => (m.id === id ? { ...m, lastSavedAt: Date.now() } : m)),
+        activeId: idx.activeId,
+      });
+      // 同步更新内存中该文档的 dirty/lastSavedAt
+      set((state) => ({
+        documents: state.documents.map((d) =>
+          d.id === id ? { ...d, dirty: false, lastSavedAt: Date.now() } : d,
+        ),
+        // 如果是当前活动文档,同步顶层镜像
+        ...(state.activeDocumentId === id ? { dirty: false, lastSavedAt: Date.now() } : {}),
+      }));
     },
 
     exportJson: () => {
@@ -1058,13 +1626,237 @@ export const useGraphStore = create<FlowStore>()(
       );
     },
 
+    serializeProject: () => {
+      const s = get();
+      const doc: GraphDocument = {
+        id: s.activeDocumentId,
+        name: s.documents.find((d) => d.id === s.activeDocumentId)?.name ?? '未命名项目',
+        color: s.documents.find((d) => d.id === s.activeDocumentId)?.color ?? '#4ea1ff',
+        nodes: s.nodes,
+        edges: s.edges,
+        viewport: s.viewport,
+        compositeTabs: s.compositeTabs,
+        activeTabId: s.activeTabId,
+        past: s.past,
+        future: s.future,
+        lastSavedAt: s.lastSavedAt,
+        dirty: s.dirty,
+      };
+      return JSON.stringify(
+        { type: 'nodeflow-project', version: 2, exportedAt: new Date().toISOString(), project: doc },
+        null,
+        2,
+      );
+    },
+
+    loadProject: (json) => {
+      if (get().allLocked) return false;
+      let doc: GraphDocument;
+      try {
+        const data = JSON.parse(json);
+        const p = data?.type === 'nodeflow-project' ? data.project : data;
+        doc = {
+          id: uid('doc'),
+          name: p?.name ?? '未命名项目',
+          color: p?.color ?? DOCUMENT_COLORS[get().documents.length % DOCUMENT_COLORS.length],
+          nodes: Array.isArray(p?.nodes) ? p.nodes : [],
+          edges: Array.isArray(p?.edges) ? p.edges : [],
+          viewport: p?.viewport ?? { x: 0, y: 0, zoom: 1 },
+          compositeTabs: Array.isArray(p?.compositeTabs) ? p.compositeTabs : [],
+          activeTabId: p?.activeTabId ?? 'main',
+          past: Array.isArray(p?.past) ? p.past : [],
+          future: Array.isArray(p?.future) ? p.future : [],
+          lastSavedAt: p?.lastSavedAt ?? null,
+          dirty: false,
+        };
+      } catch {
+        return false;
+      }
+      set((s) => ({
+        documents: [...s.documents, doc],
+        activeDocumentId: doc.id,
+        nodes: doc.nodes,
+        edges: doc.edges,
+        viewport: doc.viewport,
+        compositeTabs: doc.compositeTabs,
+        activeTabId: doc.activeTabId,
+        past: doc.past,
+        future: doc.future,
+        lastSavedAt: doc.lastSavedAt,
+        dirty: false,
+        selected: null,
+      }));
+      const idx = loadDocsIndex() ?? { docs: [], activeId: doc.id };
+      persistDocsIndex({
+        docs: [...idx.docs, { id: doc.id, name: doc.name, color: doc.color, lastSavedAt: null }],
+        activeId: doc.id,
+      });
+      return true;
+    },
+
+    // ---- 多文档管理 ----
+    createDocument: (name) => {
+      const id = uid('doc');
+      const color =
+        DOCUMENT_COLORS[get().documents.length % DOCUMENT_COLORS.length];
+      const doc: GraphDocument = {
+        id,
+        name: name ?? `未命名项目 ${get().documents.length + 1}`,
+        color,
+        nodes: [],
+        edges: [],
+        viewport: { x: 0, y: 0, zoom: 1 },
+        compositeTabs: [],
+        activeTabId: 'main',
+        past: [],
+        future: [],
+        lastSavedAt: null,
+        dirty: false,
+      };
+      set((s) => ({
+        documents: [...s.documents, doc],
+        activeDocumentId: id,
+        nodes: [],
+        edges: [],
+        viewport: { x: 0, y: 0, zoom: 1 },
+        compositeTabs: [],
+        activeTabId: 'main',
+        past: [],
+        future: [],
+        lastSavedAt: null,
+        dirty: false,
+        selected: null,
+      }));
+      const idx = loadDocsIndex() ?? { docs: [], activeId: id };
+      persistDocsIndex({
+        docs: [...idx.docs, { id, name: doc.name, color: doc.color, lastSavedAt: null }],
+        activeId: id,
+      });
+      return id;
+    },
+    switchDocument: (id) => {
+      const target = get().documents.find((d) => d.id === id);
+      if (!target) return;
+      // 先把当前活动文档写入 localStorage(同步镜像已由 set 自动完成)
+      get().saveNow();
+      set({
+        activeDocumentId: id,
+        nodes: target.nodes,
+        edges: target.edges,
+        viewport: target.viewport,
+        compositeTabs: target.compositeTabs,
+        activeTabId: target.activeTabId,
+        past: target.past,
+        future: target.future,
+        lastSavedAt: target.lastSavedAt,
+        dirty: target.dirty,
+        selected: null,
+      });
+      const idx = loadDocsIndex();
+      if (idx) persistDocsIndex({ ...idx, activeId: id });
+    },
+    closeDocument: (id) => {
+      const docs = get().documents;
+      const targetIdx = docs.findIndex((d) => d.id === id);
+      if (targetIdx < 0) return;
+      // 删除文档存储
+      try {
+        localStorage.removeItem(docKey(id));
+      } catch {
+        /* 静默 */
+      }
+
+      // 唯一项目:关闭后新建一个空项目替换,保证始终至少有一个项目
+      if (docs.length <= 1) {
+        const newId = uid('doc');
+        const color =
+          DOCUMENT_COLORS[get().documents.length % DOCUMENT_COLORS.length];
+        const emptyDoc: GraphDocument = {
+          id: newId,
+          name: `未命名项目 ${get().documents.length + 1}`,
+          color,
+          nodes: [],
+          edges: [],
+          viewport: { x: 0, y: 0, zoom: 1 },
+          compositeTabs: [],
+          activeTabId: 'main',
+          past: [],
+          future: [],
+          lastSavedAt: null,
+          dirty: false,
+        };
+        set({
+          documents: [emptyDoc],
+          activeDocumentId: newId,
+          nodes: [],
+          edges: [],
+          viewport: { x: 0, y: 0, zoom: 1 },
+          compositeTabs: [],
+          activeTabId: 'main',
+          past: [],
+          future: [],
+          lastSavedAt: null,
+          dirty: false,
+          selected: null,
+        });
+        const idx = loadDocsIndex() ?? { docs: [], activeId: newId };
+        persistDocsIndex({
+          docs: [{ id: newId, name: emptyDoc.name, color: emptyDoc.color, lastSavedAt: null }],
+          activeId: newId,
+        });
+        return;
+      }
+
+      const remaining = docs.filter((d) => d.id !== id);
+      // 若关闭的是活动文档,切换到相邻文档
+      if (get().activeDocumentId === id) {
+        const next = remaining[Math.min(targetIdx, remaining.length - 1)];
+        set({
+          documents: remaining,
+          activeDocumentId: next.id,
+          nodes: next.nodes,
+          edges: next.edges,
+          viewport: next.viewport,
+          compositeTabs: next.compositeTabs,
+          activeTabId: next.activeTabId,
+          past: next.past,
+          future: next.future,
+          lastSavedAt: next.lastSavedAt,
+          dirty: next.dirty,
+          selected: null,
+        });
+      } else {
+        set({ documents: remaining });
+      }
+      const idx = loadDocsIndex();
+      if (idx) {
+        persistDocsIndex({
+          docs: idx.docs.filter((d) => d.id !== id),
+          activeId: remaining.some((d) => d.id === idx.activeId)
+            ? idx.activeId
+            : remaining[0].id,
+        });
+      }
+    },
+    renameDocument: (id, name) => {
+      set((s) => ({
+        documents: s.documents.map((d) => (d.id === id ? { ...d, name } : d)),
+      }));
+      const idx = loadDocsIndex();
+      if (idx) {
+        persistDocsIndex({
+          ...idx,
+          docs: idx.docs.map((d) => (d.id === id ? { ...d, name } : d)),
+        });
+      }
+    },
+
     // ---- 组合节点操作 ----
     groupSelected: () => {
       if (get().allLocked) return null;
       const s = get();
       const selectedNodes = s.nodes.filter((n) => n.selected);
       if (selectedNodes.length < 2) return null;
-      if (selectedNodes.some((n) => n.data.composite)) return null;
       get().markHistory();
       const childIds = selectedNodes.map((n) => n.id);
       const id = uid('composite');
@@ -1075,9 +1867,9 @@ export const useGraphStore = create<FlowStore>()(
             y: Math.round(bounds.y + bounds.height / 2 - 120),
           }
         : { x: 100, y: 100 };
-      // 按子节点多数派推断组合节点的执行主体与标题
-      const actor = majorityActor(selectedNodes);
-      const majority = actor === 'human' ? '人工' : actor === 'machine' ? '机器' : '人机协同';
+      // 组合节点执行主体继承自内部节点(全同则同、混杂则人机协同,支持嵌套),并据此推断标题
+      const actor = computeCompositeActor(selectedNodes, buildNodesById(s.nodes));
+      const actorLabel = actor === 'human' ? '人工' : actor === 'machine' ? '机器' : '人机协同';
       const nodes = s.nodes.map((n) => (n.selected ? { ...n, selected: false } : n));
       const compNode: FlowNode = {
         id,
@@ -1085,7 +1877,7 @@ export const useGraphStore = create<FlowStore>()(
         position: pos,
         selected: true,
         data: {
-          label: `${majority}协作流程(${selectedNodes.length})`,
+          label: `${actorLabel}协作流程(${selectedNodes.length})`,
           description: `${selectedNodes.length} 个节点组合而成,可展开编辑内部流程`,
           actor,
           locked: false,
@@ -1138,7 +1930,35 @@ export const useGraphStore = create<FlowStore>()(
       set({ theme });
       savePrefs();
     },
-  })),
+    setLayoutDirection: (dir) => set({ layoutDirection: dir }),
+    autoLayout: (dir, scope) => {
+      if (get().allLocked) return;
+      const s = get();
+      // 确定布局范围:全画布可见节点 或 组合的直接子节点
+      let targetIds: Set<string>;
+      if (scope?.compositeId) {
+        const comp = s.nodes.find((n) => n.id === scope.compositeId);
+        if (!comp?.data?.composite) return;
+        targetIds = new Set(comp.data.composite.childIds);
+      } else {
+        targetIds = new Set(s.nodes.filter((n) => !n.hidden).map((n) => n.id));
+      }
+      const targets = s.nodes.filter((n) => targetIds.has(n.id));
+      if (targets.length === 0) return;
+      const layoutEdges = s.edges.filter(
+        (e) => targetIds.has(e.source) && targetIds.has(e.target),
+      );
+      const positions = computeLayout(targets, layoutEdges, dir);
+      get().markHistory();
+      const withPositions = s.nodes.map((n) => {
+        const pos = positions.get(n.id);
+        return pos ? { ...n, position: { x: Math.round(pos.x), y: Math.round(pos.y) } } : n;
+      });
+      // 重算展开态组合节点的虚线框,包裹新布局后的子节点
+      set({ nodes: applyCompositeBoxes(withPositions) });
+    },
+    };
+  }),
 );
 
 /* ------------------------------------------------------------------ */
@@ -1147,7 +1967,12 @@ export const useGraphStore = create<FlowStore>()(
 useGraphStore.subscribe(
   (s) => ({ nodes: s.nodes, edges: s.edges, viewport: s.viewport }),
   () => {
-    useGraphStore.setState({ dirty: true });
+    useGraphStore.setState((s) => ({
+      dirty: true,
+      documents: s.documents.map((d) =>
+        d.id === s.activeDocumentId ? { ...d, dirty: true } : d,
+      ),
+    }));
     if (saveTimer) clearTimeout(saveTimer);
     saveTimer = setTimeout(() => {
       useGraphStore.getState().saveNow();

@@ -94,14 +94,43 @@ export interface GraphState {
   viewport: ViewportState;
 }
 
+/** 项目文档颜色(用于多文档标签区分) */
+export const DOCUMENT_COLORS = ['#4ea1ff', '#22c55e', '#f59e0b', '#ec4899', '#9d6bff', '#06b6d4'] as const;
+
+/**
+ * 一个独立项目文档:包含完整的图数据、内部画布标签状态与各自的历史栈。
+ * 多文档模型下,每个文档拥有独立的 nodes / edges / viewport / 撤销历史。
+ */
+export interface GraphDocument {
+  /** 文档唯一 id */
+  id: string;
+  /** 文档名称 */
+  name: string;
+  /** 项目标签颜色 */
+  color: string;
+  nodes: FlowNode[];
+  edges: FlowEdge[];
+  viewport: ViewportState;
+  /** 该文档内已打开的组合内部画布标签 */
+  compositeTabs: string[];
+  /** 该文档内当前激活的标签页:'main' 或组合节点 id */
+  activeTabId: string;
+  /** 该文档自己的撤销历史 */
+  past: GraphSnapshot[];
+  /** 该文档自己的重做历史 */
+  future: GraphSnapshot[];
+  lastSavedAt: number | null;
+  dirty: boolean;
+}
+
 /** 人工 / 机器 / 人机协同 标签的图标与颜色配置 */
 export const ACTOR_META: Record<
   ActorType,
-  { label: string; color: string; bg: string }
+  { label: string; color: string; bg: string; frame: string }
 > = {
-  human: { label: '人工', color: '#e8b028', bg: 'rgba(232,176,40,.14)' },
-  machine: { label: '机器', color: '#4ea1ff', bg: 'rgba(78,161,255,.14)' },
-  hybrid: { label: '人机协同', color: '#9d6bff', bg: 'rgba(157,107,255,.14)' },
+  human: { label: '人工', color: '#e8b028', bg: 'rgba(232,176,40,.14)', frame: '#e8b028' },
+  machine: { label: '机器', color: '#4ea1ff', bg: 'rgba(78,161,255,.14)', frame: '#4ea1ff' },
+  hybrid: { label: '人机协同', color: '#9d6bff', bg: 'rgba(157,107,255,.14)', frame: '#22c55e' },
 };
 
 /** 中间产物类型的元信息 */
