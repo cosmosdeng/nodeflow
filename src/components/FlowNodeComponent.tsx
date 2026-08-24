@@ -225,6 +225,24 @@ function FlowNodeComponent({ id, data, selected }: NodeProps<FlowNode>) {
             title={gw.label}
           />
         </div>
+        {/* 执行主体图标(人/机器/人机协同,点击轮换) */}
+        <button
+          className="nf-gateway-actor"
+          title={disabled ? '演示模式已锁定' : `执行主体:${ACTOR_META[data.actor as ActorType].label} · 点击轮换`}
+          onClick={cycleActor}
+          disabled={disabled}
+        >
+          <ActorIcon actor={data.actor as ActorType} size={20} />
+        </button>
+        {/* 锁定按钮(左下角) */}
+        <button
+          className={`nf-gateway-lock ${locked ? 'locked' : ''}`}
+          title={allLocked ? '演示模式已锁定全部内容' : locked ? '网关已锁定,点击解锁' : '网关未锁定,点击锁定'}
+          onClick={toggleLock}
+          disabled={allLocked}
+        >
+          {locked ? '🔒' : '🔓'}
+        </button>
         {/* 输出分支 Handle(右,贴菱形右缘按高度分散),可继续添加 */}
         <div className="nf-gateway-out">
           {data.outputs.map((p, i) => {
@@ -285,11 +303,16 @@ function FlowNodeComponent({ id, data, selected }: NodeProps<FlowNode>) {
           <button
             className="gw-add"
             title={disabled ? '内容已锁定,无法添加分支' : '添加分支'}
-            onClick={addOutput}
             disabled={disabled}
             style={{
               left: 262,
               top: 110 + ((Math.max(data.outputs.length, 1) - 1) / 2) * (data.outputs.length <= 2 ? 40 : 34) + 30,
+            }}
+            onClick={(e) => {
+              e.stopPropagation();
+              if (disabled) return;
+              const pid = uid('out');
+              updateOutputs([...data.outputs, { id: pid, name: `分支${data.outputs.length + 1}` }]);
             }}
           >
             +

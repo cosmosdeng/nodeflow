@@ -257,7 +257,7 @@ export function createGatewayNode(type: GatewayType, position: { x: number; y: n
       actor: 'hybrid',
       locked: false,
       inputs: [{ id: 'in_1', name: '输入' }],
-      outputs: [{ id: 'out_1', name: '分支一' }, { id: 'out_2', name: '分支二' }],
+      outputs: [{ id: 'out_1', name: '分支1' }, { id: 'out_2', name: '分支2' }],
       gateway: { type },
     },
   };
