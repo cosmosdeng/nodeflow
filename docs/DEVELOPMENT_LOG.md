@@ -2,6 +2,16 @@
 
 > 按时间倒序记录开发历程。新功能、重要修复、里程碑都应在此追加。
 
+## 2026-08-24 · 修复网关连线锚点与端点错位
+
+**问题**:网关增删输入 / 输出端点后,连线锚点与端点视觉位置错位(截图确认)。
+
+**根因**:React Flow 12 中,自定义 Handle 的 `id` / 位置变化时,React Flow 内部缓存的 handle bounds(用于计算连线锚点)不会自动更新,导致锚点与实际 DOM 位置不一致。
+
+**修复**(`FlowNodeComponent.tsx`):引入 `useUpdateNodeInternals` hook,对网关节点(`data.gateway`)在 `data.inputs` / `data.outputs` 变化时自动调用 `updateNodeInternals(id)` 强制重算 handle bounds,使连线锚点与端点视觉位置对齐。
+
+---
+
 ## 2026-08-24 · P3-3 网关增强(图标 / 分支彩色连线 / 注释)
 
 - **执行主体图标**:网关菱形上方显示人 / 机器 / 人机协同图标(39px,点击轮换)。

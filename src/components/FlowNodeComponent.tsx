@@ -1,5 +1,5 @@
 import { Fragment, memo, useEffect, useMemo, useRef, useState } from 'react';
-import { Handle, Position, type NodeProps } from '@xyflow/react';
+import { Handle, Position, useUpdateNodeInternals, type NodeProps } from '@xyflow/react';
 import { ACTOR_META, GATEWAY_META, uid, type ActorType, type FlowNode, type PortDef } from '../types';
 import { computeCompositeActor, computeCompositePorts } from '../lib/composite';
 import { openCompositePopup } from '../lib/compositePopup';
@@ -96,6 +96,18 @@ function FlowNodeComponent({ id, data, selected }: NodeProps<FlowNode>) {
 
   const updateInputs = (inputs: PortDef[]) => updateNode(id, { inputs });
   const updateOutputs = (outputs: PortDef[]) => updateNode(id, { outputs });
+
+  // 端点(id / 数量)变化时强制 React Flow 重算 handle bounds,避免连线锚点错位
+  const updateNodeInternals = useUpdateNodeInternals();
+  useEffect(() => {
+    if (data.gateway) updateNodeInternals(id);
+  }, [
+    id,
+    data.gateway,
+    data.inputs,
+    data.outputs,
+    updateNodeInternals,
+  ]);
 
   const addInput = (e: React.MouseEvent) => {
     e.stopPropagation();
