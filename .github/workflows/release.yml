@@ -16,8 +16,8 @@ jobs:
           # macOS Apple Silicon (arm64)
           - os: macos-latest
             args: --mac --arm64
-          # macOS Intel (x64)
-          - os: macos-13
+          # macOS Intel (x64) — 用 macos-15-intel(macos-13 即将淘汰,runner 排队过长)
+          - os: macos-15-intel
             args: --mac --x64
           - os: ubuntu-latest
             args: --linux
