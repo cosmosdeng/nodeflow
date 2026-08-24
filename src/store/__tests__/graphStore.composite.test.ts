@@ -367,4 +367,42 @@ describe('BPMN 网关节点(createGatewayNode)', () => {
     const json = JSON.parse(s.exportJson());
     expect(json.nodes[0].data.gateway.type).toBe('exclusive');
   });
+
+  it('网关可编组成组合节点,解除编组后还原', () => {
+    const gw = createGatewayNode('parallel', { x: 0, y: 0 });
+    const n = node('A', {}, { position: { x: 400, y: 0 } });
+    useGraphStore.setState({
+      nodes: [gw, { ...n, selected: true }, { ...gw, selected: true }],
+      edges: [],
+      selected: null,
+    });
+    const groupId = useGraphStore.getState().groupSelected();
+    expect(groupId).toBeTruthy();
+    const s = useGraphStore.getState();
+    // 组合节点包含网关 id
+    expect(s.nodes.find((x) => x.id === groupId)?.data.composite?.childIds).toContain(gw.id);
+    // 解除编组后网关还原为自由节点,gateway 保留
+    useGraphStore.getState().ungroup(groupId!);
+    const after = useGraphStore.getState();
+    const gw2 = after.nodes.find((x) => x.id === gw.id);
+    expect(gw2).toBeTruthy();
+    expect(gw2?.data.gateway?.type).toBe('parallel');
+  });
+
+  it('复制粘贴网关:gateway 类型保留', () => {
+    const gw = createGatewayNode('inclusive', { x: 0, y: 0 });
+    useGraphStore.setState({
+      nodes: [gw],
+      edges: [],
+      selected: { kind: 'node', id: gw.id },
+    });
+    const copied = useGraphStore.getState().copySelection();
+    expect(copied).toBe(1);
+    const pasted = useGraphStore.getState().pasteClipboard();
+    expect(pasted).toBe(1);
+    const s = useGraphStore.getState();
+    const pastedGw = s.nodes.find((x) => x.id !== gw.id && x.data?.gateway);
+    expect(pastedGw).toBeTruthy();
+    expect(pastedGw?.data.gateway?.type).toBe('inclusive');
+  });
 });
