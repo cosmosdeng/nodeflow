@@ -71,7 +71,8 @@ export type Selection =
 export type AutoEditTarget =
   | { kind: 'node-title'; id: string }
   | { kind: 'edge-label'; id: string }
-  | { kind: 'port-label'; nodeId: string; portId: string };
+  | { kind: 'port-label'; nodeId: string; portId: string }
+  | { kind: 'stage-name'; id: string };
 
 interface FlowStore extends GraphState {
   past: GraphSnapshot[];
@@ -802,6 +803,43 @@ function rectOverlaps(nx: number, ny: number, w: number, h: number, rect: Rect, 
   const ox = nx < rect.x + rect.width + gap && nx + w > rect.x - gap;
   const oy = ny < rect.y + rect.height + gap && ny + h > rect.y - gap;
   return ox && oy;
+}
+
+/**
+ * 在目标位置附近找一个不与任何可见节点 / 其他阶段域重合的空位(带间距),
+ * 用于新建阶段域时避免覆盖已有内容。向下逐行寻找,超出行则向右移一列。
+ */
+function findStageEmptySpot(
+  x: number,
+  y: number,
+  w: number,
+  h: number,
+  nodes: FlowNode[],
+  stages: Stage[],
+) {
+  const GAP = 24;
+  const obstacles: Rect[] = [
+    ...nodes
+      .filter((n) => !n.hidden)
+      .map((n) => {
+        const { w: nw, h: nh } = getNodeSize(n);
+        return { x: n.position.x, y: n.position.y, width: nw, height: nh };
+      }),
+    ...stages.map((st) => ({ x: st.x, y: st.y, width: st.width, height: st.height })),
+  ];
+  let px = x;
+  let py = y;
+  for (let i = 0; i < 200; i++) {
+    const hit = obstacles.some((o) => rectOverlaps(px, py, w, h, o, GAP));
+    if (!hit) return { x: px, y: py };
+    if (py < y + h * 4) {
+      py += h + GAP; // 向下移一行
+    } else {
+      py = y; // 换到下一列
+      px += w + GAP;
+    }
+  }
+  return { x, y }; // 兜底:原位置
 }
 
 /** 把一个节点从矩形 rect 中沿最小位移方向推出(带间距 gap),返回新坐标 */
@@ -1802,17 +1840,22 @@ export const useGraphStore = create<FlowStore>()(
       if (get().allLocked) return '';
       get().markHistory();
       const id = uid('stage');
+      const w = Math.round(width);
+      const h = Math.round(height);
+      // 在目标位置附近找一个不与任何可见节点 / 其他阶段域重合的空位
+      const s = get();
+      const empty = findStageEmptySpot(x, y, w, h, s.nodes, s.stages);
       const stage: Stage = {
         id,
         name: name ?? '未命名阶段',
-        x: Math.round(x),
-        y: Math.round(y),
-        width: Math.round(width),
-        height: Math.round(height),
+        x: Math.round(empty.x),
+        y: Math.round(empty.y),
+        width: w,
+        height: h,
         nodeIds: [],
         selected: true,
       };
-      set((s) => ({ stages: [...s.stages, stage] }));
+      set((st) => ({ stages: [...st.stages, stage] }));
       return id;
     },
     updateStage: (id, patch) => {
@@ -2672,14 +2715,172 @@ export const useGraphStore = create<FlowStore>()(
       const layoutEdges = s.edges.filter(
         (e) => targetIds.has(e.source) && targetIds.has(e.target),
       );
-      const positions = computeLayout(targets, layoutEdges, dir);
       get().markHistory();
-      const withPositions = s.nodes.map((n) => {
-        const pos = positions.get(n.id);
-        return pos ? { ...n, position: { x: Math.round(pos.x), y: Math.round(pos.y) } } : n;
+
+      // 组合内部布局:不做阶段域处理,直接排列
+      if (scope?.compositeId) {
+        const positions = computeLayout(targets, layoutEdges, dir);
+        const withPositions = s.nodes.map((n) => {
+          const pos = positions.get(n.id);
+          return pos ? { ...n, position: { x: Math.round(pos.x), y: Math.round(pos.y) } } : n;
+        });
+        set({ nodes: applyCompositeBoxes(withPositions) });
+        return;
+      }
+
+      // === 全画布布局:集成阶段域 ===
+      const STAGE_PAD = 22; // 域内边距
+      // 1) 每个域:内部节点横向拓扑排列,域框收敛包裹
+      const stageMeta = new Map<
+        string,
+        { w: number; h: number; x: number; y: number; inner: FlowNode[] }
+      >();
+      let finalNodes = s.nodes;
+      for (const st of s.stages) {
+        const inner = targets.filter((n) => st.nodeIds.includes(n.id));
+        if (!inner.length) continue;
+        const innerIds = new Set(inner.map((n) => n.id));
+        const innerEdges = layoutEdges.filter(
+          (e) => innerIds.has(e.source) && innerIds.has(e.target),
+        );
+        const positions = computeLayout(inner, innerEdges, dir);
+        let minX = Infinity;
+        let minY = Infinity;
+        let maxX = -Infinity;
+        let maxY = -Infinity;
+        for (const n of inner) {
+          const p = positions.get(n.id) ?? { x: 0, y: 0 };
+          const { w, h } = getNodeSize(n);
+          minX = Math.min(minX, p.x);
+          minY = Math.min(minY, p.y);
+          maxX = Math.max(maxX, p.x + w);
+          maxY = Math.max(maxY, p.y + h);
+        }
+        const W = maxX - minX;
+        const H = maxY - minY;
+        // 平移内部节点到域内(以域当前左上角 + PAD 为起点)
+        const baseX = st.x + STAGE_PAD - minX;
+        const baseY = st.y + STAGE_PAD - minY;
+        finalNodes = finalNodes.map((n) => {
+          if (!innerIds.has(n.id)) return n;
+          const p = positions.get(n.id) ?? { x: 0, y: 0 };
+          return {
+            ...n,
+            position: { x: Math.round(p.x + baseX), y: Math.round(p.y + baseY) },
+          };
+        });
+        stageMeta.set(st.id, { w: W + STAGE_PAD * 2, h: H + STAGE_PAD * 2, x: st.x, y: st.y, inner });
+      }
+
+      // 2) ② 单节点域框大小对齐「除自身外最大的域」(即倒数第二大的域框体)
+      if (stageMeta.size >= 2) {
+        for (const [sid, meta] of stageMeta) {
+          if (meta.inner.length !== 1) continue;
+          let target: { w: number; h: number } | null = null;
+          for (const [oid, om] of stageMeta) {
+            if (oid === sid) continue;
+            if (!target || om.w * om.h > target.w * target.h) target = om;
+          }
+          if (target) stageMeta.set(sid, { ...meta, w: target.w, h: target.h });
+        }
+      }
+
+      // 3) 整体布局:每个域作为一个「块」+ 游离节点,横向拓扑排列
+      const inStage = new Set<string>();
+      for (const [, meta] of stageMeta) for (const n of meta.inner) inStage.add(n.id);
+      const freeNodes = targets.filter((n) => !inStage.has(n.id));
+      // 构造块节点集合:域块(带自定义宽高)+ 游离节点
+      const blockNodes: FlowNode[] = [
+        ...[...stageMeta.entries()].map(([sid, meta]) => ({
+          id: `STAGE:${sid}`,
+          type: 'flow' as const,
+          position: { x: meta.x, y: meta.y },
+          width: meta.w,
+          height: meta.h,
+          data: {
+            label: '',
+            description: '',
+            actor: 'machine' as const,
+            locked: false,
+            inputs: [] as FlowNode['data']['inputs'],
+            outputs: [] as FlowNode['data']['outputs'],
+          },
+        })),
+        ...freeNodes,
+      ];
+      // 块边:把域内节点映射到所属域块,游离节点保持自身
+      const idToBlock = new Map<string, string>();
+      for (const [sid, meta] of stageMeta) for (const n of meta.inner) idToBlock.set(n.id, `STAGE:${sid}`);
+      for (const n of freeNodes) idToBlock.set(n.id, n.id);
+      const blockEdges: FlowEdge[] = [];
+      const seen = new Set<string>();
+      for (const e of layoutEdges) {
+        const bs = idToBlock.get(e.source);
+        const bt = idToBlock.get(e.target);
+        if (!bs || !bt || bs === bt) continue;
+        const key = `${bs}|${bt}`;
+        if (seen.has(key)) continue;
+        seen.add(key);
+        blockEdges.push({
+          id: key,
+          source: bs,
+          sourceHandle: e.sourceHandle,
+          target: bt,
+          targetHandle: e.targetHandle,
+          type: 'flow',
+          data: { label: '', artifact: null },
+        });
+      }
+      const blockPositions = computeLayout(blockNodes, blockEdges, dir);
+
+      // 4) 应用整体布局位置:游离节点直接更新
+      finalNodes = finalNodes.map((n) => {
+        if (inStage.has(n.id)) return n;
+        const pos = blockPositions.get(n.id);
+        return pos
+          ? { ...n, position: { x: Math.round(pos.x), y: Math.round(pos.y) } }
+          : n;
       });
-      // 重算展开态组合节点的虚线框,包裹新布局后的子节点
-      set({ nodes: applyCompositeBoxes(withPositions) });
+      // 5) 更新域框到整体布局位置,内部节点随域平移
+      let newStages = s.stages.map((st) => {
+        const meta = stageMeta.get(st.id);
+        if (!meta) return st;
+        const pos = blockPositions.get(`STAGE:${st.id}`) ?? { x: st.x, y: st.y };
+        const dx = pos.x - meta.x;
+        const dy = pos.y - meta.y;
+        if (dx || dy) {
+          finalNodes = finalNodes.map((n) =>
+            meta.inner.some((x) => x.id === n.id)
+              ? {
+                  ...n,
+                  position: {
+                    x: Math.round(n.position.x + dx),
+                    y: Math.round(n.position.y + dy),
+                  },
+                }
+              : n,
+          );
+        }
+        return { ...st, x: Math.round(pos.x), y: Math.round(pos.y), width: Math.round(meta.w), height: Math.round(meta.h) };
+      });
+      // ③ 所有阶段域中央水平对齐:垂直中心 y 统一
+      const stageList = newStages.filter((st) => stageMeta.has(st.id));
+      if (stageList.length) {
+        const centerY = stageList[0].y + stageList[0].height / 2;
+        newStages = stageList.map((st) => {
+          const newY = centerY - st.height / 2;
+          const dy = newY - st.y;
+          if (dy) {
+            finalNodes = finalNodes.map((n) =>
+              stageMeta.get(st.id)!.inner.some((x) => x.id === n.id)
+                ? { ...n, position: { x: n.position.x, y: Math.round(n.position.y + dy) } }
+                : n,
+            );
+          }
+          return { ...st, y: Math.round(newY) };
+        });
+      }
+      set({ nodes: applyCompositeBoxes(finalNodes), stages: newStages });
     },
     };
   }),

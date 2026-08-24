@@ -1370,34 +1370,35 @@ body,
   pointer-events: none;
 }
 /* 四边拖拽条:只覆盖边框(中间镂空,不挡内部节点),pointer-events:auto,用于拖拽移动域框 */
+/* 命中区域适当加宽,便于选中拖动 */
 .nf-stage-edge {
   position: absolute;
   pointer-events: auto;
   cursor: move;
 }
 .nf-edge-top {
-  left: -5px;
-  right: -5px;
-  top: -5px;
-  height: 9px;
+  left: -6px;
+  right: -6px;
+  top: -6px;
+  height: 14px;
 }
 .nf-edge-bottom {
-  left: -5px;
-  right: -5px;
-  bottom: -5px;
-  height: 9px;
+  left: -6px;
+  right: -6px;
+  bottom: -6px;
+  height: 14px;
 }
 .nf-edge-left {
-  top: -5px;
-  bottom: -5px;
-  left: -5px;
-  width: 9px;
+  top: -6px;
+  bottom: -6px;
+  left: -6px;
+  width: 14px;
 }
 .nf-edge-right {
-  top: -5px;
-  bottom: -5px;
-  right: -5px;
-  width: 9px;
+  top: -6px;
+  bottom: -6px;
+  right: -6px;
+  width: 14px;
 }
 .nf-stage:hover {
   box-shadow: 0 0 0 1px var(--stage-color, var(--border-strong));

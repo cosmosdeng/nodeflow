@@ -1,5 +1,6 @@
 import type { Stage, ViewportState } from '../types';
 import EditableText from './EditableText';
+import { useGraphStore } from '../store/graphStore';
 
 interface Props {
   stage: Stage;
@@ -30,6 +31,8 @@ export default function StageComponent({
   onDragStart,
   onResizeStart,
 }: Props) {
+  const pendingAutoEdit = useGraphStore((s) => s.pendingAutoEdit);
+  const requestAutoEdit = useGraphStore((s) => s.requestAutoEdit);
   const left = stage.x * viewport.zoom + viewport.x;
   const top = stage.y * viewport.zoom + viewport.y;
   const width = stage.width * viewport.zoom;
@@ -93,6 +96,8 @@ export default function StageComponent({
           disabled={locked}
           onCommit={onRename}
           title="阶段名称(双击编辑)"
+          autoFocus={pendingAutoEdit?.kind === 'stage-name' && pendingAutoEdit.id === stage.id}
+          onAutoFocusConsumed={() => requestAutoEdit(null)}
         />
         <span className="nf-stage-count">{stage.nodeIds.length}</span>
       </div>

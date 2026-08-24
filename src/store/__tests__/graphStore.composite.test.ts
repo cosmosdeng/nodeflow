@@ -282,3 +282,57 @@ describe('流程阶段域(resizeStage / autoGrowStage)', () => {
     expect(B.position.x).toBeGreaterThanOrEqual(st.x + st.width + 14);
   });
 });
+
+describe('自动排列集成阶段域(autoLayout)', () => {
+  it('全画布排列:域框收敛包裹内部节点,内部节点被域包含', () => {
+    // 域 s1 含节点 A、B(连线 A→B),游离节点 C(连线 B→C)
+    const A = node('A', { actor: 'human', outputs: [{ id: 'out1', name: '出' }] }, { position: { x: 0, y: 0 } });
+    const B = node('B', { actor: 'machine', inputs: [{ id: 'in1', name: '入' }], outputs: [{ id: 'out1', name: '出' }] }, { position: { x: 300, y: 0 } });
+    const C = node('C', { actor: 'human', inputs: [{ id: 'in1', name: '入' }] }, { position: { x: 600, y: 0 } });
+    const edges = [
+      { id: 'e1', source: 'A', sourceHandle: 'out1', target: 'B', targetHandle: 'in1', type: 'flow' as const, data: { label: '', artifact: null } },
+      { id: 'e2', source: 'B', sourceHandle: 'out1', target: 'C', targetHandle: 'in1', type: 'flow' as const, data: { label: '', artifact: null } },
+    ];
+    useGraphStore.setState({
+      nodes: [A, B, C],
+      edges,
+      stages: [{ id: 's1', name: '阶段一', x: 0, y: 0, width: 500, height: 300, nodeIds: ['A', 'B'], selected: false }],
+      selected: null,
+    });
+    useGraphStore.getState().autoLayout('horizontal', undefined);
+    const s = useGraphStore.getState();
+    const st = s.stages.find((x) => x.id === 's1')!;
+    const a = s.nodes.find((n) => n.id === 'A')!;
+    const b = s.nodes.find((n) => n.id === 'B')!;
+    // 域框收敛:不再保持初始 500 宽;内部 A、B 横向拓扑排列(A 在 B 左侧),域框包裹两者
+    expect(a.position.x).toBeLessThan(b.position.x);
+    // A、B 都被域框包含(含内边距 22)
+    expect(a.position.x).toBeGreaterThanOrEqual(st.x - 1);
+    expect(a.position.y).toBeGreaterThanOrEqual(st.y - 1);
+    expect(a.position.y + 150).toBeLessThanOrEqual(st.y + st.height + 1);
+    expect(b.position.x + 240).toBeLessThanOrEqual(st.x + st.width + 1);
+  });
+
+  it('单节点域框大小对齐倒数第二大的域', () => {
+    // 域 s1 含 A、B 两个节点(较大),域 s2 仅含 C 一个节点(单节点)
+    const A = node('A', {}, { position: { x: 0, y: 0 } });
+    const B = node('B', {}, { position: { x: 0, y: 300 } });
+    const C = node('C', {}, { position: { x: 0, y: 0 } });
+    useGraphStore.setState({
+      nodes: [A, B, C],
+      edges: [],
+      stages: [
+        { id: 's1', name: '大', x: 0, y: 0, width: 300, height: 200, nodeIds: ['A', 'B'], selected: false },
+        { id: 's2', name: '小', x: 600, y: 0, width: 300, height: 200, nodeIds: ['C'], selected: false },
+      ],
+      selected: null,
+    });
+    useGraphStore.getState().autoLayout('horizontal', undefined);
+    const s = useGraphStore.getState();
+    const s1 = s.stages.find((x) => x.id === 's1')!;
+    const s2 = s.stages.find((x) => x.id === 's2')!;
+    // 单节点域 s2 的大小应对齐「倒数第二大的域」(此处唯一其它域为 s1)
+    expect(s2.width).toBe(s1.width);
+    expect(s2.height).toBe(s1.height);
+  });
+});

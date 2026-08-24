@@ -107,7 +107,7 @@ React Flow 渲染 + CSS 样式
 
 | 模块 | 职责 | 备注 |
 | --- | --- | --- |
-| `graphStore.ts` | 全部状态与动作;多文档管理;组合节点的塌缩 / 展开 / 隐藏刷新;历史栈 / 剪贴板 | 项目核心,改动需谨慎 |
+| `graphStore.ts` | 全部状态与动作;多文档管理;组合节点的塌缩 / 展开 / 隐藏刷新;阶段域(长按进入 / 自动扩大 / 自动排列集成);历史栈 / 剪贴板 | 项目核心,改动需谨慎 |
 | `lib/composite.ts` | 纯函数:`encodeCompositePort` / `decodeCompositePort`(含链式)/ `computeCompositePorts` / `computeCompositeActor` / `computeCompositeBounds` | 无副作用,可单测 |
 | `lib/compositePopup.ts` | 弹窗快照的 save / load | localStorage 桥接 |
 | `lib/layout.ts` | 自动布局:拓扑分层 + barycenter 排序(横向 / 竖向) | 纯函数,可单测 |

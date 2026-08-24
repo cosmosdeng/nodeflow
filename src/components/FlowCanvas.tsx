@@ -102,36 +102,48 @@ export default function FlowCanvas() {
   // Delete / Backspace 删除前确认。
   // React Flow 12 的 onBeforeDelete 对 Promise<boolean> 返回值处理不可靠(多选删除会失效),
   // 因此此处始终返回 false 阻止 React Flow 自动删除,改为确认后手动删除待删除的节点与连线。
-  const pendingDeleteRef = useRef<{ nodes: FlowNode[]; edges: FlowEdge[] }>({ nodes: [], edges: [] });
+  const pendingDeleteRef = useRef<{
+    nodes: FlowNode[];
+    edges: FlowEdge[];
+    stage: Stage | null;
+  }>({ nodes: [], edges: [], stage: null });
   const handleBeforeDelete = useCallback(
     ({ nodes, edges }: { nodes: FlowNode[]; edges: FlowEdge[] }) => {
       if (allLocked) return Promise.resolve(false);
-      if (!nodes.length && !edges.length) return Promise.resolve(false);
-      pendingDeleteRef.current = { nodes, edges };
+      // 若仅选中了阶段域(非节点/连线),则按删除阶段域处理
+      const st = useGraphStore.getState();
+      const selectedStage = st.stages.find((s) => s.selected) ?? null;
+      if (!nodes.length && !edges.length && !selectedStage) return Promise.resolve(false);
+      pendingDeleteRef.current = { nodes, edges, stage: selectedStage };
       const parts: string[] = [];
       if (nodes.length) parts.push(`${nodes.length} 个节点`);
       if (edges.length) parts.push(`${edges.length} 条连线`);
+      if (selectedStage) parts.push(`阶段域「${selectedStage.name || '未命名'}」`);
       const label = `确定删除选中的 ${parts.join(' 和 ')}?`;
       setConfirmDialog({
         title: '删除确认',
-        message: `${label}\n撤销删除(Ctrl+Z)可还原。`,
+        message: `${label}${
+          selectedStage ? '\n删除阶段域后,内部节点 / 组合自动脱离,变为自由节点,连线保持不变。' : ''
+        }\n撤销删除(Ctrl+Z)可还原。`,
         confirmLabel: '删除',
         cancelLabel: '取消',
         danger: true,
         onConfirm: () => {
-          const { nodes: dn, edges: de } = pendingDeleteRef.current;
-          pendingDeleteRef.current = { nodes: [], edges: [] };
-          const st = useGraphStore.getState();
+          const { nodes: dn, edges: de, stage: dStage } = pendingDeleteRef.current;
+          pendingDeleteRef.current = { nodes: [], edges: [], stage: null };
+          const g = useGraphStore.getState();
           // 删除连线(需在删节点前,避免悬空)
           de.forEach((e) => {
-            if (st.edges.some((x) => x.id === e.id)) st.deleteEdge(e.id);
+            if (g.edges.some((x) => x.id === e.id)) g.deleteEdge(e.id);
           });
           dn.forEach((n) => {
-            if (st.nodes.some((x) => x.id === n.id)) st.deleteNode(n.id);
+            if (g.nodes.some((x) => x.id === n.id)) g.deleteNode(n.id);
           });
+          // 删除阶段域:内部节点 / 组合自动脱离,变为自由节点,连线不变
+          if (dStage && g.stages.some((x) => x.id === dStage.id)) g.deleteStage(dStage.id);
         },
         onCancel: () => {
-          pendingDeleteRef.current = { nodes: [], edges: [] };
+          pendingDeleteRef.current = { nodes: [], edges: [], stage: null };
         },
       });
       return Promise.resolve(false); // 阻止 React Flow 自动删除,由 onConfirm 手动处理
@@ -145,7 +157,11 @@ export default function FlowCanvas() {
   const { screenToFlowPosition, fitView, getViewport, setViewport, getNode } = useReactFlow();
   const isDark = theme === 'dark';
 
-  const handlePaneClick = useCallback(() => setSelected(null), [setSelected]);
+  const handlePaneClick = useCallback(() => {
+    setSelected(null);
+    // 点击画布空白处同时取消所有阶段域的选中态
+    useGraphStore.getState().selectStage(null);
+  }, [setSelected]);
 
   /** 根据当前标签页过滤出实际渲染的节点与连线;全部锁定时强制所有节点不可拖(覆盖 per-node draggable) */
   const { displayNodes, displayEdges } = useMemo(() => {
@@ -852,6 +868,11 @@ export default function FlowCanvas() {
           '.annot-box, .annot-pin, .annotation-layer, .artifact-annot, .edge-annot-area, .node-annot-area, .node-annot-btn, .edge-annot-btn',
         )
       ) {
+        last = 0;
+        return;
+      }
+      // 排除阶段域(名称框双击是编辑名称),避免双击名称时误建节点
+      if (t?.closest?.('.nf-stage, .nf-stage-name, .nf-stage-head')) {
         last = 0;
         return;
       }

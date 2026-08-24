@@ -73,8 +73,6 @@ export default function Toolbar({
   const toggleLockAll = useGraphStore((s) => s.toggleLockAll);
   const setSelected = useGraphStore((s) => s.setSelected);
   const requestAutoEdit = useGraphStore((s) => s.requestAutoEdit);
-  const layoutDirection = useGraphStore((s) => s.layoutDirection);
-  const setLayoutDirection = useGraphStore((s) => s.setLayoutDirection);
   const autoLayout = useGraphStore((s) => s.autoLayout);
   const addStage = useGraphStore((s) => s.addStage);
   const selectStage = useGraphStore((s) => s.selectStage);
@@ -104,7 +102,11 @@ export default function Toolbar({
       y: window.innerHeight / 2,
     });
     const id = addStage(pos.x - 250, pos.y - 150, 500, 300);
-    if (id) selectStage(id);
+    if (id) {
+      selectStage(id);
+      // 新建阶段域后自动进入名称编辑态(域框左上角名称框)
+      requestAutoEdit({ kind: 'stage-name', id });
+    }
   };
 
   const handleExport = () => {
@@ -424,30 +426,14 @@ export default function Toolbar({
       <button
         className="tb-btn"
         disabled={allLocked}
-        title="按连线依赖关系自动排列节点;选中组合节点时对其内部节点排列,否则排列全画布"
+        title="按连线依赖关系自动横向排列;选中组合节点时对其内部节点排列,否则排列全画布"
         onClick={() => {
           const selComp = nodes.find((n) => n.selected && n.data.composite);
-          autoLayout(layoutDirection, selComp ? { compositeId: selComp.id } : undefined);
+          autoLayout('horizontal', selComp ? { compositeId: selComp.id } : undefined);
         }}
       >
         ⤺ 自动排列
       </button>
-      {(
-        [
-          ['horizontal', '⇄ 横向'],
-          ['vertical', '⇅ 竖向'],
-        ] as const
-      ).map(([dir, label]) => (
-        <button
-          key={dir}
-          className={`tb-btn ${layoutDirection === dir ? 'active' : ''}`}
-          disabled={allLocked}
-          title={`自动排列方向:${label}`}
-          onClick={() => setLayoutDirection(dir)}
-        >
-          {label}
-        </button>
-      ))}
 
       <span className="sep" />
 
