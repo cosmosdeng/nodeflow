@@ -1240,6 +1240,179 @@ body,
   min-width: 0;
   line-height: 1.4;
 }
+
+/* ---------------- 注释框 ---------------- */
+.annot-box {
+  position: relative;
+  min-width: 180px;
+  max-width: 260px;
+  background: transparent;
+  border: 1px dotted var(--border-strong);
+  border-radius: 10px;
+  padding: 6px 8px 8px;
+  z-index: 5;
+}
+.annot-head {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-bottom: 2px;
+}
+.annot-title {
+  flex: 1;
+  min-width: 0;
+  font-weight: 700;
+  font-size: 12px;
+  color: var(--text);
+  line-height: 1.3;
+}
+.annot-actions {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  flex: none;
+}
+.annot-btn {
+  width: 18px;
+  height: 18px;
+  line-height: 1;
+  border: none;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--text-faint);
+  font-size: 13px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.annot-btn:hover {
+  background: var(--bg-hover);
+  color: var(--text);
+}
+.annot-btn.danger {
+  color: #e5484d;
+  font-size: 11px;
+}
+.annot-content {
+  font-size: 11.5px;
+  color: var(--text-dim);
+  line-height: 1.4;
+  white-space: pre-wrap;
+}
+/* 收起态的图标(附着在主体上) */
+.annot-pin {
+  width: 22px;
+  height: 22px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 13px;
+  border: 1px solid var(--border-strong);
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--bg-panel) 85%, transparent);
+  cursor: pointer;
+  box-shadow: var(--shadow);
+  z-index: 5;
+}
+.annot-pin:hover {
+  border-color: var(--accent);
+}
+/* 画布归属注释的 overlay 层 */
+.annotation-layer {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 4;
+  overflow: visible;
+}
+.annotation-layer .annot-box,
+.annotation-layer .annot-pin {
+  pointer-events: auto;
+}
+/* 连线注释区域(始终显示;展开的注释框为持久内容) */
+.edge-annot-area {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  align-items: center;
+  pointer-events: auto;
+}
+.edge-annot-btn {
+  width: 20px;
+  height: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  border: 1px solid var(--border-strong);
+  border-radius: 50%;
+  background: var(--bg-panel-2);
+  cursor: pointer;
+  box-shadow: var(--shadow);
+}
+.edge-annot-btn:hover {
+  border-color: var(--accent);
+}
+/* 产物注释区域:pin / 展开框置于产物 chip 居中下方 */
+.artifact-annot {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  pointer-events: auto;
+}
+/* 红色 pin */
+.edge-annot-btn.pin {
+  color: #e5484d;
+}
+.edge-annot-btn.pin.has {
+  color: #e5484d;
+}
+
+/* 节点正下方注释入口 / 收起图标(置于节点框线外侧,离节点更远) */
+.node-annot-area {
+  position: absolute;
+  left: 50%;
+  top: 100%;
+  transform: translateX(-50%);
+  margin-top: 14px;
+  display: flex;
+  gap: 6px;
+  opacity: 0;
+  transition: opacity 0.15s;
+  z-index: 6;
+}
+.nf-node:hover .node-annot-area {
+  opacity: 1;
+}
+/* 已有注释时持续显示 pin */
+.node-annot-area:has(.pin.has) {
+  opacity: 1;
+}
+.node-annot-btn {
+  width: 26px;
+  height: 26px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 15px;
+  border: 1px solid var(--border-strong);
+  border-radius: 50%;
+  background: var(--bg-panel-2);
+  cursor: pointer;
+  box-shadow: var(--shadow);
+}
+.node-annot-btn:hover {
+  border-color: var(--accent);
+}
+/* 红色 pin */
+.node-annot-btn.pin {
+  color: #e5484d;
+}
+.node-annot-btn.pin.has {
+  color: #e5484d;
+}
 .nf-edge-label.editing {
   white-space: normal;
   max-width: 320px;

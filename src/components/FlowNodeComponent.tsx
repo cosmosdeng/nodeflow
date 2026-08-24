@@ -6,6 +6,7 @@ import { openCompositePopup } from '../lib/compositePopup';
 import { useGraphStore } from '../store/graphStore';
 import ActorIcon from './ActorIcon';
 import EditableText from './EditableText';
+import AnnotationBox from './AnnotationBox';
 
 /* ------------------------------------------------------------------ */
 /* 节点                                                                */
@@ -24,8 +25,29 @@ function FlowNodeComponent({ id, data, selected }: NodeProps<FlowNode>) {
   const openCompositeTab = useGraphStore((s) => s.openCompositeTab);
   const pendingAutoEdit = useGraphStore((s) => s.pendingAutoEdit);
   const requestAutoEdit = useGraphStore((s) => s.requestAutoEdit);
+  const annotations = useGraphStore((s) => s.annotations);
+  const addAnnotation = useGraphStore((s) => s.addAnnotation);
+  const updateAnnotation = useGraphStore((s) => s.updateAnnotation);
+  const deleteAnnotation = useGraphStore((s) => s.deleteAnnotation);
+  const toggleAnnotationCollapsed = useGraphStore((s) => s.toggleAnnotationCollapsed);
 
   const composite = data.composite;
+  // 归属本节点的注释(节点归属)
+  const nodeAnnots = useMemo(
+    () => annotations.filter((a) => a.target.kind === 'node' && a.target.nodeId === id),
+    [annotations, id],
+  );
+  // 悬停节点(无注释时悬停显示添加 pin;离开后延迟隐藏,留出移入 pin 的时间)
+  const [nodeHovered, setNodeHovered] = useState(false);
+  const nodeHoverTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const enterNodeHover = () => {
+    if (nodeHoverTimer.current) clearTimeout(nodeHoverTimer.current);
+    setNodeHovered(true);
+  };
+  const leaveNodeHover = () => {
+    if (nodeHoverTimer.current) clearTimeout(nodeHoverTimer.current);
+    nodeHoverTimer.current = setTimeout(() => setNodeHovered(false), 350);
+  };
 
   // 消费完自动编辑标记后清除(防止残留导致后续误触发)
   const consumeAutoEdit = () => requestAutoEdit(null);
@@ -141,6 +163,8 @@ function FlowNodeComponent({ id, data, selected }: NodeProps<FlowNode>) {
       <div
         className={`nf-node ${actorClass} ${selected ? 'selected' : ''} ${disabled ? 'locked' : ''}`}
         onDoubleClick={stopDoubleClick}
+        onMouseEnter={enterNodeHover}
+        onMouseLeave={leaveNodeHover}
       >
         {/* 头部:主体图标 + 可编辑标题 + 右上角主体轮换按钮/锁定按钮 */}
         <div className="node-header">
@@ -292,6 +316,38 @@ function FlowNodeComponent({ id, data, selected }: NodeProps<FlowNode>) {
             </button>
           </div>
         </div>
+        {/* 节点注释:红色 pin。无注释时悬停显示;有注释收起时持续显示;展开时不显示 */}
+        {nodeAnnots.length === 0 ? (
+          nodeHovered && (
+            <div className="node-annot-area">
+              <button
+                className="node-annot-btn pin"
+                title="添加注释"
+                onMouseEnter={enterNodeHover}
+                onMouseLeave={leaveNodeHover}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  addAnnotation({ kind: 'node', nodeId: id });
+                }}
+              >
+                📌
+              </button>
+            </div>
+          )
+        ) : !nodeAnnots[0].collapsed ? null : (
+          <div className="node-annot-area">
+            <button
+              className="node-annot-btn pin has"
+              title={nodeAnnots[0].title || '注释'}
+              onClick={(e) => {
+                e.stopPropagation();
+                toggleAnnotationCollapsed(nodeAnnots[0].id);
+              }}
+            >
+              📌
+            </button>
+          </div>
+        )}
       </div>
     );
   }
@@ -302,6 +358,8 @@ function FlowNodeComponent({ id, data, selected }: NodeProps<FlowNode>) {
       <div
         className={`nf-node nf-composite-frame ${actorClass} ${selected ? 'selected' : ''} ${disabled ? 'locked' : ''}`}
         style={{ width: '100%', height: '100%', ['--nf-frame' as string]: actor.frame }}
+        onMouseEnter={enterNodeHover}
+        onMouseLeave={leaveNodeHover}
       >
         <div className="composite-frame-bar">
           <ActorIcon
@@ -385,6 +443,40 @@ function FlowNodeComponent({ id, data, selected }: NodeProps<FlowNode>) {
             ))}
           </div>
         </div>
+        {/* 组合节点注释 pin(操作逻辑与普通节点相同) */}
+        {nodeAnnots.length === 0 ? (
+        nodeHovered && (
+          <div className="node-annot-area">
+            <button
+              className="node-annot-btn pin"
+              title="添加注释"
+              onMouseEnter={enterNodeHover}
+              onMouseLeave={leaveNodeHover}
+              onClick={(e) => {
+                e.stopPropagation();
+                addAnnotation({ kind: 'node', nodeId: id });
+              }}
+            >
+              📌
+            </button>
+          </div>
+        )
+      ) : !nodeAnnots[0].collapsed ? null : (
+        <div className="node-annot-area">
+          <button
+            className="node-annot-btn pin has"
+            title={nodeAnnots[0].title || '注释'}
+            onMouseEnter={enterNodeHover}
+            onMouseLeave={leaveNodeHover}
+            onClick={(e) => {
+              e.stopPropagation();
+              toggleAnnotationCollapsed(nodeAnnots[0].id);
+            }}
+          >
+            📌
+          </button>
+        </div>
+      )}
       </div>
     );
   }
@@ -395,6 +487,8 @@ function FlowNodeComponent({ id, data, selected }: NodeProps<FlowNode>) {
       className={`nf-node nf-composite-node ${actorClass} ${selected ? 'selected' : ''} ${disabled ? 'locked' : ''}`}
       style={{ ['--nf-frame' as string]: actor.frame }}
       onDoubleClick={toggleExpand}
+      onMouseEnter={enterNodeHover}
+      onMouseLeave={leaveNodeHover}
     >
       <div className="node-header">
         <ActorIcon
@@ -498,6 +592,40 @@ function FlowNodeComponent({ id, data, selected }: NodeProps<FlowNode>) {
           ))}
         </div>
       </div>
+      {/* 组合节点注释 pin(操作逻辑与普通节点相同) */}
+      {nodeAnnots.length === 0 ? (
+        nodeHovered && (
+          <div className="node-annot-area">
+            <button
+              className="node-annot-btn pin"
+              title="添加注释"
+              onMouseEnter={enterNodeHover}
+              onMouseLeave={leaveNodeHover}
+              onClick={(e) => {
+                e.stopPropagation();
+                addAnnotation({ kind: 'node', nodeId: id });
+              }}
+            >
+              📌
+            </button>
+          </div>
+        )
+      ) : !nodeAnnots[0].collapsed ? null : (
+        <div className="node-annot-area">
+          <button
+            className="node-annot-btn pin has"
+            title={nodeAnnots[0].title || '注释'}
+            onMouseEnter={enterNodeHover}
+            onMouseLeave={leaveNodeHover}
+            onClick={(e) => {
+              e.stopPropagation();
+              toggleAnnotationCollapsed(nodeAnnots[0].id);
+            }}
+          >
+            📌
+          </button>
+        </div>
+      )}
     </div>
   );
 }

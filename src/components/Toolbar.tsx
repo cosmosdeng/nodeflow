@@ -65,6 +65,8 @@ export default function Toolbar({
   const redo = useGraphStore((s) => s.redo);
   const addNode = useGraphStore((s) => s.addNode);
   const nodes = useGraphStore((s) => s.nodes);
+  const toggleAllAnnotations = useGraphStore((s) => s.toggleAllAnnotations);
+  const annotations = useGraphStore((s) => s.annotations);
   const edges = useGraphStore((s) => s.edges);
   const groupSelected = useGraphStore((s) => s.groupSelected);
   const allLocked = useGraphStore((s) => s.allLocked);
@@ -387,6 +389,15 @@ export default function Toolbar({
         }}
       >
         ⧉ 组合节点
+      </button>
+
+      <button
+        className="tb-btn"
+        disabled={allLocked || annotations.length === 0}
+        title="一键展开 / 收起所有注释"
+        onClick={() => toggleAllAnnotations()}
+      >
+        💬 注释
       </button>
 
       <span className="sep" />

@@ -68,6 +68,25 @@ export interface FlowEdgeData {
 export type FlowNode = Node<FlowNodeData, 'flow'>;
 export type FlowEdge = Edge<FlowEdgeData, 'flow'>;
 
+/** 注释的归属主体 */
+export type AnnotationTarget =
+  | { kind: 'canvas'; tabId: string } // 画布归属(tabId: 'main' 或组合 id)
+  | { kind: 'node'; nodeId: string } // 节点归属
+  | { kind: 'edge'; edgeId: string } // 连线归属
+  | { kind: 'artifact'; edgeId: string }; // 连线中间产物归属(定位到具体连线)
+
+/** 注释框 */
+export interface Annotation {
+  id: string;
+  title: string;
+  content: string;
+  target: AnnotationTarget;
+  /** 是否收起(收起时只显示附着在主体上的图标) */
+  collapsed: boolean;
+  /** 画布归属时的流坐标位置 */
+  position?: { x: number; y: number };
+}
+
 /** 画布视口 */
 export interface ViewportState {
   x: number;
@@ -80,6 +99,8 @@ export interface GraphSnapshot {
   nodes: FlowNode[];
   edges: FlowEdge[];
   viewport: ViewportState;
+  /** 快照创建时的注释 */
+  annotations?: Annotation[];
   /** 快照创建时的组合标签页状态(用于撤销/重做时联动恢复) */
   compositeTabs?: string[];
   /** 快照创建时的激活标签页 id */
@@ -111,6 +132,8 @@ export interface GraphDocument {
   nodes: FlowNode[];
   edges: FlowEdge[];
   viewport: ViewportState;
+  /** 该文档的注释 */
+  annotations: Annotation[];
   /** 该文档内已打开的组合内部画布标签 */
   compositeTabs: string[];
   /** 该文档内当前激活的标签页:'main' 或组合节点 id */

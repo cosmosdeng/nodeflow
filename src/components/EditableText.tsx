@@ -17,6 +17,8 @@ export interface EditableTextProps {
   autoFocus?: boolean;
   /** autoFocus 生效并进入编辑态后回调(供外部消费并清除自动编辑标记) */
   onAutoFocusConsumed?: () => void;
+  /** 根元素点击回调 */
+  onClick?: (e: React.MouseEvent<HTMLDivElement>) => void;
 }
 
 export default function EditableText({
@@ -30,6 +32,7 @@ export default function EditableText({
   onEditingChange,
   autoFocus,
   onAutoFocusConsumed,
+  onClick,
 }: EditableTextProps) {
   const ref = useRef<HTMLDivElement>(null);
   const [editing, setEditing] = useState(false);
@@ -148,6 +151,7 @@ export default function EditableText({
       onDoubleClick={handleDoubleClick}
       onBlur={commit}
       onKeyDown={handleKeyDown}
+      onClick={onClick}
     />
   );
 }

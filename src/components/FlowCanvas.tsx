@@ -19,6 +19,7 @@ import FlowNodeComponent from './FlowNodeComponent';
 import FlowEdgeComponent from './FlowEdgeComponent';
 import ContextMenu, { type ContextMenuState } from './ContextMenu';
 import ConfirmDialog, { type ConfirmDialogState } from './ConfirmDialog';
+import AnnotationBox from './AnnotationBox';
 import { useGraphStore } from '../store/graphStore';
 import type { FlowNode, FlowEdge, EdgeStyle } from '../types';
 
@@ -59,6 +60,12 @@ export default function FlowCanvas() {
   const deleteEdge = useGraphStore((s) => s.deleteEdge);
   const groupSelected = useGraphStore((s) => s.groupSelected);
   const ungroup = useGraphStore((s) => s.ungroup);
+  const annotations = useGraphStore((s) => s.annotations);
+  const addAnnotation = useGraphStore((s) => s.addAnnotation);
+  const updateAnnotation = useGraphStore((s) => s.updateAnnotation);
+  const deleteAnnotation = useGraphStore((s) => s.deleteAnnotation);
+  const toggleAnnotationCollapsed = useGraphStore((s) => s.toggleAnnotationCollapsed);
+  const setAnnotationPosition = useGraphStore((s) => s.setAnnotationPosition);
   const toggleLock = (id: string) => {
     const n = useGraphStore.getState().nodes.find((x) => x.id === id);
     if (!n) return;
@@ -123,20 +130,22 @@ export default function FlowCanvas() {
 
   const handlePaneClick = useCallback(() => setSelected(null), [setSelected]);
 
-  /** 根据当前标签页过滤出实际渲染的节点与连线 */
+  /** 根据当前标签页过滤出实际渲染的节点与连线;全部锁定时强制所有节点不可拖(覆盖 per-node draggable) */
   const { displayNodes, displayEdges } = useMemo(() => {
-    if (activeTabId === 'main') return { displayNodes: nodes, displayEdges: edges };
+    const applyLock = (ns: FlowNode[]) =>
+      allLocked ? ns.map((n) => ({ ...n, draggable: false })) : ns;
+    if (activeTabId === 'main') return { displayNodes: applyLock(nodes), displayEdges: edges };
     const comp = nodes.find((n) => n.id === activeTabId);
     const childSet = new Set(comp?.data?.composite?.childIds ?? []);
     return {
-      displayNodes: nodes
-        .filter((n) => childSet.has(n.id))
-        .map((n) => ({ ...n, hidden: false })),
+      displayNodes: applyLock(
+        nodes.filter((n) => childSet.has(n.id)).map((n) => ({ ...n, hidden: false })),
+      ),
       displayEdges: edges
         .filter((e) => childSet.has(e.source) && childSet.has(e.target))
         .map((e) => ({ ...e, hidden: false })),
     };
-  }, [activeTabId, nodes, edges]);
+  }, [activeTabId, nodes, edges, allLocked]);
 
   const handleNodeClick: NodeMouseHandler = useCallback(
     (_, node) => {
@@ -531,6 +540,15 @@ export default function FlowCanvas() {
         last = 0;
         return;
       }
+      // 排除注释框 / 注释区域,避免双击注释时误建节点(注释双击是编辑)
+      if (
+        t?.closest?.(
+          '.annot-box, .annot-pin, .annotation-layer, .artifact-annot, .edge-annot-area, .node-annot-area, .node-annot-btn, .edge-annot-btn',
+        )
+      ) {
+        last = 0;
+        return;
+      }
       const now = Date.now();
       const dx = Math.abs(e.clientX - lastX);
       const dy = Math.abs(e.clientY - lastY);
@@ -675,6 +693,47 @@ export default function FlowCanvas() {
             </button>
           )}
         </Panel>
+
+        {/* 画布 / 节点归属注释(独立 overlay 层,跟随 viewport 缩放平移) */}
+        <div className="annotation-layer">
+          {annotations.map((a) => {
+            const t = a.target;
+            let pos: { x: number; y: number } | null = null;
+            if (t.kind === 'canvas' && t.tabId === activeTabId) {
+              pos = a.position ?? { x: 80, y: 60 };
+            } else if (t.kind === 'node') {
+              const n = displayNodes.find((x) => x.id === t.nodeId);
+              if (n) {
+                // 展开的注释框放在节点正下方(框线外侧)
+                const h = n.measured?.height ?? 120;
+                pos = { x: n.position.x, y: n.position.y + h + 20 };
+              }
+            }
+            if (!pos) return null;
+            const left = pos.x * viewport.zoom + viewport.x;
+            const top = pos.y * viewport.zoom + viewport.y;
+            return (
+              <div key={a.id} style={{ position: 'absolute', left, top }}>
+                <AnnotationBox
+                  annotation={a}
+                  draggable={a.target.kind === 'canvas'}
+                  onDrag={(id, sx, sy) => {
+                    const fx = (sx - viewport.x) / viewport.zoom;
+                    const fy = (sy - viewport.y) / viewport.zoom;
+                    setAnnotationPosition(id, { x: fx, y: fy }, false);
+                  }}
+                  onDragEnd={(id) => {
+                    const cur = useGraphStore.getState().annotations.find((x) => x.id === id);
+                    if (cur?.position) setAnnotationPosition(id, cur.position, true);
+                  }}
+                  onUpdate={updateAnnotation}
+                  onDelete={deleteAnnotation}
+                  onToggleCollapsed={toggleAnnotationCollapsed}
+                />
+              </div>
+            );
+          })}
+        </div>
       </ReactFlow>
       <ContextMenu menu={contextMenu} onClose={closeContextMenu} />
       <ConfirmDialog dialog={confirmDialog} onClose={closeConfirmDialog} />

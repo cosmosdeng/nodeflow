@@ -21,6 +21,8 @@ import {
   type EdgeStyle,
   type ThemeMode,
   type ActorType,
+  type Annotation,
+  type AnnotationTarget,
   DOCUMENT_COLORS,
   createDefaultNode,
   uid,
@@ -76,6 +78,8 @@ interface FlowStore extends GraphState {
   selected: Selection;
   lastSavedAt: number | null;
   dirty: boolean;
+  /** 当前活动文档的注释(顶层镜像,与 nodes/edges 对称) */
+  annotations: Annotation[];
 
   // ---- 由 React Flow 直接回调 ----
   onNodesChange: OnNodesChange<FlowNode>;
@@ -113,6 +117,22 @@ interface FlowStore extends GraphState {
   copySelection: () => number;
   /** 把剪贴板内容粘贴到当前画布,返回粘贴的节点数 */
   pasteClipboard: (position?: { x: number; y: number }) => number;
+
+  // ---- 注释 ----
+  /** 最近创建、待自动进入编辑的注释 id(供注释框自动聚焦编辑) */
+  annotAutoEditId: string | null;
+  /** 添加注释(可指定归属),返回新注释 id */
+  addAnnotation: (target: AnnotationTarget, position?: { x: number; y: number }) => string;
+  /** 更新注释标题 / 内容(写历史) */
+  updateAnnotation: (id: string, patch: Partial<Pick<Annotation, 'title' | 'content'>>) => void;
+  /** 删除注释(写历史) */
+  deleteAnnotation: (id: string) => void;
+  /** 切换注释展开 / 收起 */
+  toggleAnnotationCollapsed: (id: string) => void;
+  /** 切换画布归属注释的位置(拖拽,结束时写历史) */
+  setAnnotationPosition: (id: string, position: { x: number; y: number }, commitHistory: boolean) => void;
+  /** 一键展开 / 收起所有注释,返回是否变为收起(用于按钮状态) */
+  toggleAllAnnotations: () => boolean;
   /**
    * 删除节点的某个输入 / 输出端口(该方向至少保留 1 个)。
    * 会同步删除连到该端口的连线,并记录历史(撤销可恢复端口与连线)。
@@ -393,14 +413,20 @@ function docKey(id: string): string {
 }
 
 /** 保存单个文档数据(仅图数据 + 内部画布标签) */
-function persistDocument(doc: Pick<GraphDocument, 'id' | 'nodes' | 'edges' | 'viewport' | 'compositeTabs' | 'activeTabId'>) {
+function persistDocument(doc: Pick<GraphDocument, 'id' | 'nodes' | 'edges' | 'viewport' | 'annotations' | 'compositeTabs' | 'activeTabId'>) {
   try {
+    // 普通节点(非组合)的 draggable 是编辑文字的临时态,不持久化;保存时强制可拖,避免编辑态卡住导致刷新后无法拖拽
+    const nodes = doc.nodes.map((n) => {
+      if (n.data?.composite) return n;
+      return n.draggable === false ? { ...n, draggable: true } : n;
+    });
     localStorage.setItem(
       docKey(doc.id),
       JSON.stringify({
-        nodes: doc.nodes,
+        nodes,
         edges: doc.edges,
         viewport: doc.viewport,
+        annotations: doc.annotations,
         compositeTabs: doc.compositeTabs,
         activeTabId: doc.activeTabId,
       }),
@@ -413,23 +439,27 @@ function persistDocument(doc: Pick<GraphDocument, 'id' | 'nodes' | 'edges' | 'vi
 /** 加载单个文档数据,返回不含历史/脏标记的图数据(缺省返回空图) */
 function loadPersistedDocument(id: string): Pick<
   GraphDocument,
-  'nodes' | 'edges' | 'viewport' | 'compositeTabs' | 'activeTabId'
+  'nodes' | 'edges' | 'viewport' | 'annotations' | 'compositeTabs' | 'activeTabId'
 > {
   try {
     const raw = localStorage.getItem(docKey(id));
     if (!raw) {
-      return { nodes: [], edges: [], viewport: { x: 0, y: 0, zoom: 1 }, compositeTabs: [], activeTabId: 'main' };
+      return { nodes: [], edges: [], viewport: { x: 0, y: 0, zoom: 1 }, annotations: [], compositeTabs: [], activeTabId: 'main' };
     }
     const data = JSON.parse(raw);
+    const rawNodes: FlowNode[] = Array.isArray(data.nodes) ? data.nodes : [];
+    // 普通节点(非组合)的 draggable 是编辑临时态,加载时强制可拖(避免旧持久化里的 false 导致不可拖)
+    const nodes = rawNodes.map((n) => (n.data?.composite ? n : n.draggable === false ? { ...n, draggable: true } : n));
     return {
-      nodes: Array.isArray(data.nodes) ? data.nodes : [],
+      nodes,
       edges: Array.isArray(data.edges) ? data.edges : [],
       viewport: data.viewport ?? { x: 0, y: 0, zoom: 1 },
+      annotations: Array.isArray(data.annotations) ? data.annotations : [],
       compositeTabs: Array.isArray(data.compositeTabs) ? data.compositeTabs : [],
       activeTabId: data.activeTabId ?? 'main',
     };
   } catch {
-    return { nodes: [], edges: [], viewport: { x: 0, y: 0, zoom: 1 }, compositeTabs: [], activeTabId: 'main' };
+    return { nodes: [], edges: [], viewport: { x: 0, y: 0, zoom: 1 }, annotations: [], compositeTabs: [], activeTabId: 'main' };
   }
 }
 
@@ -476,6 +506,7 @@ function buildInitialDocuments(): { docs: GraphDocument[]; activeId: string } {
         nodes: data.nodes,
         edges: data.edges,
         viewport: data.viewport,
+        annotations: data.annotations,
         compositeTabs: data.compositeTabs,
         activeTabId: data.activeTabId,
         past: [],
@@ -497,6 +528,7 @@ function buildInitialDocuments(): { docs: GraphDocument[]; activeId: string } {
     nodes: legacy?.nodes ?? seedGraph.nodes,
     edges: legacy?.edges ?? seedGraph.edges,
     viewport: legacy?.viewport ?? seedGraph.viewport,
+    annotations: Array.isArray(legacy?.annotations) ? legacy.annotations : [],
     compositeTabs: [],
     activeTabId: 'main',
     past: [],
@@ -910,6 +942,29 @@ function edgeReferencesNode(e: FlowEdge, nodeId: string): boolean {
   return srcPath.includes(nodeId) || tgtPath.includes(nodeId);
 }
 
+/** 判断注释的归属是否引用了某节点(节点归属,或其归属的边连接了该节点) */
+function annotationTargetsNode(a: Annotation, nodeId: string): boolean {
+  if (a.target.kind === 'node' && a.target.nodeId === nodeId) return true;
+  return false;
+}
+
+/** 判断两个注释归属是否指向同一主体 */
+function annotationTargetMatches(a: AnnotationTarget, b: AnnotationTarget): boolean {
+  if (a.kind === 'canvas' && b.kind === 'canvas') return a.tabId === b.tabId;
+  if (a.kind === 'node' && b.kind === 'node') return a.nodeId === b.nodeId;
+  if (a.kind === 'edge' && b.kind === 'edge') return a.edgeId === b.edgeId;
+  if (a.kind === 'artifact' && b.kind === 'artifact') return a.edgeId === b.edgeId;
+  return false;
+}
+
+/** 判断注释的归属是否引用了某条边 */
+function annotationTargetsEdge(a: Annotation, edgeId: string): boolean {
+  if (a.target.kind === 'edge' || a.target.kind === 'artifact') {
+    return a.target.edgeId === edgeId;
+  }
+  return false;
+}
+
 /** 子节点被删除后,从所有组合的 childIds 中移除该 id */
 function removeChildFromComposites(
   get: () => FlowStore,
@@ -979,6 +1034,7 @@ function syncActiveDoc(get: () => FlowStore, rawSet: (p: unknown) => void) {
             nodes: state.nodes,
             edges: state.edges,
             viewport: state.viewport,
+            annotations: state.annotations,
             compositeTabs: state.compositeTabs,
             activeTabId: state.activeTabId,
             past: state.past,
@@ -1005,6 +1061,8 @@ export const useGraphStore = create<FlowStore>()(
     nodes: initialActiveDoc?.nodes ?? seedGraph.nodes,
     edges: initialActiveDoc?.edges ?? seedGraph.edges,
     viewport: initialActiveDoc?.viewport ?? seedGraph.viewport,
+    annotations: initialActiveDoc?.annotations ?? [],
+    annotAutoEditId: null,
     past: initialActiveDoc?.past ?? [],
     future: initialActiveDoc?.future ?? [],
     selected: null,
@@ -1096,7 +1154,20 @@ export const useGraphStore = create<FlowStore>()(
         }, 0);
         get().markHistory();
       }
-      set((s) => ({ edges: applyEdgeChanges(changes, s.edges) }));
+      set((s) => {
+        const removedIds = new Set(removes.map((c) => c.id));
+        return {
+          edges: applyEdgeChanges(changes, s.edges),
+          // 删除连线时清理指向该连线的注释(含中间产物归属)
+          annotations:
+            removedIds.size > 0
+              ? s.annotations.filter((a) => {
+                  if (a.target.kind !== 'edge' && a.target.kind !== 'artifact') return true;
+                  return !removedIds.has(a.target.edgeId);
+                })
+              : s.annotations,
+        };
+      });
     },
     onConnect: (conn) => {
       if (get().allLocked) return;
@@ -1130,6 +1201,7 @@ export const useGraphStore = create<FlowStore>()(
             nodes: s.nodes,
             edges: s.edges,
             viewport: s.viewport,
+            annotations: s.annotations,
             compositeTabs: s.compositeTabs,
             activeTabId: s.activeTabId,
             at: Date.now(),
@@ -1151,6 +1223,7 @@ export const useGraphStore = create<FlowStore>()(
               nodes: s.nodes,
               edges: s.edges,
               viewport: s.viewport,
+              annotations: s.annotations,
               compositeTabs: s.compositeTabs,
               activeTabId: s.activeTabId,
               at: Date.now(),
@@ -1159,6 +1232,7 @@ export const useGraphStore = create<FlowStore>()(
           nodes: prev.nodes,
           edges: prev.edges,
           viewport: prev.viewport,
+          annotations: prev.annotations ?? [],
           ...restoreTabsFromSnapshot(s, prev),
         };
       });
@@ -1177,6 +1251,7 @@ export const useGraphStore = create<FlowStore>()(
               nodes: s.nodes,
               edges: s.edges,
               viewport: s.viewport,
+              annotations: s.annotations,
               compositeTabs: s.compositeTabs,
               activeTabId: s.activeTabId,
               at: Date.now(),
@@ -1185,6 +1260,7 @@ export const useGraphStore = create<FlowStore>()(
           nodes: next.nodes,
           edges: next.edges,
           viewport: next.viewport,
+          annotations: next.annotations ?? [],
           ...restoreTabsFromSnapshot(s, next),
         };
       });
@@ -1203,6 +1279,7 @@ export const useGraphStore = create<FlowStore>()(
               nodes: s.nodes,
               edges: s.edges,
               viewport: s.viewport,
+              annotations: s.annotations,
               compositeTabs: s.compositeTabs,
               activeTabId: s.activeTabId,
               at: Date.now(),
@@ -1211,6 +1288,7 @@ export const useGraphStore = create<FlowStore>()(
           nodes: target.nodes,
           edges: target.edges,
           viewport: target.viewport,
+          annotations: target.annotations ?? [],
           ...restoreTabsFromSnapshot(s, target),
         };
       });
@@ -1284,17 +1362,29 @@ export const useGraphStore = create<FlowStore>()(
         set((s) => ({
           nodes: s.nodes.filter((n) => n.id !== id),
           selected: s.selected?.kind === 'node' && s.selected.id === id ? null : s.selected,
+          // 清理指向该节点/连线的注释
+          annotations: s.annotations.filter((a) => !annotationTargetsNode(a, id)),
         }));
         set((s) => closeCompositeTabInState(s, id));
         refreshCompositeHidden(get, set);
         return;
       }
-      set((s) => ({
-        nodes: s.nodes.filter((n) => n.id !== id),
-        // 同时清理直接引用与通过 cid: 端口(塌缩聚合端口)引用该节点的连线
-        edges: s.edges.filter((e) => !edgeReferencesNode(e, id)),
-        selected: s.selected?.kind === 'node' && s.selected.id === id ? null : s.selected,
-      }));
+      set((s) => {
+        // 删除节点会连带删除其参与的连线,这些连线上的注释也要清理
+        const removedEdges = s.edges.filter((e) => edgeReferencesNode(e, id));
+        const removedEdgeIds = new Set(removedEdges.map((e) => e.id));
+        return {
+          nodes: s.nodes.filter((n) => n.id !== id),
+          edges: s.edges.filter((e) => !edgeReferencesNode(e, id)),
+          selected: s.selected?.kind === 'node' && s.selected.id === id ? null : s.selected,
+          annotations: s.annotations.filter(
+            (a) =>
+              !annotationTargetsNode(a, id) &&
+              !(a.target.kind === 'edge' && removedEdgeIds.has(a.target.edgeId)) &&
+              !(a.target.kind === 'artifact' && removedEdgeIds.has(a.target.edgeId)),
+          ),
+        };
+      });
       // 若删除的是某组合的子节点,从组合中移除
       removeChildFromComposites(get, set, id);
       // 刷新剩余塌缩组合的聚合端口与隐藏状态
@@ -1455,6 +1545,69 @@ export const useGraphStore = create<FlowStore>()(
       }
       return srcNodes.length;
     },
+
+    addAnnotation: (target, position) => {
+      if (get().allLocked) return '';
+      // 一个主体最多只能有一个注释
+      const s = get();
+      const already = s.annotations.some((a) =>
+        annotationTargetMatches(a.target, target),
+      );
+      if (already) return '';
+      get().markHistory();
+      const id = uid('annot');
+      const annot: Annotation = {
+        id,
+        title: '',
+        content: '',
+        target,
+        collapsed: false,
+        position,
+      };
+      set((st) => ({
+        annotations: [...st.annotations, annot],
+        annotAutoEditId: id,
+      }));
+      return id;
+    },
+    updateAnnotation: (id, patch) => {
+      if (get().allLocked) return;
+      get().markHistory();
+      set((s) => ({
+        annotations: s.annotations.map((a) => (a.id === id ? { ...a, ...patch } : a)),
+      }));
+    },
+    deleteAnnotation: (id) => {
+      if (get().allLocked) return;
+      get().markHistory();
+      set((s) => ({ annotations: s.annotations.filter((a) => a.id !== id) }));
+    },
+    toggleAnnotationCollapsed: (id) => {
+      set((s) => ({
+        annotations: s.annotations.map((a) =>
+          a.id === id ? { ...a, collapsed: !a.collapsed } : a,
+        ),
+      }));
+    },
+    setAnnotationPosition: (id, position, commitHistory) => {
+      // 拖拽过程不写历史,结束时(commitHistory=true)记录一次
+      if (commitHistory) get().markHistory();
+      set((s) => ({
+        annotations: s.annotations.map((a) =>
+          a.id === id ? { ...a, position } : a,
+        ),
+      }));
+    },
+    toggleAllAnnotations: () => {
+      const s = get();
+      // 若存在任意展开的注释 → 全部收起;否则全部展开
+      const anyExpanded = s.annotations.some((a) => !a.collapsed);
+      const nextCollapsed = anyExpanded;
+      set((s2) => ({
+        annotations: s2.annotations.map((a) => ({ ...a, collapsed: nextCollapsed })),
+      }));
+      return nextCollapsed;
+    },
     removePort: (id, kind, portId) => {
       if (get().allLocked) return;
       const s = get();
@@ -1511,6 +1664,7 @@ export const useGraphStore = create<FlowStore>()(
       set((s) => ({
         edges: s.edges.filter((e) => e.id !== id),
         selected: s.selected?.kind === 'edge' && s.selected.id === id ? null : s.selected,
+        annotations: s.annotations.filter((a) => !annotationTargetsEdge(a, id)),
       }));
     },
 
@@ -1551,7 +1705,7 @@ export const useGraphStore = create<FlowStore>()(
     clearGraph: () => {
       if (get().allLocked) return;
       get().markHistory();
-      set({ nodes: [], edges: [], compositeTabs: [], activeTabId: 'main' });
+      set({ nodes: [], edges: [], annotations: [], compositeTabs: [], activeTabId: 'main' });
     },
 
     loadGraph: (data) => {
@@ -1561,6 +1715,7 @@ export const useGraphStore = create<FlowStore>()(
         nodes: data.nodes,
         edges: data.edges,
         viewport: data.viewport,
+        annotations: data.annotations ?? [],
         selected: null,
         compositeTabs: [],
         activeTabId: 'main',
@@ -1574,6 +1729,7 @@ export const useGraphStore = create<FlowStore>()(
         nodes: [],
         edges: [],
         viewport: { x: 0, y: 0, zoom: 1 },
+        annotations: [],
         selected: null,
         compositeTabs: [],
         activeTabId: 'main',
@@ -1618,9 +1774,9 @@ export const useGraphStore = create<FlowStore>()(
     },
 
     exportJson: () => {
-      const { nodes, edges, viewport } = get();
+      const { nodes, edges, viewport, annotations } = get();
       return JSON.stringify(
-        { version: 1, exportedAt: new Date().toISOString(), nodes, edges, viewport },
+        { version: 1, exportedAt: new Date().toISOString(), nodes, edges, viewport, annotations },
         null,
         2,
       );
@@ -1635,6 +1791,7 @@ export const useGraphStore = create<FlowStore>()(
         nodes: s.nodes,
         edges: s.edges,
         viewport: s.viewport,
+        annotations: s.annotations,
         compositeTabs: s.compositeTabs,
         activeTabId: s.activeTabId,
         past: s.past,
@@ -1662,6 +1819,7 @@ export const useGraphStore = create<FlowStore>()(
           nodes: Array.isArray(p?.nodes) ? p.nodes : [],
           edges: Array.isArray(p?.edges) ? p.edges : [],
           viewport: p?.viewport ?? { x: 0, y: 0, zoom: 1 },
+          annotations: Array.isArray(p?.annotations) ? p.annotations : [],
           compositeTabs: Array.isArray(p?.compositeTabs) ? p.compositeTabs : [],
           activeTabId: p?.activeTabId ?? 'main',
           past: Array.isArray(p?.past) ? p.past : [],
@@ -1678,6 +1836,7 @@ export const useGraphStore = create<FlowStore>()(
         nodes: doc.nodes,
         edges: doc.edges,
         viewport: doc.viewport,
+        annotations: doc.annotations,
         compositeTabs: doc.compositeTabs,
         activeTabId: doc.activeTabId,
         past: doc.past,
@@ -1706,6 +1865,7 @@ export const useGraphStore = create<FlowStore>()(
         nodes: [],
         edges: [],
         viewport: { x: 0, y: 0, zoom: 1 },
+        annotations: [],
         compositeTabs: [],
         activeTabId: 'main',
         past: [],
@@ -1719,6 +1879,7 @@ export const useGraphStore = create<FlowStore>()(
         nodes: [],
         edges: [],
         viewport: { x: 0, y: 0, zoom: 1 },
+        annotations: [],
         compositeTabs: [],
         activeTabId: 'main',
         past: [],
@@ -1744,6 +1905,7 @@ export const useGraphStore = create<FlowStore>()(
         nodes: target.nodes,
         edges: target.edges,
         viewport: target.viewport,
+        annotations: target.annotations,
         compositeTabs: target.compositeTabs,
         activeTabId: target.activeTabId,
         past: target.past,
@@ -1778,6 +1940,7 @@ export const useGraphStore = create<FlowStore>()(
           nodes: [],
           edges: [],
           viewport: { x: 0, y: 0, zoom: 1 },
+          annotations: [],
           compositeTabs: [],
           activeTabId: 'main',
           past: [],
@@ -1791,6 +1954,7 @@ export const useGraphStore = create<FlowStore>()(
           nodes: [],
           edges: [],
           viewport: { x: 0, y: 0, zoom: 1 },
+          annotations: [],
           compositeTabs: [],
           activeTabId: 'main',
           past: [],
@@ -1817,6 +1981,7 @@ export const useGraphStore = create<FlowStore>()(
           nodes: next.nodes,
           edges: next.edges,
           viewport: next.viewport,
+          annotations: next.annotations,
           compositeTabs: next.compositeTabs,
           activeTabId: next.activeTabId,
           past: next.past,
@@ -1894,12 +2059,44 @@ export const useGraphStore = create<FlowStore>()(
       if (get().allLocked) return;
       const node = get().nodes.find((n) => n.id === id);
       if (!node?.data?.composite) return;
+      const firstChildId = node.data.composite.childIds[0];
+      // 组合节点的注释:解除编组后合并到第一个子节点
+      const compAnnot = get().annotations.find(
+        (a) => a.target.kind === 'node' && a.target.nodeId === id,
+      );
       get().markHistory();
       expandComposite(get, set, id);
-      set((s) => ({
-        nodes: s.nodes.filter((n) => n.id !== id),
-        selected: s.selected?.kind === 'node' && s.selected.id === id ? null : s.selected,
-      }));
+      set((s) => {
+        let annotations = s.annotations;
+        if (compAnnot && firstChildId) {
+          const existing = s.annotations.find(
+            (a) => a.target.kind === 'node' && a.target.nodeId === firstChildId,
+          );
+          // 先移除组合节点自身的注释
+          annotations = annotations.filter((a) => a.id !== compAnnot.id);
+          if (existing) {
+            // 第一个子节点已有注释 → 合并内容
+            const merged: Partial<Pick<Annotation, 'title' | 'content'>> = {};
+            if (compAnnot.title && !existing.title) merged.title = compAnnot.title;
+            const combinedContent = [existing.content, compAnnot.content].filter(Boolean).join('\n');
+            if (combinedContent) merged.content = combinedContent;
+            annotations = annotations.map((a) =>
+              a.id === existing.id ? { ...a, ...merged } : a,
+            );
+          } else {
+            // 第一个子节点无注释 → 把组合注释转移给它
+            annotations = [
+              ...annotations,
+              { ...compAnnot, target: { kind: 'node', nodeId: firstChildId } },
+            ];
+          }
+        }
+        return {
+          nodes: s.nodes.filter((n) => n.id !== id),
+          selected: s.selected?.kind === 'node' && s.selected.id === id ? null : s.selected,
+          annotations,
+        };
+      });
       set((s) => closeCompositeTabInState(s, id));
     },
     toggleComposite: (id) => {
@@ -1965,7 +2162,7 @@ export const useGraphStore = create<FlowStore>()(
 /* 自动保存:订阅 nodes/edges/viewport 变化,防抖后写盘                    */
 /* ------------------------------------------------------------------ */
 useGraphStore.subscribe(
-  (s) => ({ nodes: s.nodes, edges: s.edges, viewport: s.viewport }),
+  (s) => ({ nodes: s.nodes, edges: s.edges, viewport: s.viewport, annotations: s.annotations }),
   () => {
     useGraphStore.setState((s) => ({
       dirty: true,
