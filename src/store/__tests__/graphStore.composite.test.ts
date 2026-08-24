@@ -405,4 +405,49 @@ describe('BPMN 网关节点(createGatewayNode)', () => {
     expect(pastedGw).toBeTruthy();
     expect(pastedGw?.data.gateway?.type).toBe('inclusive');
   });
+
+  it('增加网关分支端点:已有连线保持连到原端点(端点 id 不变)', () => {
+    const gw = createGatewayNode('exclusive', { x: 0, y: 0 });
+    // 下游节点 B 连到网关 out_1 分支
+    const B = node('B', { inputs: [{ id: 'in1', name: '入' }] }, { position: { x: 400, y: 0 } });
+    const edges = [
+      { id: 'e1', source: gw.id, sourceHandle: 'out_1', target: 'B', targetHandle: 'in1', type: 'flow' as const, data: { label: '', artifact: null } },
+    ];
+    useGraphStore.setState({
+      nodes: [gw, B],
+      edges,
+      selected: null,
+    });
+    // 增加一个分支端点
+    const g = useGraphStore.getState();
+    g.updateNode(gw.id, {
+      outputs: [...g.nodes.find((n) => n.id === gw.id)!.data.outputs, { id: 'out_3', name: '分支3' }],
+    });
+    const s = useGraphStore.getState();
+    // 原连线 e1 仍连到 out_1(端点 id 不变),未断开
+    expect(s.edges.find((e) => e.id === 'e1')?.sourceHandle).toBe('out_1');
+    expect(s.edges.find((e) => e.id === 'e1')).toBeTruthy();
+  });
+
+  it('删除网关分支端点:只删除连到该端点的连线,其他分支连线保持', () => {
+    const gw = createGatewayNode('exclusive', { x: 0, y: 0 });
+    const B = node('B', { inputs: [{ id: 'in1', name: '入' }] }, { position: { x: 400, y: 0 } });
+    const C = node('C', { inputs: [{ id: 'in1', name: '入' }] }, { position: { x: 600, y: 0 } });
+    const edges = [
+      { id: 'e1', source: gw.id, sourceHandle: 'out_1', target: 'B', targetHandle: 'in1', type: 'flow' as const, data: { label: '', artifact: null } },
+      { id: 'e2', source: gw.id, sourceHandle: 'out_2', target: 'C', targetHandle: 'in1', type: 'flow' as const, data: { label: '', artifact: null } },
+    ];
+    useGraphStore.setState({
+      nodes: [gw, B, C],
+      edges,
+      selected: null,
+    });
+    // 删除 out_1 分支
+    useGraphStore.getState().removePort(gw.id, 'output', 'out_1');
+    const s = useGraphStore.getState();
+    // 连到 out_1 的 e1 被删除
+    expect(s.edges.find((e) => e.id === 'e1')).toBeUndefined();
+    // 连到 out_2 的 e2 保持
+    expect(s.edges.find((e) => e.id === 'e2')?.sourceHandle).toBe('out_2');
+  });
 });
