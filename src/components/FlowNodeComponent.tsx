@@ -414,35 +414,7 @@ function FlowNodeComponent({ id, data, selected }: NodeProps<FlowNode>) {
           </div>
         </div>
         <div className="composite-frame-hint">{children.length} 个内部节点</div>
-        {/* 展开态也提供聚合端口,便于直接对外连线(端口 id 为 cid: 编码,与塌缩态一致) */}
-        <div className="composite-frame-ports">
-          <div className="nf-ports-in">
-            {(aggPorts?.inputs ?? []).map((p) => (
-              <Handle
-                key={p.id}
-                id={p.id}
-                type="target"
-                position={Position.Left}
-                isConnectable
-                className={handleClass('i', p.id)}
-                title={`${p.name} · 来自内部节点`}
-              />
-            ))}
-          </div>
-          <div className="nf-ports-out">
-            {(aggPorts?.outputs ?? []).map((p) => (
-              <Handle
-                key={p.id}
-                id={p.id}
-                type="source"
-                position={Position.Right}
-                isConnectable
-                className={handleClass('o', p.id)}
-                title={`${p.name} · 来自内部节点`}
-              />
-            ))}
-          </div>
-        </div>
+        {/* 展开态虚线框仅为逻辑边界,不作为实际节点:无聚合端口,连线直接连到内部节点 */}
         {/* 组合节点注释 pin(操作逻辑与普通节点相同) */}
         {nodeAnnots.length === 0 ? (
         nodeHovered && (

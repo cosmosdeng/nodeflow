@@ -750,6 +750,96 @@ function collapseComposite(
   set({ nodes, edges });
 }
 
+interface Rect { x: number; y: number; width: number; height: number }
+
+/** 判断节点(在 nx,ny 处,尺寸 w×h)是否与矩形 rect(带间距 gap)重叠 */
+function rectOverlaps(nx: number, ny: number, w: number, h: number, rect: Rect, gap: number): boolean {
+  const ox = nx < rect.x + rect.width + gap && nx + w > rect.x - gap;
+  const oy = ny < rect.y + rect.height + gap && ny + h > rect.y - gap;
+  return ox && oy;
+}
+
+/** 把一个节点从矩形 rect 中沿最小位移方向推出(带间距 gap),返回新坐标 */
+function pushOutOfRect(nx: number, ny: number, w: number, h: number, rect: Rect, gap: number) {
+  const candidates = [
+    { dx: rect.x + rect.width + gap - nx, dy: 0 },
+    { dx: -(nx + w + gap - rect.x), dy: 0 },
+    { dx: 0, dy: rect.y + rect.height + gap - ny },
+    { dx: 0, dy: -(ny + h + gap - rect.y) },
+  ];
+  let best = candidates[0];
+  let bestDist = Infinity;
+  for (const c of candidates) {
+    const dist = Math.abs(c.dx) + Math.abs(c.dy);
+    if (dist < bestDist) {
+      best = c;
+      bestDist = dist;
+    }
+  }
+  return { x: nx + best.dx, y: ny + best.dy };
+}
+
+/**
+ * 展开组合节点时,把与虚线框重叠的节点彻底推开:
+ * 依次避让组合虚线框、其他节点 / 展开组合的矩形、以及外部连线产物(含保护区),
+ * 迭代直到不再与任何障碍重叠(带迭代上限),确保产物 / 节点彻底不与节点或展开组合重叠。
+ */
+function pushNodesAwayFromBox(
+  nodes: FlowNode[],
+  compId: string,
+  childSet: Set<string>,
+  box: Rect,
+  pad: number,
+  artifactRects: Rect[] = [],
+): FlowNode[] {
+  // 预计算每个节点(排除组合自身与内部子节点)的矩形,以及产物保护区
+  const nodeRects = nodes
+    .filter((n) => n.id !== compId && !childSet.has(n.id))
+    .map((n) => ({ id: n.id, x: n.position.x, y: n.position.y, w: getNodeSize(n).w, h: getNodeSize(n).h }));
+
+  const MAX = 8;
+  const out = nodes.map((n) => {
+    if (n.id === compId || childSet.has(n.id)) return n;
+    const { w, h } = getNodeSize(n);
+    let px = n.position.x;
+    let py = n.position.y;
+    for (let iter = 0; iter < MAX; iter++) {
+      let moved = false;
+      // 1) 避让组合虚线框(用 pad 间距)
+      if (rectOverlaps(px, py, w, h, box, pad)) {
+        const p = pushOutOfRect(px, py, w, h, box, pad);
+        px = p.x;
+        py = p.y;
+        moved = true;
+      }
+      // 2) 避让其他节点 / 展开组合(排除自身),用 pad 一半作为安全间距
+      for (const r of nodeRects) {
+        if (r.id === n.id) continue;
+        const g = Math.round(pad / 2);
+        if (rectOverlaps(px, py, w, h, { x: r.x, y: r.y, width: r.w, height: r.h }, g)) {
+          const p = pushOutOfRect(px, py, w, h, { x: r.x, y: r.y, width: r.w, height: r.h }, g);
+          px = p.x;
+          py = p.y;
+          moved = true;
+        }
+      }
+      // 3) 避让外部连线产物(含保护区)
+      for (const r of artifactRects) {
+        if (rectOverlaps(px, py, w, h, r, 0)) {
+          const p = pushOutOfRect(px, py, w, h, r, 0);
+          px = p.x;
+          py = p.y;
+          moved = true;
+        }
+      }
+      if (!moved) break;
+    }
+    if (px === n.position.x && py === n.position.y) return n;
+    return { ...n, position: { x: Math.round(px), y: Math.round(py) } };
+  });
+  return out;
+}
+
 /**
  * 展开组合节点:
  * - 恢复子节点与内部连线显示
@@ -805,6 +895,9 @@ function expandComposite(
     const base: FlowNode = {
       ...n,
       draggable: false,
+      // 标记展开态:React Flow 会把 node.className 挂到 .react-flow__node 上,
+      // 用于精确 CSS 穿透(不依赖 :has() 兼容性)
+      className: 'nf-expanded-frame',
       data: {
         ...n.data,
         composite: { ...(n.data.composite as NonNullable<FlowNodeData['composite']>), expanded: true },
@@ -819,7 +912,41 @@ function expandComposite(
     return base;
   });
 
-  set({ nodes: updated, edges });
+  // 展开后把与虚线框重叠的相邻节点推开,避免重叠
+  let finalNodes = updated;
+  if (bounds) {
+    const compNode = updated.find((n) => n.id === id);
+    const w = compNode?.width ?? bounds.width;
+    const h = compNode?.height ?? bounds.height;
+    // 外部连线的产物矩形(用于推挤时给产物留出左右间距)
+    const nodeById = buildNodesById(updated);
+    const artifactRects: Rect[] = [];
+    for (const e of edges) {
+      if (!e.data?.artifact) continue;
+      const src = nodeById.get(e.source);
+      const tgt = nodeById.get(e.target);
+      if (!src || !tgt) continue;
+      const sw = getNodeSize(src).w;
+      const sh = getNodeSize(src).h;
+      const tw = getNodeSize(tgt).w;
+      const th = getNodeSize(tgt).h;
+      // 产物近似在连线中点(两端节点中心的中点),chip 约 140×40,
+      // 保护区:左右各 70 + 40,上下各 30,确保被推开的节点彻底不与产物重叠
+      const cx = (src.position.x + sw / 2 + tgt.position.x + tw / 2) / 2;
+      const cy = (src.position.y + sh / 2 + tgt.position.y + th / 2) / 2;
+      artifactRects.push({ x: cx - 110, y: cy - 20, width: 220, height: 100 });
+    }
+    finalNodes = pushNodesAwayFromBox(
+      updated,
+      id,
+      childSet,
+      { x: bounds.x, y: bounds.y, width: w, height: h },
+      COMPOSITE_PAD,
+      artifactRects,
+    );
+  }
+
+  set({ nodes: finalNodes, edges });
   // 展开后统一重算嵌套隐藏状态(内层仍塌缩的组合其子节点保持隐藏)
   refreshCompositeHidden(get, set);
 }

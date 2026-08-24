@@ -85,7 +85,7 @@ interface Artifact {
 5. **展开**:子节点与内部连线恢复显示;外部连线从 `cid:` 端口还原;组合节点变为虚线框,尺寸由 `computeCompositeBounds` 实时包裹全部子节点(展开态不可拖动);展开态左右边缘渲染聚合端口 Handle,可直接对外连线。
 6. **删除组合节点前必须先展开**(`expandComposite`),以免误删其子节点与连线。
 7. **撤销 / 重做 / 跳转历史**必须同步恢复内部画布标签(`compositeTabs / activeTabId`):`GraphSnapshot` 记录标签状态,历史跳转通过 `restoreTabsFromSnapshot` 完整恢复,避免指向已不存在的组合节点。
-8. 组合节点自身不允许再嵌套组合(`groupSelected` 拒绝已含组合节点的选中集合)。
+8. **支持嵌套组合**:`groupSelected` 允许把已含组合节点的选中集合编入更大的组合,聚合端口递归透出(`decodeCompositePortPath`),显隐 / 连线改写 / 执行主体均递归处理。
 
 ## 当前开发阶段
 
@@ -114,6 +114,7 @@ interface Artifact {
 - **双击画布建节点**:`selectionOnDrag` 会拦截 pane 的 click/dblclick,改用画布容器原生捕获阶段监听 `pointerdown` 计数检测双击;双击节点文字仍进入编辑。
 - **端口颜色**:端口连接状态按「节点 id + 端口 id」精确匹配(`connectedHandles`),未连接桔色 / 已连接绿色;同名默认端口(`in_1`/`out_1`)不会跨节点误判。
 - **撤销删除还原连线**:React Flow 删除节点先删边(`onEdgesChange`)后删节点(`onNodesChange`),用 `edgeDeleteHistoryPending` 同步标志合并为一次「删除前含连线」快照,撤销可完整还原节点及连线。
+- **展开组合节点内部交互**:展开态组合节点(`.nf-composite-frame`)与内部节点同层渲染并相互重叠。为让内部节点可拖拽 / 连线 / 选中,`expandComposite` 给组合节点设 `className: 'nf-expanded-frame'`,CSS 用精确类选择器 `.react-flow__node.nf-expanded-frame { pointer-events: none }` 穿透(仅标题栏 `composite-frame-bar` 恢复 `auto`),并在 `FlowCanvas` 把展开组合的全部子节点 `zIndex` 提升为 1。**注意:不要改用 `:has()` 选择器实现穿透,部分环境不兼容会导致样式失效。**
 
 ## 已知问题
 

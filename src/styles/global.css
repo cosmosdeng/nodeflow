@@ -773,6 +773,15 @@ body,
   /* 框体本身不拦截事件,内部节点可正常交互 */
   pointer-events: none;
 }
+/* 展开组合节点的 React Flow 容器整体穿透事件,让内部节点 / 连线可交互;
+   仅标题栏(composite-frame-bar)通过 pointer-events:auto 恢复可交互。
+   用 node.className(nf-expanded-frame) 精确命中,不依赖 :has() 兼容性 */
+.react-flow__node.nf-expanded-frame {
+  pointer-events: none;
+}
+.react-flow__node.nf-expanded-frame .composite-frame-bar {
+  pointer-events: auto;
+}
 
 .nf-composite-frame.selected {
   border-color: var(--accent);
@@ -837,7 +846,8 @@ body,
   flex-direction: column;
   justify-content: center;
   gap: 18px;
-  pointer-events: auto;
+  /* 聚合端口不拦截事件,避免覆盖内部节点的 Handle / 操作按钮 */
+  pointer-events: none;
 }
 
 .nf-composite-frame .nf-ports-in {

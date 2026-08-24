@@ -134,7 +134,19 @@ export default function FlowCanvas() {
   const { displayNodes, displayEdges } = useMemo(() => {
     const applyLock = (ns: FlowNode[]) =>
       allLocked ? ns.map((n) => ({ ...n, draggable: false })) : ns;
-    if (activeTabId === 'main') return { displayNodes: applyLock(nodes), displayEdges: edges };
+    if (activeTabId === 'main') {
+      // 展开组合的子节点提升 zIndex,使其渲染在组合虚线框之上,保证可被拖拽 / 连线 / 选中。
+      // 不能用 :has() 让组合框 pointer-events:none 穿透(部分环境不生效),改由 z-index 层叠解决。
+      const childIds = new Set(
+        nodes
+          .filter((n) => n.data?.composite?.expanded)
+          .flatMap((n) => n.data!.composite!.childIds),
+      );
+      const lifted = nodes.map((n) =>
+        childIds.has(n.id) ? { ...n, zIndex: 1 } : n,
+      );
+      return { displayNodes: applyLock(lifted), displayEdges: edges };
+    }
     const comp = nodes.find((n) => n.id === activeTabId);
     const childSet = new Set(comp?.data?.composite?.childIds ?? []);
     return {

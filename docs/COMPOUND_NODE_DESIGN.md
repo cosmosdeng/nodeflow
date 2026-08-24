@@ -56,13 +56,14 @@ decodeCompositePort(portId)         // => { childId, portId } | null
 
 ### 4.1 创建组合 (groupSelected)
 
-前置条件:选中 **≥2 个** 且 **均非组合节点** 的节点。
+前置条件:选中 **≥2 个** 节点。**支持嵌套**:允许把已含组合节点的选中集编入更大的组合(`groupSelected` 不再拒绝组合节点)。
 
 ```
 1. 生成组合节点 id,取选中节点包围盒中心作为组合节点位置
-2. 组合节点 actor = 多数派(取第一个节点主体,由实现决定)
-3. data.composite = { expanded: true, childIds: 选中节点 id 列表 }
-4. 进入塌缩流程(collapseComposite)
+2. 组合节点 actor = computeCompositeActor(内部全同则同,混杂则人机协同,支持嵌套递归)
+3. 标题 = 「{执行主体}协作流程(N)」
+4. data.composite = { expanded: false, childIds: 选中节点 id 列表 }
+5. 进入塌缩流程(collapseComposite)
 ```
 
 ### 4.2 塌缩 (collapseComposite)
@@ -122,7 +123,7 @@ decodeCompositePort(portId)         // => { childId, portId } | null
 4. **外部连线改写是唯一破坏性操作**,必须可逆、且不得影响其他组合。
 5. **删除组合前必须先展开。**
 6. **历史 / 标签页 / 弹窗的一致性**由 store 统一维护。
-7. **组合不嵌套组合**(创建时拒绝含组合节点的选中集)。
+7. **支持嵌套组合**:聚合端口可多层链式编码(`cid:A:cid:B:port`)、显隐 / 连线改写 / 执行主体均递归处理。
 
 ## 7. 实现位置
 

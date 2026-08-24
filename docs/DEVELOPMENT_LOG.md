@@ -2,6 +2,20 @@
 
 > 按时间倒序记录开发历程。新功能、重要修复、里程碑都应在此追加。
 
+## 2026-08-24 · 修复展开组合节点内部不可交互
+
+**问题**:展开组合节点(虚线框)后,内部节点无法拖拽、无法从端口拉线、无法选中 / 加删端点——鼠标事件全被组合框挡住。
+
+**根因**:此前用 CSS `:has()`(`.react-flow__node:has(> .nf-composite-frame) { pointer-events: none }`)让展开组合节点的 React Flow 容器穿透事件。但当前运行环境(部分 WebView / Chromium 版本)**不支持 `:has()`**,样式完全无效,组合框仍盖住内部节点;尝试的 `zIndex` 提升内部节点方案也不稳定。
+
+**修复**(双保险,均不依赖 `:has()` 兼容性):
+- `graphStore.expandComposite` 给展开组合节点设置 `className: 'nf-expanded-frame'`——React Flow 会把 `node.className` 挂到 `.react-flow__node` 上,用**精确类选择器** `.react-flow__node.nf-expanded-frame { pointer-events: none }` 命中并穿透,仅标题栏 `composite-frame-bar` 恢复 `pointer-events: auto`。
+- `FlowCanvas` 将展开组合的全部子节点 `zIndex` 提升为 `1`,渲染在组合框(默认 0)之上,保证内部节点优先接收事件。
+
+效果:展开组合后,内部节点可正常拖拽 / 从端口拉线 / 选中 / 加删端点。
+
+---
+
 ## 2026-08-24 · P3-1 注释框
 
 **P3 首项完成**:实现注释框(Annotation)功能,支持画布 / 节点 / 连线 / 连线产物 / 组合节点多种主体。
