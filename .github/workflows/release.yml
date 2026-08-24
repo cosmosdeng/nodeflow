@@ -13,8 +13,12 @@ jobs:
       fail-fast: false
       matrix:
         include:
+          # macOS Apple Silicon (arm64)
           - os: macos-latest
-            args: --mac
+            args: --mac --arm64
+          # macOS Intel (x64)
+          - os: macos-13
+            args: --mac --x64
           - os: ubuntu-latest
             args: --linux
           - os: windows-latest
