@@ -87,6 +87,22 @@ export interface Annotation {
   position?: { x: number; y: number };
 }
 
+/** 流程阶段域(Stage):矩形虚线框区域,节点/组合拖入即归属 */
+export interface Stage {
+  id: string;
+  /** 域名称 */
+  name: string;
+  /** 域的流坐标矩形 */
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  /** 归属该域的节点 id 列表 */
+  nodeIds: string[];
+  /** 是否选中(用于高亮) */
+  selected?: boolean;
+}
+
 /** 画布视口 */
 export interface ViewportState {
   x: number;
@@ -101,6 +117,8 @@ export interface GraphSnapshot {
   viewport: ViewportState;
   /** 快照创建时的注释 */
   annotations?: Annotation[];
+  /** 快照创建时的流程阶段域 */
+  stages?: Stage[];
   /** 快照创建时的组合标签页状态(用于撤销/重做时联动恢复) */
   compositeTabs?: string[];
   /** 快照创建时的激活标签页 id */
@@ -134,6 +152,8 @@ export interface GraphDocument {
   viewport: ViewportState;
   /** 该文档的注释 */
   annotations: Annotation[];
+  /** 该文档的流程阶段域 */
+  stages: Stage[];
   /** 该文档内已打开的组合内部画布标签 */
   compositeTabs: string[];
   /** 该文档内当前激活的标签页:'main' 或组合节点 id */

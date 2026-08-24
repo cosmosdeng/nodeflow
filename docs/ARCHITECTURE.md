@@ -41,6 +41,7 @@ nodeflow/
 │   │   ├── FlowEdgeComponent.tsx   # 自定义连线组件(弧线 + 中间产物标签)
 │   │   ├── EditableText.tsx        # 共享内联编辑组件(自动聚焦)
 │   │   ├── AnnotationBox.tsx       # 注释框(画布/节点/连线/产物/组合)
+│   │   ├── StageComponent.tsx      # 流程阶段域(矩形虚线框,穿透内部,可拖拽/调整大小)
 │   │   ├── CompositePopupView.tsx  # 独立窗口的内部画布(只读)
 │   │   ├── Toolbar.tsx             # 顶部工具栏:新建/组合/锁定/历史/导入导出
 │   │   ├── PropertiesPanel.tsx     # 右侧属性面板
@@ -66,12 +67,13 @@ nodeflow/
 
 ```
 Store 状态:
-├── documents: GraphDocument[]    # 全部项目文档,每个含独立 nodes/edges/viewport/组合标签/历史栈
+├── documents: GraphDocument[]    # 全部项目文档,每个含独立 nodes/edges/viewport/组合标签/stages/历史栈
 ├── activeDocumentId              # 当前激活文档 id
 ├── selected                     # 当前选中项
 ├── allLocked: boolean           # 演示模式:全局锁定
 ├── clipboard                    # 全局子图剪贴板(跨文档 / 跨项目共享)
-└── annotations                  # 注释框(画布/节点/连线/产物/组合归属)
+├── annotations                  # 注释框(画布/节点/连线/产物/组合归属)
+└── stages                       # 流程阶段域(矩形虚线框,文档级数组)
 ```
 
 **活动文档镜像**:为兼容大量基于顶层 `nodes / edges` 的 action,store 保留顶层 `nodes/edges` 等字段,`set` 被包装后自动同步回 `activeDocumentId` 对应的文档;切换文档时整体加载目标文档。**组合节点只保存 `childIds` 引用**,子节点与连线仍是该文档 `nodes / edges` 中的普通成员,由 `hidden` 字段控制显隐;撤销 / 重做按文档隔离、基于历史快照。
@@ -112,7 +114,8 @@ React Flow 渲染 + CSS 样式
 | `lib/edgePath.ts` | 连线绕障路径(避开节点) | 直角线 / 弧线 |
 | `lib/exportImage.ts` | JPG / PDF 导出(html-to-image + jsPDF,保留主题背景 / 点阵) | |
 | `FlowNodeComponent.tsx` | 节点渲染:普通 / 展开虚线框 / 塌缩聚合端口 | 三种形态同一组件 |
-| `FlowCanvas.tsx` | ReactFlow 实例、连线交互回调、内部画布 tab 渲染、展开组合内部节点穿透 | 事件集中区 |
+| `FlowCanvas.tsx` | ReactFlow 实例、连线交互回调、内部画布 tab 渲染、展开组合内部节点穿透、阶段域(长按进入 / 自动扩大 / 拖拽 / resize) | 事件集中区 |
+| `StageComponent.tsx` | 阶段域渲染(矩形虚线框 / 光谱色 / 四边拖拽条 / 手柄 / 名称编辑) | overlay 层,整体穿透内部 |
 | `EditableText.tsx` | 共享内联编辑组件(标题 / 描述 / 端口名 / 连线 label),支持自动聚焦 | |
 | `AnnotationBox.tsx` | 注释框(画布 / 节点 / 连线 / 产物 / 组合归属) | |
 | `Toolbar.tsx` | 全局操作入口(新建节点 / 组合 / 锁定 / 撤销重做 / 导入导出 / 清空) | |

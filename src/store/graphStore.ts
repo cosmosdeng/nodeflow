@@ -23,6 +23,7 @@ import {
   type ActorType,
   type Annotation,
   type AnnotationTarget,
+  type Stage,
   DOCUMENT_COLORS,
   createDefaultNode,
   uid,
@@ -80,6 +81,10 @@ interface FlowStore extends GraphState {
   dirty: boolean;
   /** 当前活动文档的注释(顶层镜像,与 nodes/edges 对称) */
   annotations: Annotation[];
+  /** 当前活动文档的流程阶段域(Stage) */
+  stages: Stage[];
+  /** 长按进入域时的闪烁反馈:正在闪烁的阶段域 id(700ms 后自动清除) */
+  stageFlashId: string | null;
 
   // ---- 由 React Flow 直接回调 ----
   onNodesChange: OnNodesChange<FlowNode>;
@@ -133,6 +138,35 @@ interface FlowStore extends GraphState {
   setAnnotationPosition: (id: string, position: { x: number; y: number }, commitHistory: boolean) => void;
   /** 一键展开 / 收起所有注释,返回是否变为收起(用于按钮状态) */
   toggleAllAnnotations: () => boolean;
+
+  // ---- 流程阶段域(Stage) ----
+  /** 添加一个阶段域,返回新域 id */
+  addStage: (x: number, y: number, width: number, height: number, name?: string) => string;
+  /** 更新阶段域(名称 / 矩形 / 归属节点),写历史 */
+  updateStage: (id: string, patch: Partial<Pick<Stage, 'name' | 'x' | 'y' | 'width' | 'height'>>) => void;
+  /** 设置阶段域的归属节点列表(写历史) */
+  setStageNodes: (id: string, nodeIds: string[]) => void;
+  /** 删除阶段域(写历史) */
+  deleteStage: (id: string) => void;
+  /** 选中阶段域 */
+  selectStage: (id: string | null) => void;
+  /** 自动把「完全位于某域内的可见节点」归属到该域(合并节点移动后调用) */
+  syncStageMembership: () => void;
+  /** 把指定节点从所有阶段域中脱离 */
+  detachNodeFromStages: (nodeId: string) => void;
+  /** 移动阶段域(及其内部节点,保持相对关系);commitHistory=false 用于拖拽过程 */
+  moveStageNodes: (id: string, dx: number, dy: number, moveNodes: boolean, commitHistory: boolean) => void;
+  /** 调整阶段域大小(右下角拖拽);commitHistory=false 用于拖拽过程 */
+  resizeStage: (id: string, width: number, height: number, commitHistory: boolean) => void;
+  /** 把节点加入某阶段域(长按进入);若已在其它域先移出,写历史 */
+  enterNodeToStage: (stageId: string, nodeId: string) => void;
+  /** 把一批节点从所有阶段域中脱离(右键「脱离阶段域」) */
+  detachNodesFromStages: (nodeIds: string[]) => void;
+  /**
+   * 阶段域自动扩大:按归属节点包围盒(含内边距)重算域框;
+   * 若扩大后与外部节点/组合/其他阶段域重叠,按最小位移把外部元素推开(保持间距)。
+   */
+  autoGrowStage: (stageId: string) => void;
   /**
    * 删除节点的某个输入 / 输出端口(该方向至少保留 1 个)。
    * 会同步删除连到该端口的连线,并记录历史(撤销可恢复端口与连线)。
@@ -420,7 +454,7 @@ function docKey(id: string): string {
 }
 
 /** 保存单个文档数据(仅图数据 + 内部画布标签) */
-function persistDocument(doc: Pick<GraphDocument, 'id' | 'nodes' | 'edges' | 'viewport' | 'annotations' | 'compositeTabs' | 'activeTabId'>) {
+function persistDocument(doc: Pick<GraphDocument, 'id' | 'nodes' | 'edges' | 'viewport' | 'annotations' | 'stages' | 'compositeTabs' | 'activeTabId'>) {
   try {
     // 普通节点(非组合)的 draggable 是编辑文字的临时态,不持久化;保存时强制可拖,避免编辑态卡住导致刷新后无法拖拽
     const nodes = doc.nodes.map((n) => {
@@ -434,6 +468,7 @@ function persistDocument(doc: Pick<GraphDocument, 'id' | 'nodes' | 'edges' | 'vi
         edges: doc.edges,
         viewport: doc.viewport,
         annotations: doc.annotations,
+        stages: doc.stages,
         compositeTabs: doc.compositeTabs,
         activeTabId: doc.activeTabId,
       }),
@@ -446,12 +481,12 @@ function persistDocument(doc: Pick<GraphDocument, 'id' | 'nodes' | 'edges' | 'vi
 /** 加载单个文档数据,返回不含历史/脏标记的图数据(缺省返回空图) */
 function loadPersistedDocument(id: string): Pick<
   GraphDocument,
-  'nodes' | 'edges' | 'viewport' | 'annotations' | 'compositeTabs' | 'activeTabId'
+  'nodes' | 'edges' | 'viewport' | 'annotations' | 'stages' | 'compositeTabs' | 'activeTabId'
 > {
   try {
     const raw = localStorage.getItem(docKey(id));
     if (!raw) {
-      return { nodes: [], edges: [], viewport: { x: 0, y: 0, zoom: 1 }, annotations: [], compositeTabs: [], activeTabId: 'main' };
+      return { nodes: [], edges: [], viewport: { x: 0, y: 0, zoom: 1 }, annotations: [], stages: [], compositeTabs: [], activeTabId: 'main' };
     }
     const data = JSON.parse(raw);
     const rawNodes: FlowNode[] = Array.isArray(data.nodes) ? data.nodes : [];
@@ -462,11 +497,12 @@ function loadPersistedDocument(id: string): Pick<
       edges: Array.isArray(data.edges) ? data.edges : [],
       viewport: data.viewport ?? { x: 0, y: 0, zoom: 1 },
       annotations: Array.isArray(data.annotations) ? data.annotations : [],
+      stages: Array.isArray(data.stages) ? data.stages : [],
       compositeTabs: Array.isArray(data.compositeTabs) ? data.compositeTabs : [],
       activeTabId: data.activeTabId ?? 'main',
     };
   } catch {
-    return { nodes: [], edges: [], viewport: { x: 0, y: 0, zoom: 1 }, annotations: [], compositeTabs: [], activeTabId: 'main' };
+    return { nodes: [], edges: [], viewport: { x: 0, y: 0, zoom: 1 }, annotations: [], stages: [], compositeTabs: [], activeTabId: 'main' };
   }
 }
 
@@ -514,6 +550,7 @@ function buildInitialDocuments(): { docs: GraphDocument[]; activeId: string } {
         edges: data.edges,
         viewport: data.viewport,
         annotations: data.annotations,
+        stages: data.stages,
         compositeTabs: data.compositeTabs,
         activeTabId: data.activeTabId,
         past: [],
@@ -536,6 +573,7 @@ function buildInitialDocuments(): { docs: GraphDocument[]; activeId: string } {
     edges: legacy?.edges ?? seedGraph.edges,
     viewport: legacy?.viewport ?? seedGraph.viewport,
     annotations: Array.isArray(legacy?.annotations) ? legacy.annotations : [],
+    stages: [],
     compositeTabs: [],
     activeTabId: 'main',
     past: [],
@@ -1169,6 +1207,7 @@ function syncActiveDoc(get: () => FlowStore, rawSet: (p: unknown) => void) {
             edges: state.edges,
             viewport: state.viewport,
             annotations: state.annotations,
+            stages: state.stages,
             compositeTabs: state.compositeTabs,
             activeTabId: state.activeTabId,
             past: state.past,
@@ -1196,6 +1235,8 @@ export const useGraphStore = create<FlowStore>()(
     edges: initialActiveDoc?.edges ?? seedGraph.edges,
     viewport: initialActiveDoc?.viewport ?? seedGraph.viewport,
     annotations: initialActiveDoc?.annotations ?? [],
+    stages: initialActiveDoc?.stages ?? [],
+    stageFlashId: null,
     annotAutoEditId: null,
     past: initialActiveDoc?.past ?? [],
     future: initialActiveDoc?.future ?? [],
@@ -1253,6 +1294,12 @@ export const useGraphStore = create<FlowStore>()(
           ),
           selected:
             s.selected?.kind === 'node' && removedIds.has(s.selected.id) ? null : s.selected,
+          // 被删节点从阶段域的归属中移除
+          stages: s.stages.map((st) =>
+            st.nodeIds.some((nid) => removedIds.has(nid))
+              ? { ...st, nodeIds: st.nodeIds.filter((nid) => !removedIds.has(nid)) }
+              : st,
+          ),
         }));
         // 若删除的是组合的子节点,从组合中移除;若删除的是组合节点,关闭其标签
         for (const rid of removedIds) {
@@ -1336,6 +1383,7 @@ export const useGraphStore = create<FlowStore>()(
             edges: s.edges,
             viewport: s.viewport,
             annotations: s.annotations,
+            stages: s.stages,
             compositeTabs: s.compositeTabs,
             activeTabId: s.activeTabId,
             at: Date.now(),
@@ -1358,6 +1406,7 @@ export const useGraphStore = create<FlowStore>()(
               edges: s.edges,
               viewport: s.viewport,
               annotations: s.annotations,
+              stages: s.stages,
               compositeTabs: s.compositeTabs,
               activeTabId: s.activeTabId,
               at: Date.now(),
@@ -1367,6 +1416,7 @@ export const useGraphStore = create<FlowStore>()(
           edges: prev.edges,
           viewport: prev.viewport,
           annotations: prev.annotations ?? [],
+          stages: prev.stages ?? [],
           ...restoreTabsFromSnapshot(s, prev),
         };
       });
@@ -1386,6 +1436,7 @@ export const useGraphStore = create<FlowStore>()(
               edges: s.edges,
               viewport: s.viewport,
               annotations: s.annotations,
+              stages: s.stages,
               compositeTabs: s.compositeTabs,
               activeTabId: s.activeTabId,
               at: Date.now(),
@@ -1395,6 +1446,7 @@ export const useGraphStore = create<FlowStore>()(
           edges: next.edges,
           viewport: next.viewport,
           annotations: next.annotations ?? [],
+          stages: next.stages ?? [],
           ...restoreTabsFromSnapshot(s, next),
         };
       });
@@ -1414,6 +1466,7 @@ export const useGraphStore = create<FlowStore>()(
               edges: s.edges,
               viewport: s.viewport,
               annotations: s.annotations,
+              stages: s.stages,
               compositeTabs: s.compositeTabs,
               activeTabId: s.activeTabId,
               at: Date.now(),
@@ -1423,6 +1476,7 @@ export const useGraphStore = create<FlowStore>()(
           edges: target.edges,
           viewport: target.viewport,
           annotations: target.annotations ?? [],
+          stages: target.stages ?? [],
           ...restoreTabsFromSnapshot(s, target),
         };
       });
@@ -1742,6 +1796,246 @@ export const useGraphStore = create<FlowStore>()(
       }));
       return nextCollapsed;
     },
+
+    // ---- 流程阶段域(Stage) ----
+    addStage: (x, y, width, height, name) => {
+      if (get().allLocked) return '';
+      get().markHistory();
+      const id = uid('stage');
+      const stage: Stage = {
+        id,
+        name: name ?? '未命名阶段',
+        x: Math.round(x),
+        y: Math.round(y),
+        width: Math.round(width),
+        height: Math.round(height),
+        nodeIds: [],
+        selected: true,
+      };
+      set((s) => ({ stages: [...s.stages, stage] }));
+      return id;
+    },
+    updateStage: (id, patch) => {
+      if (get().allLocked) return;
+      get().markHistory();
+      set((s) => ({
+        stages: s.stages.map((st) =>
+          st.id === id ? { ...st, ...patch, id } : st,
+        ),
+      }));
+    },
+    setStageNodes: (id, nodeIds) => {
+      if (get().allLocked) return;
+      get().markHistory();
+      set((s) => ({
+        stages: s.stages.map((st) => (st.id === id ? { ...st, nodeIds } : st)),
+      }));
+    },
+    deleteStage: (id) => {
+      if (get().allLocked) return;
+      get().markHistory();
+      set((s) => ({
+        stages: s.stages.filter((st) => st.id !== id),
+      }));
+    },
+    selectStage: (id) => {
+      set((s) => ({
+        stages: s.stages.map((st) => ({ ...st, selected: st.id === id })),
+      }));
+    },
+    detachNodeFromStages: (nodeId) => {
+      set((s) => ({
+        stages: s.stages.map((st) =>
+          st.nodeIds.includes(nodeId)
+            ? { ...st, nodeIds: st.nodeIds.filter((n) => n !== nodeId) }
+            : st,
+        ),
+      }));
+    },
+    syncStageMembership: () => {
+      const s = get();
+      if (!s.stages.length) return;
+      // 重新判定每个可见节点归属的域(完全包含判定)
+      const owned = new Map<string, string>();
+      for (const n of s.nodes) {
+        if (n.hidden) continue;
+        const { w, h } = getNodeSize(n);
+        const nx = n.position.x;
+        const ny = n.position.y;
+        for (const st of s.stages) {
+          if (
+            nx >= st.x &&
+            ny >= st.y &&
+            nx + w <= st.x + st.width &&
+            ny + h <= st.y + st.height
+          ) {
+            owned.set(n.id, st.id);
+            break;
+          }
+        }
+      }
+      // 重建每个域的 nodeIds:保留仍在域内的,补入新归属的
+      const newStages = s.stages.map((st) => ({
+        ...st,
+        nodeIds: st.nodeIds.filter((nid) => owned.get(nid) === st.id),
+      }));
+      for (const [nid, sid] of owned) {
+        const stage = newStages.find((st) => st.id === sid);
+        if (stage && !stage.nodeIds.includes(nid)) stage.nodeIds.push(nid);
+      }
+      set({ stages: newStages });
+    },
+    moveStageNodes: (id, dx, dy, moveNodes, commitHistory) => {
+      const s = get();
+      const stage = s.stages.find((st) => st.id === id);
+      if (!stage) return;
+      if (commitHistory) get().markHistory();
+      const rx = Math.round(dx);
+      const ry = Math.round(dy);
+      set((st) => ({
+        stages: st.stages.map((stg) =>
+          stg.id === id ? { ...stg, x: stg.x + rx, y: stg.y + ry } : stg,
+        ),
+        nodes: moveNodes
+          ? st.nodes.map((n) =>
+              stage.nodeIds.includes(n.id)
+                ? { ...n, position: { x: n.position.x + rx, y: n.position.y + ry } }
+                : n,
+            )
+          : st.nodes,
+      }));
+    },
+    resizeStage: (id, width, height, commitHistory) => {
+      if (commitHistory) get().markHistory();
+      const s = get();
+      const stage = s.stages.find((st) => st.id === id);
+      if (!stage) return;
+      const PAD = 22;
+      // 计算最小覆盖尺寸:缩小后仍须完全包住所有归属可见节点(含内边距),否则 clamp 回最小
+      let minW = 140;
+      let minH = 100;
+      for (const nid of stage.nodeIds) {
+        const n = s.nodes.find((x) => x.id === nid);
+        if (!n || n.hidden) continue;
+        const { w, h } = getNodeSize(n);
+        minW = Math.max(minW, n.position.x + w - stage.x + PAD);
+        minH = Math.max(minH, n.position.y + h - stage.y + PAD);
+      }
+      const w = Math.max(minW, Math.round(width));
+      const h = Math.max(minH, Math.round(height));
+      set((s2) => ({
+        stages: s2.stages.map((st) => (st.id === id ? { ...st, width: w, height: h } : st)),
+      }));
+    },
+    enterNodeToStage: (stageId, nodeId) => {
+      if (get().allLocked) return;
+      get().markHistory();
+      set((s) => ({
+        stages: s.stages.map((st) => {
+          if (st.id === stageId) {
+            // 加入目标域(去重)
+            return st.nodeIds.includes(nodeId) ? st : { ...st, nodeIds: [...st.nodeIds, nodeId] };
+          }
+          // 从其它域移出(一节点只属一个域)
+          return st.nodeIds.includes(nodeId)
+            ? { ...st, nodeIds: st.nodeIds.filter((n) => n !== nodeId) }
+            : st;
+        }),
+      }));
+    },
+    detachNodesFromStages: (nodeIds) => {
+      if (get().allLocked || nodeIds.length === 0) return;
+      get().markHistory();
+      const ids = new Set(nodeIds);
+      set((s) => ({
+        stages: s.stages.map((st) =>
+          st.nodeIds.some((n) => ids.has(n))
+            ? { ...st, nodeIds: st.nodeIds.filter((n) => !ids.has(n)) }
+            : st,
+        ),
+      }));
+    },
+    autoGrowStage: (stageId) => {
+      const s = get();
+      const stage = s.stages.find((st) => st.id === stageId);
+      if (!stage || !stage.nodeIds.length) return;
+      const PAD = 22; // 域框内边距(节点与框边间距,遵循合理间距)
+      const GAP = 14; // 外部推挤间距
+      // 计算所有归属可见节点的包围盒
+      let minX = Infinity;
+      let minY = Infinity;
+      let maxX = -Infinity;
+      let maxY = -Infinity;
+      for (const nid of stage.nodeIds) {
+        const n = s.nodes.find((x) => x.id === nid);
+        if (!n || n.hidden) continue;
+        const { w, h } = getNodeSize(n);
+        minX = Math.min(minX, n.position.x);
+        minY = Math.min(minY, n.position.y);
+        maxX = Math.max(maxX, n.position.x + w);
+        maxY = Math.max(maxY, n.position.y + h);
+      }
+      if (minX === Infinity) return;
+      // 目标域框
+      const tx = minX - PAD;
+      const ty = minY - PAD;
+      const tw = maxX - minX + PAD * 2;
+      const th = maxY - minY + PAD * 2;
+      // 若目标框已被当前框完全包裹,无需扩大
+      if (
+        tx >= stage.x &&
+        ty >= stage.y &&
+        tx + tw <= stage.x + stage.width &&
+        ty + th <= stage.y + stage.height
+      ) {
+        return;
+      }
+      // 需要推挤的外部元素:其他可见节点(非本域归属,含组合节点)与其他阶段域框体
+      const outsideNodes = s.nodes.filter((n) => !n.hidden && !stage.nodeIds.includes(n.id));
+      const otherStages = s.stages.filter((st2) => st2.id !== stageId);
+      const nodePos = new Map(outsideNodes.map((n) => [n.id, { ...n.position }]));
+      const stagePos = new Map(otherStages.map((st) => [st.id, { x: st.x, y: st.y }]));
+      const box: Rect = { x: tx, y: ty, width: tw, height: th };
+      // 迭代把与扩大的域框重叠的外部元素推开(保持间距)
+      const MAX = 6;
+      let changed = true;
+      for (let iter = 0; iter < MAX && changed; iter++) {
+        changed = false;
+        for (const n of outsideNodes) {
+          const p = nodePos.get(n.id)!;
+          const { w, h } = getNodeSize(n);
+          if (rectOverlaps(p.x, p.y, w, h, box, GAP)) {
+            nodePos.set(n.id, pushOutOfRect(p.x, p.y, w, h, box, GAP));
+            changed = true;
+          }
+        }
+        for (const st2 of otherStages) {
+          const p = stagePos.get(st2.id)!;
+          if (rectOverlaps(p.x, p.y, st2.width, st2.height, box, GAP)) {
+            stagePos.set(st2.id, pushOutOfRect(p.x, p.y, st2.width, st2.height, box, GAP));
+            changed = true;
+          }
+        }
+      }
+      set((st) => ({
+        stages: st.stages.map((stg) => {
+          if (stg.id === stageId) {
+            return { ...stg, x: Math.round(tx), y: Math.round(ty), width: Math.round(tw), height: Math.round(th) };
+          }
+          const p = stagePos.get(stg.id);
+          return p && (p.x !== stg.x || p.y !== stg.y)
+            ? { ...stg, x: Math.round(p.x), y: Math.round(p.y) }
+            : stg;
+        }),
+        nodes: st.nodes.map((n) => {
+          const p = nodePos.get(n.id);
+          return p && (p.x !== n.position.x || p.y !== n.position.y)
+            ? { ...n, position: { x: Math.round(p.x), y: Math.round(p.y) } }
+            : n;
+        }),
+      }));
+    },
+
     removePort: (id, kind, portId) => {
       if (get().allLocked) return;
       const s = get();
@@ -1927,7 +2221,7 @@ export const useGraphStore = create<FlowStore>()(
     clearGraph: () => {
       if (get().allLocked) return;
       get().markHistory();
-      set({ nodes: [], edges: [], annotations: [], compositeTabs: [], activeTabId: 'main' });
+      set({ nodes: [], edges: [], annotations: [], stages: [], compositeTabs: [], activeTabId: 'main' });
     },
 
     loadGraph: (data) => {
@@ -1938,6 +2232,7 @@ export const useGraphStore = create<FlowStore>()(
         edges: data.edges,
         viewport: data.viewport,
         annotations: data.annotations ?? [],
+        stages: data.stages ?? [],
         selected: null,
         compositeTabs: [],
         activeTabId: 'main',
@@ -1952,6 +2247,7 @@ export const useGraphStore = create<FlowStore>()(
         edges: [],
         viewport: { x: 0, y: 0, zoom: 1 },
         annotations: [],
+        stages: [],
         selected: null,
         compositeTabs: [],
         activeTabId: 'main',
@@ -1996,9 +2292,9 @@ export const useGraphStore = create<FlowStore>()(
     },
 
     exportJson: () => {
-      const { nodes, edges, viewport, annotations } = get();
+      const { nodes, edges, viewport, annotations, stages } = get();
       return JSON.stringify(
-        { version: 1, exportedAt: new Date().toISOString(), nodes, edges, viewport, annotations },
+        { version: 1, exportedAt: new Date().toISOString(), nodes, edges, viewport, annotations, stages },
         null,
         2,
       );
@@ -2014,6 +2310,7 @@ export const useGraphStore = create<FlowStore>()(
         edges: s.edges,
         viewport: s.viewport,
         annotations: s.annotations,
+        stages: s.stages,
         compositeTabs: s.compositeTabs,
         activeTabId: s.activeTabId,
         past: s.past,
@@ -2042,6 +2339,7 @@ export const useGraphStore = create<FlowStore>()(
           edges: Array.isArray(p?.edges) ? p.edges : [],
           viewport: p?.viewport ?? { x: 0, y: 0, zoom: 1 },
           annotations: Array.isArray(p?.annotations) ? p.annotations : [],
+          stages: Array.isArray(p?.stages) ? p.stages : [],
           compositeTabs: Array.isArray(p?.compositeTabs) ? p.compositeTabs : [],
           activeTabId: p?.activeTabId ?? 'main',
           past: Array.isArray(p?.past) ? p.past : [],
@@ -2059,6 +2357,7 @@ export const useGraphStore = create<FlowStore>()(
         edges: doc.edges,
         viewport: doc.viewport,
         annotations: doc.annotations,
+        stages: doc.stages,
         compositeTabs: doc.compositeTabs,
         activeTabId: doc.activeTabId,
         past: doc.past,
@@ -2088,6 +2387,7 @@ export const useGraphStore = create<FlowStore>()(
         edges: [],
         viewport: { x: 0, y: 0, zoom: 1 },
         annotations: [],
+        stages: [],
         compositeTabs: [],
         activeTabId: 'main',
         past: [],
@@ -2102,6 +2402,7 @@ export const useGraphStore = create<FlowStore>()(
         edges: [],
         viewport: { x: 0, y: 0, zoom: 1 },
         annotations: [],
+        stages: [],
         compositeTabs: [],
         activeTabId: 'main',
         past: [],
@@ -2128,6 +2429,7 @@ export const useGraphStore = create<FlowStore>()(
         edges: target.edges,
         viewport: target.viewport,
         annotations: target.annotations,
+        stages: target.stages,
         compositeTabs: target.compositeTabs,
         activeTabId: target.activeTabId,
         past: target.past,
@@ -2163,6 +2465,7 @@ export const useGraphStore = create<FlowStore>()(
           edges: [],
           viewport: { x: 0, y: 0, zoom: 1 },
           annotations: [],
+          stages: [],
           compositeTabs: [],
           activeTabId: 'main',
           past: [],
@@ -2177,6 +2480,7 @@ export const useGraphStore = create<FlowStore>()(
           edges: [],
           viewport: { x: 0, y: 0, zoom: 1 },
           annotations: [],
+          stages: [],
           compositeTabs: [],
           activeTabId: 'main',
           past: [],
@@ -2204,6 +2508,7 @@ export const useGraphStore = create<FlowStore>()(
           edges: next.edges,
           viewport: next.viewport,
           annotations: next.annotations,
+          stages: next.stages,
           compositeTabs: next.compositeTabs,
           activeTabId: next.activeTabId,
           past: next.past,

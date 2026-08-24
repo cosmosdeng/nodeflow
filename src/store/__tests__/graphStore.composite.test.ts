@@ -218,3 +218,67 @@ describe('连线插入节点(insertNodeOnEdge)', () => {
     expect(an1?.target.kind === 'edge' && an1.target.edgeId).not.toBe(down!.id);
   });
 });
+
+describe('流程阶段域(resizeStage / autoGrowStage)', () => {
+  const defaultStage = {
+    id: 's1',
+    name: '阶段一',
+    x: 0,
+    y: 0,
+    width: 500,
+    height: 300,
+    nodeIds: ['A'],
+  };
+
+  it('resizeStage 缩小到不能小于覆盖所有域内节点', () => {
+    // 节点 A 在 (0,0),默认尺寸 240×150;域内边距 PAD=22
+    useGraphStore.setState({
+      nodes: [node('A', {}, { position: { x: 0, y: 0 } })],
+      edges: [],
+      stages: [defaultStage],
+      selected: null,
+    });
+    useGraphStore.getState().resizeStage('s1', 100, 100, true);
+    const s = useGraphStore.getState();
+    const st = s.stages.find((x) => x.id === 's1')!;
+    // 最小覆盖:width >= 0+240-0+22 = 262, height >= 0+150-0+22 = 172
+    expect(st.width).toBeGreaterThanOrEqual(262);
+    expect(st.height).toBeGreaterThanOrEqual(172);
+  });
+
+  it('autoGrowStage 自动扩大域框以包裹移出节点', () => {
+    // 节点 A 移到 (600,0),超出域 (0,0,500,300)
+    useGraphStore.setState({
+      nodes: [node('A', {}, { position: { x: 600, y: 0 } })],
+      edges: [],
+      stages: [defaultStage],
+      selected: null,
+    });
+    useGraphStore.getState().autoGrowStage('s1');
+    const s = useGraphStore.getState();
+    const st = s.stages.find((x) => x.id === 's1')!;
+    // 域 x 左移包裹节点:PAD=22,节点左边界 600 → tx=578
+    expect(st.x).toBeLessThanOrEqual(578);
+    // 域右边界 >= 节点右边界 + PAD:600+240+22 = 862
+    expect(st.x + st.width).toBeGreaterThanOrEqual(862);
+  });
+
+  it('autoGrowStage 扩大时把外部重叠节点推开(保持间距)', () => {
+    // 节点 A 在域内 (0,0);外部节点 B 紧贴域右边界
+    useGraphStore.setState({
+      nodes: [
+        node('A', {}, { position: { x: 0, y: 0 } }),
+        node('B', {}, { position: { x: 500, y: 0 } }),
+      ],
+      edges: [],
+      stages: [defaultStage],
+      selected: null,
+    });
+    useGraphStore.getState().autoGrowStage('s1');
+    const s = useGraphStore.getState();
+    const st = s.stages.find((x) => x.id === 's1')!;
+    const B = s.nodes.find((n) => n.id === 'B')!;
+    // B 不应与扩大后的域重叠(B 左边界 >= 域右边界 + 间距)
+    expect(B.position.x).toBeGreaterThanOrEqual(st.x + st.width + 14);
+  });
+});

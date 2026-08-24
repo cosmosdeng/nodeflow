@@ -76,6 +76,8 @@ export default function Toolbar({
   const layoutDirection = useGraphStore((s) => s.layoutDirection);
   const setLayoutDirection = useGraphStore((s) => s.setLayoutDirection);
   const autoLayout = useGraphStore((s) => s.autoLayout);
+  const addStage = useGraphStore((s) => s.addStage);
+  const selectStage = useGraphStore((s) => s.selectStage);
   const createDocument = useGraphStore((s) => s.createDocument);
   const clearGraph = useGraphStore((s) => s.clearGraph);
   const loadGraph = useGraphStore((s) => s.loadGraph);
@@ -94,6 +96,15 @@ export default function Toolbar({
     const id = addNode(undefined, { x: pos.x - 115, y: pos.y - 60 });
     setSelected({ kind: 'node', id });
     requestAutoEdit({ kind: 'node-title', id });
+  };
+
+  const handleAddStage = () => {
+    const pos = screenToFlowPosition({
+      x: window.innerWidth / 2,
+      y: window.innerHeight / 2,
+    });
+    const id = addStage(pos.x - 250, pos.y - 150, 500, 300);
+    if (id) selectStage(id);
   };
 
   const handleExport = () => {
@@ -376,6 +387,14 @@ export default function Toolbar({
 
       <button className="tb-btn primary" disabled={allLocked} onClick={handleAddNode}>
         ＋ 添加节点
+      </button>
+      <button
+        className="tb-btn"
+        disabled={allLocked}
+        title="添加流程阶段域(矩形虚线框,把节点完全拖入即归属)"
+        onClick={handleAddStage}
+      >
+        ▦ 添加阶段域
       </button>
       <button
         className="tb-btn"

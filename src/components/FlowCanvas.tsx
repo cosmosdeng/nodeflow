@@ -20,8 +20,9 @@ import FlowEdgeComponent from './FlowEdgeComponent';
 import ContextMenu, { type ContextMenuState } from './ContextMenu';
 import ConfirmDialog, { type ConfirmDialogState } from './ConfirmDialog';
 import AnnotationBox from './AnnotationBox';
+import StageComponent from './StageComponent';
 import { useGraphStore } from '../store/graphStore';
-import type { FlowNode, FlowEdge, EdgeStyle } from '../types';
+import type { FlowNode, FlowEdge, EdgeStyle, Stage } from '../types';
 
 const nodeTypes: NodeTypes = { flow: FlowNodeComponent };
 const edgeTypes: EdgeTypes = { flow: FlowEdgeComponent };
@@ -62,6 +63,20 @@ export default function FlowCanvas() {
   const ungroup = useGraphStore((s) => s.ungroup);
   const toggleComposite = useGraphStore((s) => s.toggleComposite);
   const insertNodeOnEdge = useGraphStore((s) => s.insertNodeOnEdge);
+  const stages = useGraphStore((s) => s.stages);
+  const stageFlashId = useGraphStore((s) => s.stageFlashId);
+  const addStage = useGraphStore((s) => s.addStage);
+  const updateStage = useGraphStore((s) => s.updateStage);
+  const deleteStage = useGraphStore((s) => s.deleteStage);
+  const selectStage = useGraphStore((s) => s.selectStage);
+  const setStageNodes = useGraphStore((s) => s.setStageNodes);
+  const detachNodeFromStages = useGraphStore((s) => s.detachNodeFromStages);
+  const syncStageMembership = useGraphStore((s) => s.syncStageMembership);
+  const moveStageNodes = useGraphStore((s) => s.moveStageNodes);
+  const resizeStage = useGraphStore((s) => s.resizeStage);
+  const enterNodeToStage = useGraphStore((s) => s.enterNodeToStage);
+  const detachNodesFromStages = useGraphStore((s) => s.detachNodesFromStages);
+  const autoGrowStage = useGraphStore((s) => s.autoGrowStage);
   const annotations = useGraphStore((s) => s.annotations);
   const addAnnotation = useGraphStore((s) => s.addAnnotation);
   const updateAnnotation = useGraphStore((s) => s.updateAnnotation);
@@ -127,7 +142,7 @@ export default function FlowCanvas() {
   // 记录「右键是否处于拖拽平移中」,用于右键松开时不弹菜单
   const rightDragRef = useRef(false);
 
-  const { screenToFlowPosition, fitView, getViewport, setViewport } = useReactFlow();
+  const { screenToFlowPosition, fitView, getViewport, setViewport, getNode } = useReactFlow();
   const isDark = theme === 'dark';
 
   const handlePaneClick = useCallback(() => setSelected(null), [setSelected]);
@@ -175,11 +190,98 @@ export default function FlowCanvas() {
     [setSelected],
   );
 
-  const handleNodeDragStart = useCallback(() => setIsNodeDragging(true), []);
+  // 长按 1 秒进入阶段域:计时器与当前目标
+  const stageEnterTimerRef = useRef<number | null>(null);
+  const stageEnterTargetRef = useRef<{ stageId: string; nodeId: string } | null>(null);
+
+  const clearStageEnterTimer = useCallback(() => {
+    if (stageEnterTimerRef.current != null) {
+      window.clearTimeout(stageEnterTimerRef.current);
+      stageEnterTimerRef.current = null;
+    }
+    stageEnterTargetRef.current = null;
+  }, []);
+
+  // 节点/域闪烁反馈
+  const setStageFlash = useCallback((stageId: string, nodeId: string) => {
+    useGraphStore.setState({ stageFlashId: stageId });
+    useGraphStore.setState((s) => ({
+      nodes: s.nodes.map((n) =>
+        n.id === nodeId
+          ? { ...n, className: `${n.className ?? ''} nf-flash`.trim() }
+          : n,
+      ),
+    }));
+    window.setTimeout(() => {
+      useGraphStore.setState({ stageFlashId: null });
+      useGraphStore.setState((s) => ({
+        nodes: s.nodes.map((n) =>
+          n.className?.includes('nf-flash')
+            ? { ...n, className: n.className.replace(/\s*nf-flash\s*/g, '').trim() }
+            : n,
+        ),
+      }));
+    }, 700);
+  }, []);
+
+  const handleNodeDragStart = useCallback(() => {
+    setIsNodeDragging(true);
+    clearStageEnterTimer();
+  }, [clearStageEnterTimer]);
+
+  // 拖拽过程中:检测节点是否完全位于某域内,并持续按住 1 秒后进入该域;
+  // 对已归属某域的节点,实时自动扩大该域以包裹节点(并推挤外部元素)
+  const handleNodeDrag = useCallback(
+    (_: unknown, node: FlowNode) => {
+      const st = useGraphStore.getState();
+      if (!st.stages.length) return;
+      // 若该节点已归属某域:实时扩大该域(包裹节点 + 推挤外部元素)
+      const ownedStage = st.stages.find((sg) => sg.nodeIds.includes(node.id));
+      if (ownedStage) {
+        st.autoGrowStage(ownedStage.id);
+        return;
+      }
+      const rf = getNode(node.id) as (FlowNode & { measured?: { width?: number; height?: number } }) | undefined;
+      const w = rf?.measured?.width ?? rf?.width ?? 230;
+      const h = rf?.measured?.height ?? rf?.height ?? 100;
+      const nx = node.position.x;
+      const ny = node.position.y;
+      // 找完全包含该节点的域
+      let target: string | null = null;
+      for (const s of st.stages) {
+        if (nx >= s.x && ny >= s.y && nx + w <= s.x + s.width && ny + h <= s.y + s.height) {
+          target = s.id;
+          break;
+        }
+      }
+      const cur = stageEnterTargetRef.current;
+      if (target && cur && cur.stageId === target && cur.nodeId === node.id) {
+        return; // 已开始计时,等待触发
+      }
+      clearStageEnterTimer();
+      if (target) {
+        stageEnterTargetRef.current = { stageId: target, nodeId: node.id };
+        stageEnterTimerRef.current = window.setTimeout(() => {
+          useGraphStore.getState().enterNodeToStage(target, node.id);
+          setStageFlash(target, node.id);
+          clearStageEnterTimer();
+        }, 1000);
+      }
+    },
+    [getNode, clearStageEnterTimer, setStageFlash],
+  );
+
   const handleNodeDragStop = useCallback(() => {
     setIsNodeDragging(false);
+    clearStageEnterTimer();
     markHistory();
-  }, [markHistory]);
+    // 拖拽结束:对归属域节点再收敛一次域框(可能缩小回节点包围盒)
+    const st = useGraphStore.getState();
+    const owned = st.stages.filter((sg) =>
+      sg.nodeIds.some((nid) => st.nodes.find((n) => n.id === nid && !n.hidden)),
+    );
+    owned.forEach((sg) => st.autoGrowStage(sg.id));
+  }, [clearStageEnterTimer, markHistory]);
 
   /**
    * 从端口拖出连线到画布空白处(未连接到有效端口)时,自动创建新节点并连接:
@@ -327,6 +429,10 @@ export default function FlowCanvas() {
         : [node];
       const isComposite = !!node.data.composite;
       const multi = targets.length > 1;
+      // 是否有任一目标节点属于阶段域
+      const anyInStage = st.stages.some((sg) =>
+        sg.nodeIds.some((nid) => targets.some((t) => t.id === nid)),
+      );
 
       setContextMenu({
         x: e.clientX,
@@ -365,6 +471,12 @@ export default function FlowCanvas() {
                 if (cur) st.updateNode(n.id, { locked: !cur.data.locked });
               });
             },
+          },
+          {
+            label: multi ? `脱离阶段域 (${targets.length})` : '脱离阶段域',
+            disabled: allLocked || !anyInStage,
+            hint: !anyInStage ? '选中的节点不在阶段域内' : undefined,
+            onClick: () => detachNodesFromStages(targets.map((n) => n.id)),
           },
           {
             label: multi ? `编组为复合节点 (${targets.length})` : '编组为复合节点',
@@ -418,7 +530,7 @@ export default function FlowCanvas() {
         ],
       });
     },
-    [deleteNode, groupSelected, setSelected, setConfirmDialog, ungroup, toggleComposite, allLocked],
+    [deleteNode, groupSelected, setSelected, setConfirmDialog, ungroup, toggleComposite, detachNodesFromStages, allLocked],
   );
 
   /** 连线上右键:弹出连线菜单(在连线中间插入新节点 / 删除连线) */
@@ -469,6 +581,95 @@ export default function FlowCanvas() {
       setConfirmDialog,
       deleteEdge,
     ],
+  );
+
+  /** 阶段域上右键:弹出域菜单 */
+  const handleStageContextMenu = useCallback(
+    (e: React.MouseEvent, stage: Stage) => {
+      e.preventDefault();
+      e.stopPropagation();
+      selectStage(stage.id);
+      setContextMenu({
+        x: e.clientX,
+        y: e.clientY,
+        items: [
+          {
+            label: stage.nodeIds.length
+              ? `脱离全部节点 (${stage.nodeIds.length})`
+              : '脱离全部节点',
+            disabled: allLocked || stage.nodeIds.length === 0,
+            hint: '把该阶段域内的全部节点移出归属',
+            onClick: () => setStageNodes(stage.id, []),
+          },
+          {
+            label: '删除阶段域',
+            danger: true,
+            disabled: allLocked,
+            onClick: () => deleteStage(stage.id),
+          },
+        ],
+      });
+    },
+    [allLocked, selectStage, setStageNodes, deleteStage],
+  );
+
+  /** 拖拽阶段域:移动域矩形,内部节点保持相对关系整体移动;结束记录一次历史 */
+  const handleStageDragStart = useCallback(
+    (e: React.PointerEvent, stage: Stage) => {
+      if (allLocked) return;
+      // 用增量位移:每次 pointermove 只算相对上一点的位移,避免绝对位移反复累加
+      let lastX = e.clientX;
+      let lastY = e.clientY;
+      let moved = false;
+      const onMove = (me: PointerEvent) => {
+        const dx = (me.clientX - lastX) / viewport.zoom;
+        const dy = (me.clientY - lastY) / viewport.zoom;
+        lastX = me.clientX;
+        lastY = me.clientY;
+        moveStageNodes(stage.id, dx, dy, true, false);
+        moved = true;
+      };
+      const onUp = () => {
+        window.removeEventListener('pointermove', onMove);
+        window.removeEventListener('pointerup', onUp);
+        window.removeEventListener('pointercancel', onUp);
+        if (moved) useGraphStore.getState().markHistory();
+      };
+      window.addEventListener('pointermove', onMove);
+      window.addEventListener('pointerup', onUp);
+      window.addEventListener('pointercancel', onUp);
+    },
+    [allLocked, viewport.zoom, moveStageNodes],
+  );
+
+  /** 拖拽阶段域右下角手柄:调整域大小,结束记录一次历史 */
+  const handleStageResizeStart = useCallback(
+    (e: React.PointerEvent, stage: Stage) => {
+      if (allLocked) return;
+      let lastX = e.clientX;
+      let lastY = e.clientY;
+      let moved = false;
+      const onMove = (me: PointerEvent) => {
+        const dw = (me.clientX - lastX) / viewport.zoom;
+        const dh = (me.clientY - lastY) / viewport.zoom;
+        lastX = me.clientX;
+        lastY = me.clientY;
+        // 用当前宽高累加增量,避免反复累加
+        const cur = useGraphStore.getState().stages.find((x) => x.id === stage.id);
+        resizeStage(stage.id, (cur?.width ?? stage.width) + dw, (cur?.height ?? stage.height) + dh, false);
+        moved = true;
+      };
+      const onUp = () => {
+        window.removeEventListener('pointermove', onMove);
+        window.removeEventListener('pointerup', onUp);
+        window.removeEventListener('pointercancel', onUp);
+        if (moved) useGraphStore.getState().markHistory();
+      };
+      window.addEventListener('pointermove', onMove);
+      window.addEventListener('pointerup', onUp);
+      window.addEventListener('pointercancel', onUp);
+    },
+    [allLocked, viewport.zoom, resizeStage],
   );
 
   /** 判断事件目标是否在节点/连线上,分别弹出节点菜单或连线菜单,否则弹画布菜单 */
@@ -706,6 +907,7 @@ export default function FlowCanvas() {
         onEdgeClick={handleEdgeClick}
         onPaneClick={handlePaneClick}
         onNodeDragStart={handleNodeDragStart}
+        onNodeDrag={handleNodeDrag}
         onNodeDragStop={handleNodeDragStop}
         onBeforeDelete={handleBeforeDelete}
         onNodeDoubleClick={(_, node) => setSelected({ kind: 'node', id: node.id })}
@@ -838,6 +1040,24 @@ export default function FlowCanvas() {
               </div>
             );
           })}
+        </div>
+
+        {/* 流程阶段域(独立 overlay 层,跟随 viewport) */}
+        <div className="stage-layer">
+          {stages.map((st) => (
+            <StageComponent
+              key={st.id}
+              stage={st}
+              viewport={viewport}
+              locked={allLocked}
+              flash={stageFlashId === st.id}
+              onRename={(name) => updateStage(st.id, { name })}
+              onSelect={() => selectStage(st.id)}
+              onContextMenu={(e) => handleStageContextMenu(e, st)}
+              onDragStart={(e) => handleStageDragStart(e, st)}
+              onResizeStart={(e) => handleStageResizeStart(e, st)}
+            />
+          ))}
         </div>
       </ReactFlow>
       <ContextMenu menu={contextMenu} onClose={closeContextMenu} />

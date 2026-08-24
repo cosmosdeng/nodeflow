@@ -1340,6 +1340,142 @@ body,
 .annotation-layer .annot-pin {
   pointer-events: auto;
 }
+/* ---------- 流程阶段域(Stage) ---------- */
+/* 阶段域 overlay 层:跟随 viewport,但不拦截画布事件(内部 nf-stage 恢复交互) */
+.stage-layer {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  /* 需高于 React Flow 内置覆盖层(annotation-layer z:4 / node-annot-area z:6),否则拦截不到事件 */
+  z-index: 10;
+  overflow: visible;
+}
+/* 域框:虚线边框 + 低饱和低明度光谱填充(与边框同色),支持移动与右下角调整大小 */
+/* 整个域 pointer-events:none(完全穿透,内部节点/连线/产物不受影响);
+   仅头部(拖域/名称)与右下角手柄(resize)恢复交互 */
+.nf-stage {
+  pointer-events: none;
+  border: 2px dashed var(--stage-color, var(--border-strong));
+  border-radius: 10px;
+  background: transparent;
+  box-shadow: 0 0 0 1px transparent;
+  transition: box-shadow 0.12s, background 0.12s;
+}
+/* 内部填充层:低透明光谱色,pointer-events:none 穿透,不挡内部节点/连线/产物 */
+.nf-stage-body {
+  position: absolute;
+  inset: 2px;
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--stage-color, var(--border-strong)) 12%, transparent);
+  pointer-events: none;
+}
+/* 四边拖拽条:只覆盖边框(中间镂空,不挡内部节点),pointer-events:auto,用于拖拽移动域框 */
+.nf-stage-edge {
+  position: absolute;
+  pointer-events: auto;
+  cursor: move;
+}
+.nf-edge-top {
+  left: -5px;
+  right: -5px;
+  top: -5px;
+  height: 9px;
+}
+.nf-edge-bottom {
+  left: -5px;
+  right: -5px;
+  bottom: -5px;
+  height: 9px;
+}
+.nf-edge-left {
+  top: -5px;
+  bottom: -5px;
+  left: -5px;
+  width: 9px;
+}
+.nf-edge-right {
+  top: -5px;
+  bottom: -5px;
+  right: -5px;
+  width: 9px;
+}
+.nf-stage:hover {
+  box-shadow: 0 0 0 1px var(--stage-color, var(--border-strong));
+}
+.nf-stage.selected {
+  border-style: solid;
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--stage-color, var(--border-strong)) 45%, transparent);
+}
+/* 节点长按进入阶段域时的闪烁反馈 */
+@keyframes nf-stage-flash {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.35;
+  }
+}
+.nf-stage.flash {
+  animation: nf-stage-flash 0.35s ease-in-out 2;
+}
+.react-flow__node.nf-flash .nf-node {
+  animation: nf-stage-flash 0.35s ease-in-out 2;
+}
+/* 右下角调整大小手柄(仅选中/悬停时显示) */
+.nf-stage-resize {
+  position: absolute;
+  right: -7px;
+  bottom: -7px;
+  width: 14px;
+  height: 14px;
+  cursor: nwse-resize;
+  border-radius: 3px;
+  border: 1px solid var(--stage-color, var(--border-strong));
+  background: var(--bg-panel);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--stage-color, var(--border-strong)) 30%, transparent);
+  pointer-events: auto;
+  opacity: 0;
+  transition: opacity 0.12s;
+}
+.nf-stage:hover .nf-stage-resize,
+.nf-stage.selected .nf-stage-resize {
+  opacity: 1;
+}
+.nf-stage-head {
+  position: absolute;
+  top: -12px;
+  left: 10px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 2px 8px;
+  background: var(--bg-panel);
+  border: 1px solid var(--stage-color, var(--border-strong));
+  border-radius: 999px;
+  color: var(--text);
+  font-size: 11px;
+  font-weight: 600;
+  max-width: calc(100% - 20px);
+  pointer-events: auto;
+}
+.nf-stage-name {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.nf-stage-name:focus {
+  white-space: normal;
+}
+.nf-stage-count {
+  font-size: 10px;
+  color: var(--text-faint);
+  background: var(--bg-panel-2);
+  border-radius: 999px;
+  padding: 0 6px;
+  line-height: 1.4;
+  flex-shrink: 0;
+}
 /* 连线注释区域(始终显示;展开的注释框为持久内容) */
 .edge-annot-area {
   display: flex;
