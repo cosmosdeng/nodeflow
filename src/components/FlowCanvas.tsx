@@ -60,6 +60,8 @@ export default function FlowCanvas() {
   const deleteEdge = useGraphStore((s) => s.deleteEdge);
   const groupSelected = useGraphStore((s) => s.groupSelected);
   const ungroup = useGraphStore((s) => s.ungroup);
+  const toggleComposite = useGraphStore((s) => s.toggleComposite);
+  const insertNodeOnEdge = useGraphStore((s) => s.insertNodeOnEdge);
   const annotations = useGraphStore((s) => s.annotations);
   const addAnnotation = useGraphStore((s) => s.addAnnotation);
   const updateAnnotation = useGraphStore((s) => s.updateAnnotation);
@@ -376,6 +378,14 @@ export default function FlowCanvas() {
           ...(isComposite
             ? [
                 {
+                  label: node.data.composite?.expanded ? '收起(塌缩组合)' : '展开(显示内部节点)',
+                  disabled: allLocked,
+                  onClick: () => {
+                    toggleComposite(node.id);
+                    setSelected({ kind: 'node', id: node.id });
+                  },
+                },
+                {
                   label: '解除编组',
                   disabled: allLocked,
                   onClick: () => ungroup(node.id),
@@ -408,10 +418,60 @@ export default function FlowCanvas() {
         ],
       });
     },
-    [deleteNode, groupSelected, setSelected, setConfirmDialog, ungroup, allLocked],
+    [deleteNode, groupSelected, setSelected, setConfirmDialog, ungroup, toggleComposite, allLocked],
   );
 
-  /** 判断事件目标是否在节点上,若是则弹出节点菜单,否则弹画布菜单 */
+  /** 连线上右键:弹出连线菜单(在连线中间插入新节点 / 删除连线) */
+  const handleEdgeContextMenu = useCallback(
+    (e: React.MouseEvent, edge: FlowEdge) => {
+      e.preventDefault();
+      e.stopPropagation();
+      const fp = screenToFlowPosition({ x: e.clientX, y: e.clientY });
+      setContextMenu({
+        x: e.clientX,
+        y: e.clientY,
+        items: [
+          {
+            label: '在此添加节点',
+            disabled: allLocked,
+            hint: '在连线中间插入新节点,原连线拆成两段,说明与产物移至上游',
+            onClick: () => {
+              const id = insertNodeOnEdge(edge.id, fp);
+              if (id) setSelected({ kind: 'node', id });
+            },
+          },
+          {
+            label: '删除连线',
+            danger: true,
+            disabled: allLocked,
+            onClick: () => {
+              setConfirmDialog({
+                title: '删除确认',
+                message: '确定删除这条连线?',
+                confirmLabel: '删除',
+                cancelLabel: '取消',
+                danger: true,
+                onConfirm: () => {
+                  deleteEdge(edge.id);
+                  setSelected(null);
+                },
+              });
+            },
+          },
+        ],
+      });
+    },
+    [
+      allLocked,
+      screenToFlowPosition,
+      setSelected,
+      insertNodeOnEdge,
+      setConfirmDialog,
+      deleteEdge,
+    ],
+  );
+
+  /** 判断事件目标是否在节点/连线上,分别弹出节点菜单或连线菜单,否则弹画布菜单 */
   const openContextMenuAt = useCallback(
     (clientX: number, clientY: number, target: EventTarget | null) => {
       const el = target as HTMLElement | null;
@@ -431,9 +491,42 @@ export default function FlowCanvas() {
           return;
         }
       }
+      // 连线上右键(edge 元素 / 连线说明 label / 产物 chip):弹连线菜单
+      const labelEl = el?.closest?.('[data-edge-id]');
+      if (labelEl) {
+        const edgeId = labelEl.getAttribute('data-edge-id');
+        const edge = useGraphStore.getState().edges.find((n) => n.id === edgeId);
+        if (edge) {
+          const ev = {
+            clientX,
+            clientY,
+            preventDefault: () => {},
+            stopPropagation: () => {},
+          } as unknown as React.MouseEvent;
+          handleEdgeContextMenu(ev, edge);
+          return;
+        }
+      }
+      const edgeEl = el?.closest?.('.react-flow__edge');
+      if (edgeEl) {
+        const edgeId =
+          edgeEl.getAttribute('data-id') ||
+          edgeEl.getAttribute('data-edgeid');
+        const edge = useGraphStore.getState().edges.find((n) => n.id === edgeId);
+        if (edge) {
+          const ev = {
+            clientX,
+            clientY,
+            preventDefault: () => {},
+            stopPropagation: () => {},
+          } as unknown as React.MouseEvent;
+          handleEdgeContextMenu(ev, edge);
+          return;
+        }
+      }
       handlePaneContextMenu({ clientX, clientY, preventDefault: () => {} } as React.MouseEvent);
     },
-    [handleNodeContextMenu, handlePaneContextMenu],
+    [handleNodeContextMenu, handlePaneContextMenu, handleEdgeContextMenu],
   );
 
   /**

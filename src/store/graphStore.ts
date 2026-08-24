@@ -146,6 +146,13 @@ interface FlowStore extends GraphState {
   // ---- 连线操作 ----
   updateEdge: (id: string, patch: Partial<FlowEdgeData>) => void;
   deleteEdge: (id: string) => void;
+  /**
+   * 在连线上插入一个新节点,把原连线拆成两段:
+   * 上游(源 → 新节点)继承原连线的说明文字 / 中间产物 / 注释;
+   * 下游(新节点 → 目标)为新的空白连线。
+   * 返回新节点 id。
+   */
+  insertNodeOnEdge: (edgeId: string, position?: { x: number; y: number }) => string;
 
   // ---- 中间产物 ----
   setArtifact: (edgeId: string, artifact: Artifact | null) => void;
@@ -1793,6 +1800,94 @@ export const useGraphStore = create<FlowStore>()(
         selected: s.selected?.kind === 'edge' && s.selected.id === id ? null : s.selected,
         annotations: s.annotations.filter((a) => !annotationTargetsEdge(a, id)),
       }));
+    },
+    insertNodeOnEdge: (edgeId, position) => {
+      if (get().allLocked) return '';
+      const s = get();
+      const edge = s.edges.find((e) => e.id === edgeId);
+      if (!edge) return '';
+      const src = s.nodes.find((n) => n.id === edge.source);
+      const tgt = s.nodes.find((n) => n.id === edge.target);
+      get().markHistory();
+      // 默认位置:两端节点中心连线的中点
+      let pos = position;
+      if (!pos && src && tgt) {
+        const sw = getNodeSize(src).w;
+        const sh = getNodeSize(src).h;
+        const tw = getNodeSize(tgt).w;
+        const th = getNodeSize(tgt).h;
+        pos = {
+          x: Math.round((src.position.x + sw / 2 + tgt.position.x + tw / 2) / 2 - 115),
+          y: Math.round((src.position.y + sh / 2 + tgt.position.y + th / 2) / 2 - 60),
+        };
+      }
+      const node = createDefaultNode(pos ?? { x: 80, y: 80 });
+      // 内部画布 → 新节点加入所属组合
+      let newNode = node;
+      let compId: string | null = null;
+      if (s.activeTabId !== 'main') {
+        compId = s.activeTabId;
+        const comp = s.nodes.find((n) => n.id === compId);
+        if (comp?.data?.composite) {
+          newNode = !comp.data.composite.expanded ? { ...node, hidden: true } : node;
+        }
+      }
+      // 原连线的说明 / 产物转移到上游连线
+      const { label = '', artifact = null } = edge.data ?? {};
+      const upstreamId = uid('edge');
+      const downstreamId = uid('edge');
+      const upstream: FlowEdge = {
+        id: upstreamId,
+        source: edge.source,
+        sourceHandle: edge.sourceHandle,
+        target: newNode.id,
+        targetHandle: 'in_1',
+        type: 'flow',
+        data: { label, artifact },
+      };
+      const downstream: FlowEdge = {
+        id: downstreamId,
+        source: newNode.id,
+        sourceHandle: 'out_1',
+        target: edge.target,
+        targetHandle: edge.targetHandle,
+        type: 'flow',
+        data: { label: '', artifact: null },
+      };
+      set((st) => ({
+        edges: st.edges.filter((e) => e.id !== edgeId).concat(upstream, downstream),
+        nodes: compId
+          ? st.nodes
+              .map((n) =>
+                n.id === compId
+                  ? {
+                      ...n,
+                      data: {
+                        ...n.data,
+                        composite: {
+                          ...(n.data.composite as NonNullable<FlowNodeData['composite']>),
+                          childIds: [...n.data.composite!.childIds, newNode.id],
+                        },
+                      },
+                    }
+                  : n,
+              )
+              .concat(newNode)
+          : st.nodes.concat(newNode),
+        // 原连线的注释(连线 / 产物归属)一并转移到上游连线
+        annotations: st.annotations.map((a) =>
+          annotationTargetsEdge(a, edgeId)
+            ? { ...a, target: { ...a.target, edgeId: upstreamId } }
+            : a,
+        ),
+      }));
+      if (compId) refreshCompositeHidden(get, set);
+      // 选中新节点并进入标题编辑
+      set({
+        selected: { kind: 'node', id: newNode.id },
+        pendingAutoEdit: { kind: 'node-title', id: newNode.id },
+      });
+      return newNode.id;
     },
 
     setArtifact: (edgeId, artifact) => {

@@ -120,6 +120,7 @@ function FlowEdgeComponent({
         {/* 连线说明文字:双击或新建连线时在画布上内联编辑 */}
         <div
           className={`nf-edge-label ${isEdgeActive ? 'active' : ''} ${labelEditing ? 'editing' : ''}`}
+          data-edge-id={id}
           style={{
             position: 'absolute',
             transform: `translate(-50%, -50%) translate(${labelX}px, ${labelY - 20}px)`,
