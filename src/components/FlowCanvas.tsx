@@ -1080,16 +1080,33 @@ export default function FlowCanvas() {
             } else if (t.kind === 'node') {
               const n = displayNodes.find((x) => x.id === t.nodeId);
               if (n) {
-                // 展开的注释框放在节点正下方(框线外侧)
-                const h = n.measured?.height ?? 120;
-                pos = { x: n.position.x, y: n.position.y + h + 20 };
+                if (n.data?.gateway) {
+                  // 网关:注释框水平居中,高度对齐原红 pin 图标位置
+                  pos = {
+                    x: n.position.x + (n.measured?.width ?? 380) / 2,
+                    y: n.position.y + (n.measured?.height ?? 220) - 2,
+                  };
+                } else {
+                  // 展开的注释框放在节点正下方(框线外侧)
+                  const h = n.measured?.height ?? 120;
+                  pos = { x: n.position.x, y: n.position.y + h + 20 };
+                }
               }
             }
             if (!pos) return null;
             const left = pos.x * viewport.zoom + viewport.x;
             const top = pos.y * viewport.zoom + viewport.y;
+            const isGatewayAnnot = t.kind === 'node' && displayNodes.find((x) => x.id === t.nodeId)?.data?.gateway;
             return (
-              <div key={a.id} style={{ position: 'absolute', left, top }}>
+              <div
+                key={a.id}
+                style={{
+                  position: 'absolute',
+                  left,
+                  top,
+                  transform: isGatewayAnnot ? 'translateX(-50%)' : undefined,
+                }}
+              >
                 <AnnotationBox
                   annotation={a}
                   draggable={a.target.kind === 'canvas'}

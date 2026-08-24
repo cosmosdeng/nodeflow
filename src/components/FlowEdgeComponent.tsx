@@ -108,6 +108,32 @@ function FlowEdgeComponent({
     (s) => s.selected?.kind === 'artifact' && s.selected.edgeId === id,
   );
 
+  // 网关分支连线配色:若 source 是网关,按 sourceHandle 的分支序号从调色板取色,各分支颜色不同
+  const gatewayBranchColors = [
+    '#ff6b6b',
+    '#4ecdc4',
+    '#f7d794',
+    '#a29bfe',
+    '#55efc4',
+    '#fd79a8',
+    '#74b9ff',
+    '#ffeaa7',
+  ];
+  const edgeColor = useMemo(() => {
+    const src = allNodes.find((n) => n.id === source);
+    if (src?.data?.gateway) {
+      // 通过 store 找到本连线的 sourceHandle(EdgeProps 未直接暴露)
+      const e = useGraphStore.getState().edges.find((x) => x.id === id);
+      const sh = e?.sourceHandle;
+      if (sh) {
+        const idx = src.data.outputs.findIndex((o) => o.id === sh);
+        if (idx >= 0) return gatewayBranchColors[idx % gatewayBranchColors.length];
+      }
+    }
+    return undefined; // 非网关连线用默认色
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [source, allNodes, id]);
+
   return (
     <>
       <BaseEdge
@@ -115,6 +141,7 @@ function FlowEdgeComponent({
         path={path}
         onMouseEnter={enterHover}
         onMouseLeave={leaveHover}
+        style={edgeColor ? { stroke: edgeColor } : undefined}
       />
       <EdgeLabelRenderer>
         {/* 连线说明文字:双击或新建连线时在画布上内联编辑 */}

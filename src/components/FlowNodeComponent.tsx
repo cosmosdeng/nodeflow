@@ -318,10 +318,10 @@ function FlowNodeComponent({ id, data, selected }: NodeProps<FlowNode>) {
             +
           </button>
         </div>
-        {/* 网关注释 pin */}
+        {/* 网关注释 pin(悬停在锁定键下方显示;有注释则持续显示) */}
         {nodeAnnots.length === 0 ? (
           nodeHovered && (
-            <div className="node-annot-area">
+            <div className="nf-gateway-annot">
               <button
                 className="node-annot-btn pin"
                 title="添加注释"
@@ -337,7 +337,7 @@ function FlowNodeComponent({ id, data, selected }: NodeProps<FlowNode>) {
             </div>
           )
         ) : !nodeAnnots[0].collapsed ? null : (
-          <div className="node-annot-area">
+          <div className="nf-gateway-annot">
             <button
               className="node-annot-btn pin has"
               title={nodeAnnots[0].title || '注释'}
