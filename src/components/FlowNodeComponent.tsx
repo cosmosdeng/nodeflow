@@ -1,6 +1,6 @@
-import { memo, useEffect, useMemo, useRef, useState } from 'react';
+import { Fragment, memo, useEffect, useMemo, useRef, useState } from 'react';
 import { Handle, Position, type NodeProps } from '@xyflow/react';
-import { ACTOR_META, uid, type ActorType, type FlowNode, type PortDef } from '../types';
+import { ACTOR_META, GATEWAY_META, uid, type ActorType, type FlowNode, type PortDef } from '../types';
 import { computeCompositeActor, computeCompositePorts } from '../lib/composite';
 import { openCompositePopup } from '../lib/compositePopup';
 import { useGraphStore } from '../store/graphStore';
@@ -156,6 +156,180 @@ function FlowNodeComponent({ id, data, selected }: NodeProps<FlowNode>) {
     e.stopPropagation();
     setSelected({ kind: 'node', id });
   };
+
+  /* ---------------- BPMN 网关节点(菱形) ---------------- */
+  if (data.gateway) {
+    const gw = GATEWAY_META[data.gateway.type];
+    return (
+      <div
+        className={`nf-gateway ${selected ? 'selected' : ''} ${disabled ? 'locked' : ''}`}
+        style={{ ['--gw-color' as string]: gw.color }}
+        onDoubleClick={stopDoubleClick}
+        onMouseEnter={enterNodeHover}
+        onMouseLeave={leaveNodeHover}
+      >
+        {/* 输入 Handle(左,以菱形左顶点为中轴上下对称,离角稍留间距),可继续添加 */}
+        <div className="nf-gateway-in">
+          {data.inputs.map((p, i) => {
+            const nIn = Math.max(data.inputs.length, 1);
+            const stepIn = nIn <= 2 ? 40 : 34;
+            const top = 105 - ((nIn - 1) / 2) * stepIn + i * stepIn;
+            return (
+              <Fragment key={p.id}>
+                <Handle
+                  id={p.id}
+                  type="target"
+                  position={Position.Left}
+                  isConnectable
+                  className={handleClass('i', p.id)}
+                  style={{ left: 90, top }}
+                />
+                <div className="nf-gateway-branch left" style={{ top: top - 4 }}>
+                  <EditableText
+                    className="port-label"
+                    value={p.name}
+                    placeholder="输入"
+                    disabled={disabled}
+                    onCommit={(v) => updateNode(id, { inputs: data.inputs.map((o) => (o.id === p.id ? { ...o, name: v } : o)) })}
+                    onEditingChange={(editing) => setNodeDraggable(id, !editing)}
+                  />
+                  {!disabled && data.inputs.length > 1 && (
+                    <button
+                      className="port-remove"
+                      title="删除该输入端口(至少保留 1 个)"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        removePort(id, 'input', p.id);
+                      }}
+                    >
+                      ×
+                    </button>
+                  )}
+                </div>
+              </Fragment>
+            );
+          })}
+        </div>
+        {/* 菱形主体 */}
+        <div className="nf-gateway-diamond">
+          <span className="nf-gateway-mark" title={gw.label}>
+            {gw.mark}
+          </span>
+          <EditableText
+            className="nf-gateway-name"
+            value={data.label}
+            placeholder={gw.label}
+            disabled={disabled}
+            onCommit={(v) => updateNode(id, { label: v })}
+            onEditingChange={(editing) => setNodeDraggable(id, !editing)}
+            title={gw.label}
+          />
+        </div>
+        {/* 输出分支 Handle(右,贴菱形右缘按高度分散),可继续添加 */}
+        <div className="nf-gateway-out">
+          {data.outputs.map((p, i) => {
+            // 分支数 n:第 i 个端点以菱形右顶点(top:110)为中轴上下对称
+            const n = Math.max(data.outputs.length, 1);
+            const step = n <= 2 ? 40 : 34;
+            const top = 110 - ((n - 1) / 2) * step + i * step;
+            return (
+              <Fragment key={p.id}>
+                <Handle
+                  id={p.id}
+                  type="source"
+                  position={Position.Right}
+                  isConnectable
+                  className={handleClass('o', p.id)}
+                  style={{ left: 283, top }}
+                />
+                <div className="nf-gateway-branch" style={{ top: top - 4 }}>
+                  {!disabled && data.outputs.length > 1 && (
+                    <button
+                      className="port-remove"
+                      title="删除该分支(至少保留 1 个)"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        removePort(id, 'output', p.id);
+                      }}
+                    >
+                      ×
+                    </button>
+                  )}
+                  <EditableText
+                    className="port-label"
+                    value={p.name}
+                    placeholder="分支"
+                    disabled={disabled}
+                    onCommit={(v) => updateNode(id, { outputs: data.outputs.map((o) => (o.id === p.id ? { ...o, name: v } : o)) })}
+                    onEditingChange={(editing) => setNodeDraggable(id, !editing)}
+                  />
+                </div>
+              </Fragment>
+            );
+          })}
+        </div>
+        {/* 添加输入/分支 + 按钮:独立顶层容器,放菱形左右外侧,保证可见可点 */}
+        <div className="nf-gateway-adds">
+          <button
+            className="gw-add"
+            title={disabled ? '内容已锁定,无法添加输入端口' : '添加输入端口'}
+            onClick={addInput}
+            disabled={disabled}
+            style={{
+              left: 96,
+              top: 105 + ((Math.max(data.inputs.length, 1) - 1) / 2) * (data.inputs.length <= 2 ? 40 : 34) + 30,
+            }}
+          >
+            +
+          </button>
+          <button
+            className="gw-add"
+            title={disabled ? '内容已锁定,无法添加分支' : '添加分支'}
+            onClick={addOutput}
+            disabled={disabled}
+            style={{
+              left: 262,
+              top: 110 + ((Math.max(data.outputs.length, 1) - 1) / 2) * (data.outputs.length <= 2 ? 40 : 34) + 30,
+            }}
+          >
+            +
+          </button>
+        </div>
+        {/* 网关注释 pin */}
+        {nodeAnnots.length === 0 ? (
+          nodeHovered && (
+            <div className="node-annot-area">
+              <button
+                className="node-annot-btn pin"
+                title="添加注释"
+                onMouseEnter={enterNodeHover}
+                onMouseLeave={leaveNodeHover}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  addAnnotation({ kind: 'node', nodeId: id });
+                }}
+              >
+                📌
+              </button>
+            </div>
+          )
+        ) : !nodeAnnots[0].collapsed ? null : (
+          <div className="node-annot-area">
+            <button
+              className="node-annot-btn pin has"
+              title={nodeAnnots[0].title || '注释'}
+              onClick={(e) => {
+                e.stopPropagation();
+                toggleAnnotationCollapsed(nodeAnnots[0].id);
+              }}
+            >
+              📌
+            </button>
+          </div>
+        )}
+      </div>
+    );
+  }
 
   /* ---------------- 普通节点 ---------------- */
   if (!composite) {

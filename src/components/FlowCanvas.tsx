@@ -22,7 +22,8 @@ import ConfirmDialog, { type ConfirmDialogState } from './ConfirmDialog';
 import AnnotationBox from './AnnotationBox';
 import StageComponent from './StageComponent';
 import { useGraphStore } from '../store/graphStore';
-import type { FlowNode, FlowEdge, EdgeStyle, Stage } from '../types';
+import { createGatewayNode, GATEWAY_KINDS, GATEWAY_META } from '../types';
+import type { FlowNode, FlowEdge, EdgeStyle, Stage, GatewayType } from '../types';
 
 const nodeTypes: NodeTypes = { flow: FlowNodeComponent };
 const edgeTypes: EdgeTypes = { flow: FlowEdgeComponent };
@@ -384,6 +385,33 @@ export default function FlowCanvas() {
             },
           },
           {
+            label: '添加网关',
+            disabled: true,
+            hint: '选择下方网关类型创建',
+          },
+          ...GATEWAY_KINDS.map((gt) => ({
+            label: `▸ ${GATEWAY_META[gt].label} (${GATEWAY_META[gt].mark})`,
+            disabled: allLocked,
+            onClick: () => {
+              const pos = screenToFlowPosition({ x: clientX, y: clientY });
+              const st = useGraphStore.getState();
+              const comp =
+                st.activeTabId !== 'main'
+                  ? st.nodes.find((n) => n.id === st.activeTabId)
+                  : null;
+              const gw = createGatewayNode(gt, { x: pos.x - 65, y: pos.y - 48 });
+              const st2 = useGraphStore.getState();
+              let id: string;
+              if (comp?.data?.composite) {
+                id = addNodeToComposite(comp.id, pos);
+                if (id) st2.updateNode(id, gw.data);
+              } else {
+                id = addNode(gw.data, gw.position);
+              }
+              if (id) setSelected({ kind: 'node', id });
+            },
+          })),
+          {
             label: allLocked ? '解除锁定全部' : '锁定全部',
             onClick: () => toggleLockAll(),
           },
@@ -444,6 +472,7 @@ export default function FlowCanvas() {
         ? selectedNodes
         : [node];
       const isComposite = !!node.data.composite;
+      const isGateway = !!node.data.gateway;
       const multi = targets.length > 1;
       // 是否有任一目标节点属于阶段域
       const anyInStage = st.stages.some((sg) =>
@@ -518,6 +547,25 @@ export default function FlowCanvas() {
                   disabled: allLocked,
                   onClick: () => ungroup(node.id),
                 },
+                { label: '---' as const },
+              ]
+            : []),
+          ...(isGateway
+            ? [
+                { label: `网关类型:${GATEWAY_META[node.data.gateway!.type].label}`, disabled: true },
+                ...GATEWAY_KINDS.filter((t) => t !== node.data.gateway!.type).map((t) => ({
+                  label: `切换为${GATEWAY_META[t].label}`,
+                  disabled: allLocked,
+                  onClick: () => {
+                    const cur = useGraphStore.getState().nodes.find((x) => x.id === node.id);
+                    if (cur?.data?.gateway) {
+                      useGraphStore.getState().updateNode(node.id, {
+                        gateway: { ...cur.data.gateway, type: t },
+                        label: GATEWAY_META[t].label,
+                      });
+                    }
+                  },
+                })),
                 { label: '---' as const },
               ]
             : []),

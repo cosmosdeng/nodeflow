@@ -1,5 +1,5 @@
 import { describe, expect, it, beforeEach, vi } from 'vitest';
-import type { FlowNode } from '../../types';
+import { createGatewayNode, GATEWAY_META, type FlowNode, type GatewayType } from '../../types';
 
 // mock localStorage(Node 环境无 localStorage)
 const store = new Map<string, string>();
@@ -334,5 +334,37 @@ describe('自动排列集成阶段域(autoLayout)', () => {
     // 单节点域 s2 的大小应对齐「倒数第二大的域」(此处唯一其它域为 s1)
     expect(s2.width).toBe(s1.width);
     expect(s2.height).toBe(s1.height);
+  });
+});
+
+describe('BPMN 网关节点(createGatewayNode)', () => {
+  it('创建三种网关:data.gateway 类型正确,端口结构为 1 输入 + 2 输出', () => {
+    const types: GatewayType[] = ['exclusive', 'parallel', 'inclusive'];
+    for (const t of types) {
+      const gw = createGatewayNode(t, { x: 0, y: 0 });
+      expect(gw.data.gateway?.type).toBe(t);
+      expect(gw.data.gateway?.defaultBranch).toBeUndefined();
+      expect(gw.data.inputs).toHaveLength(1);
+      expect(gw.data.outputs).toHaveLength(2);
+      expect(gw.data.label).toBe(GATEWAY_META[t].label);
+      // 尺寸接近普通节点但稍小
+      expect(gw.width).toBeGreaterThan(100);
+    }
+  });
+
+  it('网关节点可加入阶段域(作为普通节点处理)且可被序列化', () => {
+    const gw = createGatewayNode('exclusive', { x: 0, y: 0 });
+    useGraphStore.setState({
+      nodes: [gw],
+      edges: [],
+      stages: [{ id: 's1', name: '阶段', x: 0, y: 0, width: 500, height: 300, nodeIds: [gw.id], selected: false }],
+      selected: null,
+    });
+    const s = useGraphStore.getState();
+    // 网关属于阶段域
+    expect(s.stages[0].nodeIds).toContain(gw.id);
+    // 导出 JSON 包含网关类型
+    const json = JSON.parse(s.exportJson());
+    expect(json.nodes[0].data.gateway.type).toBe('exclusive');
   });
 });

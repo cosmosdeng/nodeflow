@@ -113,7 +113,7 @@ React Flow 渲染 + CSS 样式
 | `lib/layout.ts` | 自动布局:拓扑分层 + barycenter 排序(横向 / 竖向) | 纯函数,可单测 |
 | `lib/edgePath.ts` | 连线绕障路径(避开节点) | 直角线 / 弧线 |
 | `lib/exportImage.ts` | JPG / PDF 导出(html-to-image + jsPDF,保留主题背景 / 点阵) | |
-| `FlowNodeComponent.tsx` | 节点渲染:普通 / 展开虚线框 / 塌缩聚合端口 | 三种形态同一组件 |
+| `FlowNodeComponent.tsx` | 节点渲染:普通 / 展开虚线框 / 塌缩聚合端口 / BPMN 网关菱形 | 四种形态同一组件 |
 | `FlowCanvas.tsx` | ReactFlow 实例、连线交互回调、内部画布 tab 渲染、展开组合内部节点穿透、阶段域(长按进入 / 自动扩大 / 拖拽 / resize) | 事件集中区 |
 | `StageComponent.tsx` | 阶段域渲染(矩形虚线框 / 光谱色 / 四边拖拽条 / 手柄 / 名称编辑) | overlay 层,整体穿透内部 |
 | `EditableText.tsx` | 共享内联编辑组件(标题 / 描述 / 端口名 / 连线 label),支持自动聚焦 | |

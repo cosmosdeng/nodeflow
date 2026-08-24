@@ -1340,6 +1340,147 @@ body,
 .annotation-layer .annot-pin {
   pointer-events: auto;
 }
+/* ---------- BPMN 网关节点(菱形) ---------- */
+.nf-gateway {
+  position: relative;
+  width: 380px;
+  height: 220px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  pointer-events: auto;
+}
+.nf-gateway-diamond {
+  position: relative;
+  width: 132px;
+  height: 132px;
+  transform: rotate(45deg);
+  border: 2px solid var(--gw-color, var(--accent));
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--gw-color, var(--accent)) 10%, transparent);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: box-shadow 0.12s, background 0.12s;
+  margin-top: 2px;
+}
+.nf-gateway:hover .nf-gateway-diamond {
+  box-shadow: 0 0 0 1px var(--gw-color, var(--accent)),
+    0 0 12px 1px color-mix(in srgb, var(--gw-color, var(--accent)) 35%, transparent);
+}
+.nf-gateway.selected .nf-gateway-diamond {
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--gw-color, var(--accent)) 55%, transparent);
+}
+.nf-gateway-mark {
+  transform: rotate(-45deg);
+  color: var(--gw-color, var(--accent));
+  font-size: 56px;
+  font-weight: 700;
+  line-height: 1;
+  user-select: none;
+}
+.nf-gateway-name {
+  margin-top: 10px;
+  font-size: 14px;
+  color: var(--text);
+  max-width: 240px;
+  text-align: center;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.nf-gateway-name:focus {
+  white-space: normal;
+}
+/* 输出/输入分支区域(Handle 贴菱形边角,标签在菱形外) */
+.nf-gateway-out,
+.nf-gateway-in {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  /* 高于菱形(菱形 transform 创建层叠上下文),确保 + 按钮/标签在菱形之上 */
+  z-index: 2;
+}
+.nf-gateway-branch {
+  position: absolute;
+  right: 102px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  pointer-events: auto;
+  justify-content: flex-end;
+}
+.nf-gateway-branch.left {
+  right: auto;
+  left: 108px;
+  justify-content: flex-start;
+}
+.nf-gateway-branch .port-label {
+  font-size: 12px;
+  color: var(--text, #e6e8ee);
+  max-width: 90px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.nf-gateway-branch .port-remove {
+  position: static;
+  width: 14px;
+  height: 14px;
+  line-height: 12px;
+  padding: 0;
+  font-size: 11px;
+  border-radius: 50%;
+  border: none;
+  color: var(--danger, #e5484d);
+  background: transparent;
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 0.12s, background 0.12s;
+}
+.nf-gateway-branch .port-remove:hover {
+  background: #e5484d;
+  color: #fff;
+}
+.nf-gateway-branch:hover .port-remove {
+  opacity: 1;
+}
+/* 添加输入/分支 + 按钮:独立顶层容器,放菱形左右外侧,保证可见可点 */
+.nf-gateway-adds {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 5;
+}
+.gw-add {
+  position: absolute;
+  width: 18px;
+  height: 18px;
+  font-size: 13px;
+  line-height: 1;
+  border-radius: 50%;
+  border: 1.5px solid var(--text, #e6e8ee);
+  color: var(--text, #e6e8ee);
+  background: var(--bg-panel);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  pointer-events: auto;
+}
+.gw-add:hover {
+  background: color-mix(in srgb, var(--gw-color, var(--accent)) 20%, transparent);
+}
+.gw-add:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+.nf-gateway.locked .nf-gateway-diamond {
+  opacity: 0.6;
+}
+
 /* ---------- 流程阶段域(Stage) ---------- */
 /* 阶段域 overlay 层:跟随 viewport,但不拦截画布事件(内部 nf-stage 恢复交互) */
 .stage-layer {

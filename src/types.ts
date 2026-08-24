@@ -6,6 +6,26 @@ export type ActorType = 'human' | 'machine' | 'hybrid';
 /** 中间产物类型 */
 export type ArtifactKind = 'document' | 'image' | 'video' | 'audio' | 'code' | 'data' | 'other';
 
+/** BPMN 网关类型:排他(XOR) / 并行(AND) / 包容(OR) */
+export type GatewayType = 'exclusive' | 'parallel' | 'inclusive';
+
+/** 网关节点元数据 */
+export interface GatewayMeta {
+  /** 网关类型 */
+  type: GatewayType;
+  /** 默认分支:出口连线 id(排他 / 包容网关的兜底分支) */
+  defaultBranch?: string;
+}
+
+/** 网关头像标签与内部标记 */
+export const GATEWAY_META: Record<GatewayType, { label: string; mark: string; color: string }> = {
+  exclusive: { label: '排他网关', mark: '×', color: '#f59e0b' },
+  parallel: { label: '并行网关', mark: '+', color: '#14b8a6' },
+  inclusive: { label: '包容网关', mark: '○', color: '#8b5cf6' },
+};
+
+export const GATEWAY_KINDS: GatewayType[] = ['exclusive', 'parallel', 'inclusive'];
+
 /** 连线显示风格 */
 export type EdgeStyle = 'smoothstep' | 'bezier';
 
@@ -47,6 +67,8 @@ export interface FlowNodeData {
   outputs: PortDef[];
   /** 组合节点元数据(存在即表示该节点是组合节点) */
   composite?: CompositeMeta;
+  /** 网关节点元数据(存在即表示该节点是 BPMN 网关) */
+  gateway?: GatewayMeta;
   [key: string]: unknown;
 }
 
@@ -216,6 +238,27 @@ export function createDefaultNode(position: { x: number; y: number }): FlowNode 
       locked: false,
       inputs: [{ id: 'in_1', name: '输入' }],
       outputs: [{ id: 'out_1', name: '输出' }],
+    },
+  };
+}
+
+/** 创建一个 BPMN 网关节点(菱形外观):1 输入 + 2 个默认输出分支,可继续添加 */
+export function createGatewayNode(type: GatewayType, position: { x: number; y: number }): FlowNode {
+  const id = uid('gw');
+  return {
+    id,
+    type: 'flow',
+    position,
+    width: 380,
+    height: 220,
+    data: {
+      label: GATEWAY_META[type].label,
+      description: '',
+      actor: 'hybrid',
+      locked: false,
+      inputs: [{ id: 'in_1', name: '输入' }],
+      outputs: [{ id: 'out_1', name: '分支一' }, { id: 'out_2', name: '分支二' }],
+      gateway: { type },
     },
   };
 }
