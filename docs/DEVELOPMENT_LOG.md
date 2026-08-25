@@ -2,6 +2,19 @@
 
 > 按时间倒序记录开发历程。新功能、重要修复、里程碑都应在此追加。
 
+## 2026-08-25 · P6 系列 Document Format & Persistence 设计(完成,只读)
+
+进入 P6(文档格式与持久化)。P6-01~P6-03 为**只读审计 / 设计**阶段,未修改任何代码。设计决策已固化到 `docs/P6_DESIGN.md`。
+- **P6-01 Document Format Audit**(只读):审计 `.nodeflow` 项目格式(v2,type:'nodeflow-project')、静态导出(v1)、Save/Load Flow、数据五分类(Document/Editor/UI/Derived/Metadata)、版本机制现状(无正式版本门控)。发现风险:version 未校验(future version 可能被误加载)。
+- **P6-02 Document Model & Version Design**(只读):设计正式 Project Format v3(`{format:'nodeflow',version:3,document:{graph,editor}}`)、JSON Export(`nodeflow-export`)、localStorage 模型升级(v2 key)、5 项数据边界决策(D1 历史不入文件 / D2 viewport 归 Editor / D3 tabs 归 Editor / D4 dirty 不入文件 / expanded 保存、hidden 派生)。
+- **P6-02 Design Freeze Correction**(只读):两个关键语义修正——(1) Project 与 Export 是两个独立 Format Family,version namespace 独立,禁止 `Export v1 → Project v3` 作为 Migration Chain;(2) Persistent Document ID 暂不定案,`loadProject()` 重新生成 Runtime ID 是当前实现事实而非长期契约。
+- **P6-03 Backward Compatibility Design**(只读):逐字段审计 Legacy Project v2,设计 Format/Version Detection、Future Version Gate(>current 安全拒绝)、Validation 三分类(Fatal/Recoverable/Derived)、Composite Migration(expanded 迁移、hidden 重算)、React Flow 字段清洗、History Discard、Broken Reference 处理、Migration 纯函数/确定性/不可变性、Load Failure Safety(当前文档+原文件不变)。
+- **P6-03 Documentation Freeze**:把以上已确认设计决策固化为 `docs/P6_DESIGN.md`,作为 P6-04 实施的安全基线。
+
+P6 路线图:P6-01~03 设计 ✅ → P6-04 Migration ⏳(待人工授权) → P6-05 Safe Persistence → P6-06 Validation → P6-07 Tests → P6-08 Real Project → P6-09 Error Handling → P6-10 Auto Save → P6 Gate。
+
+---
+
 ## 2026-08-25 · P5 收尾 · Geometry 抽取(完成)
 
 新建 `lib/geometry.ts` 几何工具层,从 graphStore 迁出纯几何逻辑。
