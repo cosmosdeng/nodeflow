@@ -44,6 +44,14 @@ import {
 } from '../lib/composite';
 import { computeLayout, type LayoutDirection } from '../lib/layout';
 import { findNodeById, findEdgeById } from '../domain/graph/queries';
+import {
+  addNodeToStage,
+  boundsToStageBox,
+  computeStageBounds,
+  computeStageMembership,
+  computeStageMinSize,
+  detachNodeIdsFromStages,
+} from '../lib/stage';
 
 const SAVE_KEY = 'nodeflow:graph:v1';
 const PREFS_KEY = 'nodeflow:prefs:v1';
@@ -1858,24 +1866,7 @@ export const useGraphStore = create<FlowStore>()(
       const s = get();
       if (!s.stages.length) return;
       // 重新判定每个可见节点归属的域(完全包含判定)
-      const owned = new Map<string, string>();
-      for (const n of s.nodes) {
-        if (n.hidden) continue;
-        const { w, h } = getNodeSize(n);
-        const nx = n.position.x;
-        const ny = n.position.y;
-        for (const st of s.stages) {
-          if (
-            nx >= st.x &&
-            ny >= st.y &&
-            nx + w <= st.x + st.width &&
-            ny + h <= st.y + st.height
-          ) {
-            owned.set(n.id, st.id);
-            break;
-          }
-        }
-      }
+      const owned = computeStageMembership(s.nodes, s.stages);
       // 重建每个域的 nodeIds:保留仍在域内的,补入新归属的
       const newStages = s.stages.map((st) => ({
         ...st,
@@ -1914,15 +1905,7 @@ export const useGraphStore = create<FlowStore>()(
       if (!stage) return;
       const PAD = 22;
       // 计算最小覆盖尺寸:缩小后仍须完全包住所有归属可见节点(含内边距),否则 clamp 回最小
-      let minW = 140;
-      let minH = 100;
-      for (const nid of stage.nodeIds) {
-        const n = findNodeById(s.nodes, nid);
-        if (!n || n.hidden) continue;
-        const { w, h } = getNodeSize(n);
-        minW = Math.max(minW, n.position.x + w - stage.x + PAD);
-        minH = Math.max(minH, n.position.y + h - stage.y + PAD);
-      }
+      const { minW, minH } = computeStageMinSize(stage, s.nodes, PAD);
       const w = Math.max(minW, Math.round(width));
       const h = Math.max(minH, Math.round(height));
       set((s2) => ({
@@ -1932,30 +1915,12 @@ export const useGraphStore = create<FlowStore>()(
     enterNodeToStage: (stageId, nodeId) => {
       if (get().allLocked) return;
       get().markHistory();
-      set((s) => ({
-        stages: s.stages.map((st) => {
-          if (st.id === stageId) {
-            // 加入目标域(去重)
-            return st.nodeIds.includes(nodeId) ? st : { ...st, nodeIds: [...st.nodeIds, nodeId] };
-          }
-          // 从其它域移出(一节点只属一个域)
-          return st.nodeIds.includes(nodeId)
-            ? { ...st, nodeIds: st.nodeIds.filter((n) => n !== nodeId) }
-            : st;
-        }),
-      }));
+      set((s) => ({ stages: addNodeToStage(s.stages, stageId, nodeId) }));
     },
     detachNodesFromStages: (nodeIds) => {
       if (get().allLocked || nodeIds.length === 0) return;
       get().markHistory();
-      const ids = new Set(nodeIds);
-      set((s) => ({
-        stages: s.stages.map((st) =>
-          st.nodeIds.some((n) => ids.has(n))
-            ? { ...st, nodeIds: st.nodeIds.filter((n) => !ids.has(n)) }
-            : st,
-        ),
-      }));
+      set((s) => ({ stages: detachNodeIdsFromStages(s.stages, nodeIds) }));
     },
     autoGrowStage: (stageId) => {
       const s = get();
@@ -1964,25 +1929,14 @@ export const useGraphStore = create<FlowStore>()(
       const PAD = 22; // 域框内边距(节点与框边间距,遵循合理间距)
       const GAP = 14; // 外部推挤间距
       // 计算所有归属可见节点的包围盒
-      let minX = Infinity;
-      let minY = Infinity;
-      let maxX = -Infinity;
-      let maxY = -Infinity;
-      for (const nid of stage.nodeIds) {
-        const n = findNodeById(s.nodes, nid);
-        if (!n || n.hidden) continue;
-        const { w, h } = getNodeSize(n);
-        minX = Math.min(minX, n.position.x);
-        minY = Math.min(minY, n.position.y);
-        maxX = Math.max(maxX, n.position.x + w);
-        maxY = Math.max(maxY, n.position.y + h);
-      }
-      if (minX === Infinity) return;
+      const bounds = computeStageBounds(stage.nodeIds, s.nodes);
+      if (!bounds) return;
       // 目标域框
-      const tx = minX - PAD;
-      const ty = minY - PAD;
-      const tw = maxX - minX + PAD * 2;
-      const th = maxY - minY + PAD * 2;
+      const growBox = boundsToStageBox(bounds, PAD);
+      const tx = growBox.x;
+      const ty = growBox.y;
+      const tw = growBox.width;
+      const th = growBox.height;
       // 若目标框已被当前框完全包裹,无需扩大
       if (
         tx >= stage.x &&

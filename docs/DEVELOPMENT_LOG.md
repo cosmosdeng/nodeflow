@@ -2,6 +2,15 @@
 
 > 按时间倒序记录开发历程。新功能、重要修复、里程碑都应在此追加。
 
+## 2026-08-25 · P5-05 Stage Domain 抽取(完成)
+
+新建 `lib/stage.ts` 阶段域领域纯逻辑层,graphStore 的 5 个 stage action 改用 domain 函数。
+- 新增纯函数:`stageContainsNode`(完全包含判定)、`computeStageMembership`(归属判定)、`detachNodeIdsFromStages`(脱离)、`addNodeToStage`(加入/移出)、`computeStageMinSize`(最小覆盖尺寸)、`computeStageBounds`(归属节点包围盒)、`boundsToStageBox`(包围盒→域框)
+- graphStore 改用:`syncStageMembership` / `resizeStage` / `enterNodeToStage` / `detachNodesFromStages` / `autoGrowStage`(包围盒计算)
+- 新增 7 测试(包含判定/归属/脱离/加入/最小尺寸/包围盒/域框),完整套件 107 → **114 用例通过**;tsc / build 通过
+
+---
+
 ## 2026-08-25 · P5-04 Gateway Domain 抽取(完成)
 
 新建 `lib/gateway.ts` 网关领域纯逻辑层,从 `types.ts` 迁出网关常量与创建函数。
