@@ -2,6 +2,15 @@
 
 > 按时间倒序记录开发历程。新功能、重要修复、里程碑都应在此追加。
 
+## 2026-08-25 · P4-04 Serialization Round Trip
+
+为序列化建立 round-trip 保护:新增 `src/store/__tests__/serialization.roundtrip.test.ts` 6 用例,验证 `Graph → serializeProject/exportJson → loadProject → Graph` 语义一致。
+- 覆盖:Node / Edge / Composite / Nested Composite / Gateway(类型 + 分支)/ Stage / Annotation / Artifact / viewport
+- 损坏 JSON 加载失败且不破坏当前状态
+- 完整套件 76 → **82 用例通过**;tsc / build 通过
+
+---
+
 ## 2026-08-25 · P4-03 Graph Invariant Tests
 
 为 P4-02 的 `validateGraph()` 建立更全面的不变量测试:新增 `src/lib/__tests__/graphValidation.invariant.test.ts` 14 用例。
