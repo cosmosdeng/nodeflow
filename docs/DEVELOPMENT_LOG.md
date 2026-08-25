@@ -2,6 +2,14 @@
 
 > 按时间倒序记录开发历程。新功能、重要修复、里程碑都应在此追加。
 
+## 2026-08-25 · P4-05 Undo / Redo Tests
+
+为历史栈建立回归保护:新增 `src/store/__tests__/undoredo.test.ts` 8 用例,验证 `S0 → Action → S1 → Undo → S0` 与 `S0 → Action → S1 → Undo → Redo → S1`。
+- 覆盖:addNode / deleteNode(含连线恢复)/ groupSelected(编组)/ addStage / addAnnotation / copy-paste / 连续多次操作全量 undo
+- 完整套件 82 → **90 用例通过**;tsc / build 通过
+
+---
+
 ## 2026-08-25 · P4-04 Serialization Round Trip
 
 为序列化建立 round-trip 保护:新增 `src/store/__tests__/serialization.roundtrip.test.ts` 6 用例,验证 `Graph → serializeProject/exportJson → loadProject → Graph` 语义一致。
