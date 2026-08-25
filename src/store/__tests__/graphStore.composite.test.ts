@@ -1,5 +1,6 @@
 import { describe, expect, it, beforeEach, vi } from 'vitest';
-import { createGatewayNode, GATEWAY_META, type FlowNode, type GatewayType } from '../../types';
+import { createGatewayNode, GATEWAY_META } from '../../lib/gateway';
+import type { FlowNode, GatewayType } from '../../types';
 
 // mock localStorage(Node 环境无 localStorage)
 const store = new Map<string, string>();

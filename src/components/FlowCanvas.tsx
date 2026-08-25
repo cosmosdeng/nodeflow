@@ -22,7 +22,7 @@ import ConfirmDialog, { type ConfirmDialogState } from './ConfirmDialog';
 import AnnotationBox from './AnnotationBox';
 import StageComponent from './StageComponent';
 import { useGraphStore } from '../store/graphStore';
-import { createGatewayNode, GATEWAY_KINDS, GATEWAY_META } from '../types';
+import { changeGatewayType, createGatewayNode, GATEWAY_KINDS, GATEWAY_META } from '../lib/gateway';
 import type { FlowNode, FlowEdge, EdgeStyle, Stage, GatewayType } from '../types';
 
 const nodeTypes: NodeTypes = { flow: FlowNodeComponent };
@@ -559,10 +559,8 @@ export default function FlowCanvas() {
                   onClick: () => {
                     const cur = useGraphStore.getState().nodes.find((x) => x.id === node.id);
                     if (cur?.data?.gateway) {
-                      useGraphStore.getState().updateNode(node.id, {
-                        gateway: { ...cur.data.gateway, type: t },
-                        label: GATEWAY_META[t].label,
-                      });
+                      const updated = changeGatewayType(cur.data.gateway, t, GATEWAY_META[t].label);
+                      useGraphStore.getState().updateNode(node.id, updated);
                     }
                   },
                 })),

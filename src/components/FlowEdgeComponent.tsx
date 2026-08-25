@@ -3,6 +3,7 @@ import { BaseEdge, EdgeLabelRenderer, type EdgeProps } from '@xyflow/react';
 import { ARTIFACT_META, uid, type FlowEdge } from '../types';
 import { useGraphStore } from '../store/graphStore';
 import { computeEdgePath } from '../lib/edgePath';
+import { GATEWAY_BRANCH_COLORS } from '../lib/gateway';
 import EditableText from './EditableText';
 import AnnotationBox from './AnnotationBox';
 
@@ -109,16 +110,6 @@ function FlowEdgeComponent({
   );
 
   // 网关分支连线配色:若 source 是网关,按 sourceHandle 的分支序号从调色板取色,各分支颜色不同
-  const gatewayBranchColors = [
-    '#ff6b6b',
-    '#4ecdc4',
-    '#f7d794',
-    '#a29bfe',
-    '#55efc4',
-    '#fd79a8',
-    '#74b9ff',
-    '#ffeaa7',
-  ];
   const edgeColor = useMemo(() => {
     const src = allNodes.find((n) => n.id === source);
     if (src?.data?.gateway) {
@@ -127,7 +118,7 @@ function FlowEdgeComponent({
       const sh = e?.sourceHandle;
       if (sh) {
         const idx = src.data.outputs.findIndex((o) => o.id === sh);
-        if (idx >= 0) return gatewayBranchColors[idx % gatewayBranchColors.length];
+        if (idx >= 0) return GATEWAY_BRANCH_COLORS[idx % GATEWAY_BRANCH_COLORS.length];
       }
     }
     return undefined; // 非网关连线用默认色

@@ -1,6 +1,7 @@
 import { Fragment, memo, useEffect, useMemo, useRef, useState } from 'react';
 import { Handle, Position, useUpdateNodeInternals, type NodeProps } from '@xyflow/react';
-import { ACTOR_META, GATEWAY_META, uid, type ActorType, type FlowNode, type PortDef } from '../types';
+import { ACTOR_META, uid, type ActorType, type FlowNode, type PortDef } from '../types';
+import { GATEWAY_META } from '../lib/gateway';
 import { computeCompositeActor, computeCompositePorts } from '../lib/composite';
 import { openCompositePopup } from '../lib/compositePopup';
 import { useGraphStore } from '../store/graphStore';

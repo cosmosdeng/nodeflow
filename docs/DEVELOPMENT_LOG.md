@@ -2,6 +2,17 @@
 
 > 按时间倒序记录开发历程。新功能、重要修复、里程碑都应在此追加。
 
+## 2026-08-25 · P5-04 Gateway Domain 抽取(完成)
+
+新建 `lib/gateway.ts` 网关领域纯逻辑层,从 `types.ts` 迁出网关常量与创建函数。
+- 迁出:`GATEWAY_META` / `GATEWAY_KINDS` / `createGatewayNode`(types.ts 仅保留 GatewayType / GatewayMeta 类型定义,因 FlowNode 引用)
+- 新增纯函数:`changeGatewayType`(类型切换,保留端口与 defaultBranch)、`setDefaultBranch`(兜底分支设置/清除)
+- 收敛:`GATEWAY_BRANCH_COLORS` 分支配色板(FlowEdgeComponent 内联 8 色 → domain 常量);FlowCanvas 右键切换网关类型内联逻辑改用 `changeGatewayType`
+- 更新 3 处 import(FlowCanvas / FlowNodeComponent / graphStore.composite.test)
+- 新增 5 测试(create / changeGatewayType / setDefaultBranch),完整套件 102 → **107 用例通过**;tsc / build 通过
+
+---
+
 ## 2026-08-25 · P5-03 Composite Domain 抽取(完成)
 
 在 `lib/composite.ts` 新增组合关系查询纯函数 `findParentCompositeId` / `isChildOf`,graphStore 的 2 处「找父组合」逻辑改用 domain 函数(语义等价)。

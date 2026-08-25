@@ -17,15 +17,6 @@ export interface GatewayMeta {
   defaultBranch?: string;
 }
 
-/** 网关头像标签与内部标记 */
-export const GATEWAY_META: Record<GatewayType, { label: string; mark: string; color: string }> = {
-  exclusive: { label: '排他网关', mark: '×', color: '#f59e0b' },
-  parallel: { label: '并行网关', mark: '+', color: '#14b8a6' },
-  inclusive: { label: '包容网关', mark: '○', color: '#8b5cf6' },
-};
-
-export const GATEWAY_KINDS: GatewayType[] = ['exclusive', 'parallel', 'inclusive'];
-
 /** 连线显示风格 */
 export type EdgeStyle = 'smoothstep' | 'bezier';
 
@@ -242,23 +233,4 @@ export function createDefaultNode(position: { x: number; y: number }): FlowNode 
   };
 }
 
-/** 创建一个 BPMN 网关节点(菱形外观):1 输入 + 2 个默认输出分支,可继续添加 */
-export function createGatewayNode(type: GatewayType, position: { x: number; y: number }): FlowNode {
-  const id = uid('gw');
-  return {
-    id,
-    type: 'flow',
-    position,
-    width: 380,
-    height: 220,
-    data: {
-      label: GATEWAY_META[type].label,
-      description: '',
-      actor: 'hybrid',
-      locked: false,
-      inputs: [{ id: 'in_1', name: '输入' }],
-      outputs: [{ id: 'out_1', name: '分支1' }, { id: 'out_2', name: '分支2' }],
-      gateway: { type },
-    },
-  };
-}
+
