@@ -2,6 +2,21 @@
 
 > 按时间倒序记录开发历程。新功能、重要修复、里程碑都应在此追加。
 
+## 2026-08-25 · P4-03 Graph Invariant Tests
+
+为 P4-02 的 `validateGraph()` 建立更全面的不变量测试:新增 `src/lib/__tests__/graphValidation.invariant.test.ts` 14 用例。
+- Nested Composite 合法 / 非法 child
+- Composite 重复 child(warning)、展开 / 塌缩两种状态
+- Edge 两端悬空、引用不存在端口
+- Stage 引用同一节点(允许)、重复 Stage / Annotation ID
+- Annotation node target 存在 / 不存在、canvas 归属 main / 不存在组合
+- `cid:` 嵌套多层聚合端口解析
+- 普通节点端口 id 重复(warning)、大规模节点 / 连线
+
+完整套件 62 → **76 用例通过**;tsc / build 通过。
+
+---
+
 ## 2026-08-25 · P4 架构加固 — P4-01 基线 + P4-02 Graph Validation
 
 **P4-01 项目基线**:新建 `docs/P4_BASELINE.md`,记录 NodeFlow 当前真实状态(tsc / test / build 通过;`graphStore.ts` 2907 行;45 用例;关键入口定位),作为后续重构对照基准。未修改任何业务代码。
