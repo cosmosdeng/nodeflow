@@ -38,6 +38,7 @@ import {
   decodeCompositePort,
   decodeCompositePortPath,
   encodeCompositePort,
+  findParentCompositeId,
   getNodeSize,
   isCompositePort,
 } from '../lib/composite';
@@ -674,13 +675,7 @@ function wrapRefToOuter(
     if (visited.has(cur)) break;
     visited.add(cur);
     // 找到包含 cur 的父组合
-    let parentId: string | null = null;
-    for (const n of nodes) {
-      if (n.data?.composite?.childIds.includes(cur)) {
-        parentId = n.id;
-        break;
-      }
-    }
+    const parentId = findParentCompositeId(nodes, cur) ?? null;
     if (!parentId || parentId === outerId) break;
     ref = encodeCompositePort(parentId, ref);
     cur = parentId;
@@ -1056,13 +1051,7 @@ function refreshCompositeHidden(
     while (cur) {
       if (visited.has(cur)) break;
       visited.add(cur);
-      let parentId: string | null = null;
-      for (const c of comps) {
-        if (c.data!.composite!.childIds.includes(cur)) {
-          parentId = c.id;
-          break;
-        }
-      }
+      const parentId = findParentCompositeId(comps, cur) ?? null;
       if (!parentId) break;
       const pnode = byId.get(parentId);
       if (pnode?.data?.composite && !pnode.data.composite.expanded) return true;

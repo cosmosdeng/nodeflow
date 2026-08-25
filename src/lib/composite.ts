@@ -1,5 +1,16 @@
 import type { ActorType, FlowEdge, FlowNode, PortDef } from '../types';
 
+/** 查找包含指定子节点的组合节点 id(第一层直接父组合);不存在返回 undefined */
+export function findParentCompositeId(nodes: readonly FlowNode[], childId: string): string | undefined {
+  return nodes.find((n) => n.data?.composite?.childIds.includes(childId))?.id;
+}
+
+/** 判断某节点是否直接是某个组合的子节点 */
+export function isChildOf(nodeId: string, compositeId: string, nodes: readonly FlowNode[]): boolean {
+  const comp = nodes.find((n) => n.id === compositeId);
+  return !!comp?.data?.composite?.childIds.includes(nodeId);
+}
+
 /** 组合端口引用编码前缀 */
 export const COMPOSITE_PREFIX = 'cid:';
 /** 展开态虚线框的内边距 */

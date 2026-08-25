@@ -11,6 +11,8 @@ import {
   computeCompositeBounds,
   getNodeSize,
   applyCompositeBoxes,
+  findParentCompositeId,
+  isChildOf,
 } from '../composite';
 
 function node(id: string, data: Partial<FlowNode['data']>, extra?: Partial<FlowNode>): FlowNode {
@@ -246,5 +248,30 @@ describe('applyCompositeBoxes 展开组合虚线框重算', () => {
     const input = [a];
     const result = applyCompositeBoxes(input);
     expect(result).toBe(input); // 无变化返回原引用
+  });
+});
+
+describe('组合关系查询(findParentCompositeId / isChildOf)', () => {
+  it('findParentCompositeId 找到直接父组合', () => {
+    const A = node('A', {});
+    const comp = node('G', { composite: { expanded: false, childIds: ['A'] } });
+    expect(findParentCompositeId([A, comp], 'A')).toBe('G');
+    expect(findParentCompositeId([A, comp], 'X')).toBeUndefined();
+  });
+
+  it('嵌套组合:返回直接父组合(最内层)', () => {
+    const A = node('A', {});
+    const inner = node('GI', { composite: { expanded: false, childIds: ['A'] } });
+    const outer = node('GO', { composite: { expanded: false, childIds: ['GI'] } });
+    expect(findParentCompositeId([A, inner, outer], 'A')).toBe('GI'); // 直接父是 GI
+    expect(findParentCompositeId([A, inner, outer], 'GI')).toBe('GO');
+  });
+
+  it('isChildOf 判断直接父子关系', () => {
+    const A = node('A', {});
+    const comp = node('G', { composite: { expanded: false, childIds: ['A'] } });
+    expect(isChildOf('A', 'G', [A, comp])).toBe(true);
+    expect(isChildOf('B', 'G', [A, comp])).toBe(false); // B 不存在
+    expect(isChildOf('A', 'GHOST', [A, comp])).toBe(false); // 组合不存在
   });
 });

@@ -2,6 +2,14 @@
 
 > 按时间倒序记录开发历程。新功能、重要修复、里程碑都应在此追加。
 
+## 2026-08-25 · P5-03 Composite Domain 抽取(完成)
+
+在 `lib/composite.ts` 新增组合关系查询纯函数 `findParentCompositeId` / `isChildOf`,graphStore 的 2 处「找父组合」逻辑改用 domain 函数(语义等价)。
+- graphStore 中散落的 `childIds.includes(...)` 父组合查找收敛到 composite 领域
+- 新增 3 测试(直接父组合 / 嵌套父组合 / isChildOf),完整套件 99 → **102 用例通过**;tsc / build 通过
+
+---
+
 ## 2026-08-25 · P5-03 Composite Domain 抽取(第一步)
 
 将 `applyCompositeBoxes`(重算展开组合虚线框,纯函数)从 `graphStore.ts` 迁移到 `lib/composite.ts`,Store 改为 import 调用。行为完全一致。
