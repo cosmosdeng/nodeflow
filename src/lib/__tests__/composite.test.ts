@@ -10,6 +10,7 @@ import {
   computeCompositePorts,
   computeCompositeBounds,
   getNodeSize,
+  applyCompositeBoxes,
 } from '../composite';
 
 function node(id: string, data: Partial<FlowNode['data']>, extra?: Partial<FlowNode>): FlowNode {
@@ -214,5 +215,36 @@ describe('getNodeSize 节点尺寸', () => {
   it('无 measured 但有显式 width/height', () => {
     const n = node('A', {}, { width: 300, height: 200 });
     expect(getNodeSize(n)).toEqual({ w: 300, h: 200 });
+  });
+});
+
+describe('applyCompositeBoxes 展开组合虚线框重算', () => {
+  const childA = node('A', {}, { position: { x: 100, y: 100 }, width: 200, height: 100 });
+  const childB = node('B', {}, { position: { x: 350, y: 100 }, width: 200, height: 100 });
+
+  it('展开态组合节点虚线框包裹子节点(含内边距)', () => {
+    // 组合初始位置错误,应被重算为包裹 A、B
+    const comp = node('G', { composite: { expanded: true, childIds: ['A', 'B'] } }, { position: { x: 0, y: 0 }, width: 100, height: 100 });
+    const result = applyCompositeBoxes([childA, childB, comp]);
+    const g = result.find((n) => n.id === 'G')!;
+    // 包裹 A(100,100) 和 B(350,100),宽高含 COMPOSITE_PAD=36
+    expect(g.position.x).toBeLessThanOrEqual(100 - 36);
+    expect(g.position.y).toBeLessThanOrEqual(100 - 36);
+    expect(g.position.x + (g.width ?? 0)).toBeGreaterThanOrEqual(350 + 200 + 36);
+    expect(g.position.y + (g.height ?? 0)).toBeGreaterThanOrEqual(100 + 100 + 36);
+  });
+
+  it('塌缩态组合节点不重算', () => {
+    const comp = node('G', { composite: { expanded: false, childIds: ['A', 'B'] } }, { position: { x: 0, y: 0 } });
+    const result = applyCompositeBoxes([childA, childB, comp]);
+    const g = result.find((n) => n.id === 'G')!;
+    expect(g.position.x).toBe(0); // 未被改动
+  });
+
+  it('无展开组合时返回原数组引用', () => {
+    const a = node('A', {});
+    const input = [a];
+    const result = applyCompositeBoxes(input);
+    expect(result).toBe(input); // 无变化返回原引用
   });
 });

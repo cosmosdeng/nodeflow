@@ -195,3 +195,38 @@ export function computeCompositeBounds(
     height: maxY - minY + pad * 2,
   };
 }
+
+/**
+ * 纯函数:基于当前节点数组,重算所有展开态组合节点的虚线框包围盒(包裹全部子节点)。
+ * 输入不变(无展开组合 / 包围盒无变化)时返回原数组引用,否则返回新数组。
+ */
+export function applyCompositeBoxes(nodes: FlowNode[]): FlowNode[] {
+  let changed = false;
+  const out = nodes.map((n) => {
+    if (!n.data?.composite || !n.data.composite.expanded) return n;
+    const children = nodes.filter((c) => n.data!.composite!.childIds.includes(c.id));
+    const bounds = computeCompositeBounds(children, COMPOSITE_PAD);
+    if (!bounds) return n;
+    if (
+      Math.abs(n.position.x - bounds.x) < 0.5 &&
+      Math.abs(n.position.y - bounds.y) < 0.5 &&
+      Math.abs((n.width ?? 0) - bounds.width) < 0.5 &&
+      Math.abs((n.height ?? 0) - bounds.height) < 0.5
+    ) {
+      return n;
+    }
+    changed = true;
+    return {
+      ...n,
+      position: { x: Math.round(bounds.x), y: Math.round(bounds.y) },
+      width: Math.round(bounds.width),
+      height: Math.round(bounds.height),
+      style: {
+        ...(n.style ?? {}),
+        width: Math.round(bounds.width),
+        height: Math.round(bounds.height),
+      },
+    };
+  });
+  return changed ? out : nodes;
+}
