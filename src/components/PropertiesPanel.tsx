@@ -143,6 +143,32 @@ function Section({
 
 /* ---------------- 节点属性 ---------------- */
 
+/** 参与方分配下拉(显式 Assign:只改语义,不改 position) */
+function ParticipantField({ nodeId, disabled }: { nodeId: string; disabled?: boolean }) {
+  const node = useGraphStore((s) => s.nodes.find((n) => n.id === nodeId));
+  const participants = useGraphStore((s) => s.participants);
+  const assignParticipant = useGraphStore((s) => s.assignParticipant);
+  const value = node?.data.participantId ?? '';
+  return (
+    <Section title="参与方">
+      <div className="field">
+        <label>责任主体</label>
+        <select
+          className="pp-input"
+          value={value}
+          disabled={disabled}
+          onChange={(e) => assignParticipant(nodeId, e.target.value || null)}
+        >
+          <option value="">（未分配）</option>
+          {participants.map((p) => (
+            <option key={p.id} value={p.id}>{p.name}</option>
+          ))}
+        </select>
+      </div>
+    </Section>
+  );
+}
+
 function NodeProperties({ nodeId }: { nodeId: string }) {
   const node = useGraphStore((s) => s.nodes.find((n) => n.id === nodeId));
   const nodes = useGraphStore((s) => s.nodes);
@@ -289,6 +315,8 @@ function NodeProperties({ nodeId }: { nodeId: string }) {
           </div>
         )}
       </Section>
+
+      <ParticipantField nodeId={nodeId} disabled={disabled} />
 
       {isComposite && (
         <Section title="组合节点">

@@ -2319,3 +2319,133 @@ body,
     transform: scale(1);
   }
 }
+
+/* ---- 参与方与组织 Outliner ---- */
+.participants-panel {
+  width: 280px;
+  flex-shrink: 0;
+}
+.participants-panel .pp-close {
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  font-size: 13px;
+}
+.participants-panel .pp-section {
+  margin-bottom: 14px;
+}
+.participants-panel .pp-section-title {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-muted);
+  margin-bottom: 6px;
+}
+.pp-add-row {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  margin-bottom: 6px;
+}
+.pp-add-row .pp-type {
+  flex: 0 0 92px;
+}
+.pp-input {
+  background: var(--bg);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 4px 8px;
+  font-size: 12px;
+  flex: 1;
+  min-width: 0;
+}
+.pp-input:disabled {
+  opacity: 0.5;
+}
+.pp-btn {
+  background: var(--accent, #4ea1ff);
+  color: #fff;
+  border: none;
+  border-radius: 6px;
+  padding: 4px 10px;
+  font-size: 12px;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+.pp-btn:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+.pp-org-group {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  margin-bottom: 8px;
+  overflow: hidden;
+}
+.pp-org-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 6px 10px;
+  background: var(--bg);
+  border-bottom: 1px solid var(--border);
+}
+.pp-org-name {
+  font-weight: 600;
+  font-size: 12px;
+}
+.pp-participant {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 10px;
+  font-size: 12px;
+  border-bottom: 1px solid var(--border);
+}
+.pp-participant:last-child {
+  border-bottom: none;
+}
+.pp-participant-name {
+  font-weight: 500;
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.pp-participant-type {
+  color: var(--text-muted);
+  font-size: 11px;
+}
+.pp-row-actions {
+  display: flex;
+  gap: 4px;
+  flex-shrink: 0;
+}
+.pp-link {
+  background: none;
+  border: none;
+  color: var(--accent, #4ea1ff);
+  cursor: pointer;
+  font-size: 11px;
+  padding: 0;
+}
+.pp-link.pp-danger {
+  color: var(--danger, #ef4444);
+}
+.pp-edit-row {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  padding: 5px 10px;
+  flex-wrap: wrap;
+}
+.pp-org-edit {
+  background: var(--bg);
+}
+.pp-empty {
+  padding: 8px 10px;
+  color: var(--text-muted);
+  font-size: 12px;
+}

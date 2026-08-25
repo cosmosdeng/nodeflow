@@ -21,18 +21,22 @@ interface Props {
   showOutline: boolean;
   showProperties: boolean;
   showHistory: boolean;
+  showParticipants: boolean;
   onToggleOutline: () => void;
   onToggleProperties: () => void;
   onToggleHistory: () => void;
+  onToggleParticipants: () => void;
 }
 
 export default function Toolbar({
   showOutline,
   showProperties,
   showHistory,
+  showParticipants,
   onToggleOutline,
   onToggleProperties,
   onToggleHistory,
+  onToggleParticipants,
 }: Props) {
   const [fileOpen, setFileOpen] = useState(false);
   const [importOpen, setImportOpen] = useState(false);
@@ -460,6 +464,9 @@ export default function Toolbar({
       </button>
       <button className={`tb-btn ${showHistory ? 'active' : ''}`} onClick={onToggleHistory}>
         🕘 历史
+      </button>
+      <button className={`tb-btn ${showParticipants ? 'active' : ''}`} onClick={onToggleParticipants}>
+        👤 参与方
       </button>
 
       <span className="sep" />

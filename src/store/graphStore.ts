@@ -66,6 +66,7 @@ import {
 import { setEdgeArtifact, updateEdgeArtifact } from '../lib/artifact';
 import { createFlowEdge } from '../lib/edge';
 import { findStageEmptySpot, pushNodesAwayFromBox, pushOutOfRect, rectOverlaps, type Rect } from '../lib/geometry';
+import { detachOrganizationFromParticipants, detachParticipantFromNodes } from '../lib/participant';
 import {
   buildProjectDocumentV4,
   detectDocumentFormat,
@@ -221,6 +222,22 @@ interface FlowStore extends GraphState {
     kind: 'input' | 'output',
     portId: string,
   ) => void;
+
+  // ---- 参与方 / 组织 ----
+  /** 新增参与方 */
+  addParticipant: (name: string, type: ParticipantType, organizationId?: string) => string;
+  /** 更新参与方 */
+  updateParticipant: (id: string, patch: Partial<Pick<Participant, 'name' | 'type' | 'organizationId'>>) => void;
+  /** 删除参与方:指向它的节点 participantId 置 undefined(safe detach,不删节点) */
+  deleteParticipant: (id: string) => void;
+  /** 新增组织 */
+  addOrganization: (name: string) => string;
+  /** 更新组织 */
+  updateOrganization: (id: string, patch: Partial<Pick<Organization, 'name'>>) => void;
+  /** 删除组织:属于它的参与方 organizationId 置 undefined(safe detach,不删参与方) */
+  deleteOrganization: (id: string) => void;
+  /** 给节点显式指定参与方(只改语义,不改 position) */
+  assignParticipant: (nodeId: string, participantId: string | null) => void;
 
   // ---- 连线操作 ----
   updateEdge: (id: string, patch: Partial<FlowEdgeData>) => void;
@@ -1813,6 +1830,63 @@ export const useGraphStore = create<FlowStore>()(
       if (get().allLocked || nodeIds.length === 0) return;
       get().markHistory();
       set((s) => ({ stages: detachNodeIdsFromStages(s.stages, nodeIds) }));
+    },
+    addParticipant: (name, type, organizationId) => {
+      if (get().allLocked) return '';
+      const id = uid('participant');
+      get().markHistory();
+      set((s) => ({ participants: [...s.participants, { id, name, type, organizationId }] }));
+      return id;
+    },
+    updateParticipant: (id, patch) => {
+      if (get().allLocked) return;
+      get().markHistory();
+      set((s) => ({
+        participants: s.participants.map((p) => (p.id === id ? { ...p, ...patch } : p)),
+      }));
+    },
+    deleteParticipant: (id) => {
+      if (get().allLocked) return;
+      get().markHistory();
+      set((s) => ({
+        participants: s.participants.filter((p) => p.id !== id),
+        // safe detach:指向该参与方的节点 participantId 置 undefined(不删除节点)
+        nodes: detachParticipantFromNodes(s.nodes, id),
+      }));
+    },
+    addOrganization: (name) => {
+      if (get().allLocked) return '';
+      const id = uid('org');
+      get().markHistory();
+      set((s) => ({ organizations: [...s.organizations, { id, name }] }));
+      return id;
+    },
+    updateOrganization: (id, patch) => {
+      if (get().allLocked) return;
+      get().markHistory();
+      set((s) => ({
+        organizations: s.organizations.map((o) => (o.id === id ? { ...o, ...patch } : o)),
+      }));
+    },
+    deleteOrganization: (id) => {
+      if (get().allLocked) return;
+      get().markHistory();
+      set((s) => ({
+        organizations: s.organizations.filter((o) => o.id !== id),
+        // safe detach:属于该组织的参与方 organizationId 置 undefined(不删除参与方)
+        participants: detachOrganizationFromParticipants(s.participants, id),
+      }));
+    },
+    assignParticipant: (nodeId, participantId) => {
+      if (get().allLocked) return;
+      get().markHistory();
+      set((s) => ({
+        nodes: s.nodes.map((n) =>
+          n.id === nodeId
+            ? { ...n, data: { ...n.data, participantId: participantId ?? undefined } }
+            : n,
+        ),
+      }));
     },
     autoGrowStage: (stageId) => {
       const s = get();

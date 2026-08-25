@@ -4,6 +4,7 @@ import FlowCanvas from './components/FlowCanvas';
 import OutlinePanel from './components/OutlinePanel';
 import PropertiesPanel from './components/PropertiesPanel';
 import HistoryPanel from './components/HistoryPanel';
+import ParticipantsPanel from './components/ParticipantsPanel';
 import CompositePopupView from './components/CompositePopupView';
 import { openCompositePopup } from './lib/compositePopup';
 import { useGraphStore } from './store/graphStore';
@@ -13,6 +14,7 @@ function MainApp() {
   const [showOutline, setShowOutline] = useState(false);
   const [showProperties, setShowProperties] = useState(true);
   const [showHistory, setShowHistory] = useState(false);
+  const [showParticipants, setShowParticipants] = useState(false);
 
   const undo = useGraphStore((s) => s.undo);
   const redo = useGraphStore((s) => s.redo);
@@ -107,9 +109,11 @@ function MainApp() {
         showOutline={showOutline}
         showProperties={showProperties}
         showHistory={showHistory}
+        showParticipants={showParticipants}
         onToggleOutline={() => setShowOutline((v) => !v)}
         onToggleProperties={() => setShowProperties((v) => !v)}
         onToggleHistory={() => setShowHistory((v) => !v)}
+        onToggleParticipants={() => setShowParticipants((v) => !v)}
       />
 
       {/* 标签栏:项目文档标签 + 当前项目内(主画布 + 组合内部画布)标签 */}
@@ -187,6 +191,7 @@ function MainApp() {
 
       <div className="app-main">
         {showOutline && <OutlinePanel onClose={() => setShowOutline(false)} />}
+        {showParticipants && <ParticipantsPanel onClose={() => setShowParticipants(false)} />}
         <FlowCanvas />
         {showProperties && <PropertiesPanel onClose={() => setShowProperties(false)} />}
         {showHistory && <HistoryPanel onClose={() => setShowHistory(false)} />}

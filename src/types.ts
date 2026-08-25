@@ -28,6 +28,17 @@ export interface Organization {
   name: string;
 }
 
+/** 参与方类型显示名 */
+export const PARTICIPANT_TYPE_LABELS: Record<ParticipantType, string> = {
+  person: '个人',
+  role: '角色',
+  organization: '组织',
+  department: '部门',
+  machine: '机器',
+  software: '软件',
+  'ai-agent': 'AI 智能体',
+};
+
 /** 中间产物类型 */
 export type ArtifactKind = 'document' | 'image' | 'video' | 'audio' | 'code' | 'data' | 'other';
 
