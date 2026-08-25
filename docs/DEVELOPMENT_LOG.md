@@ -2,6 +2,18 @@
 
 > 按时间倒序记录开发历程。新功能、重要修复、里程碑都应在此追加。
 
+## 2026-08-25 · P5 开始 — P5-02 Graph Domain 抽取(第一步)
+
+P5 目标:逐步把业务逻辑从 `graphStore.ts` 抽出,让 Store 调用 Domain。
+
+**P5-02 第一步**:新建 `src/domain/graph/queries.ts` 纯查询模块,与 React / Zustand / Electron 解耦。
+- `findNodeById` / `findEdgeById` / `findNodesByIds` / `findEdgesForNode` / `isNodeReferencedByEdge` / `isEdgeDangling` / `findDuplicateIds`
+- Store 开始调用(`insertNodeOnEdge` 的 find 改用 domain 函数),其余 16 处 find 留待后续阶段逐步替换。
+
+**测试**:新增 `src/domain/__tests__/graph.queries.test.ts` 6 用例,完整套件 90 → **96 用例通过**;tsc / build 通过。
+
+---
+
 ## 2026-08-25 · P4 完成（P4-06 Gate 验收）
 
 P4 全部完成,通过阶段闸门。新建 `docs/P4_COMPLETION.md` 记录验收结果。

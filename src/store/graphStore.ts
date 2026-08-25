@@ -41,6 +41,7 @@ import {
   isCompositePort,
 } from '../lib/composite';
 import { computeLayout, type LayoutDirection } from '../lib/layout';
+import { findNodeById, findEdgeById } from '../domain/graph/queries';
 
 const SAVE_KEY = 'nodeflow:graph:v1';
 const PREFS_KEY = 'nodeflow:prefs:v1';
@@ -2141,10 +2142,10 @@ export const useGraphStore = create<FlowStore>()(
     insertNodeOnEdge: (edgeId, position) => {
       if (get().allLocked) return '';
       const s = get();
-      const edge = s.edges.find((e) => e.id === edgeId);
+      const edge = findEdgeById(s.edges, edgeId);
       if (!edge) return '';
-      const src = s.nodes.find((n) => n.id === edge.source);
-      const tgt = s.nodes.find((n) => n.id === edge.target);
+      const src = findNodeById(s.nodes, edge.source);
+      const tgt = findNodeById(s.nodes, edge.target);
       get().markHistory();
       // 默认位置:两端节点中心连线的中点
       let pos = position;
