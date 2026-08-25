@@ -2,6 +2,16 @@
 
 > 按时间倒序记录开发历程。新功能、重要修复、里程碑都应在此追加。
 
+## 2026-08-25 · P4 完成（P4-06 Gate 验收）
+
+P4 全部完成,通过阶段闸门。新建 `docs/P4_COMPLETION.md` 记录验收结果。
+
+**P4 交付**:Graph Validation + Invariant / Serialization / Undo-Redo 测试,共 **90 用例**(P4 前 45),tsc / build 通过;未改 UI、未改 `.nodeflow` 格式、未移动文件。
+
+**P4 意义**:为后续 P5 拆解 Store 建立了安全网——任何重构后都可通过 validation / invariant / serialization / undo-redo 测试验证未破坏结构。
+
+---
+
 ## 2026-08-25 · P4-05 Undo / Redo Tests
 
 为历史栈建立回归保护:新增 `src/store/__tests__/undoredo.test.ts` 8 用例,验证 `S0 → Action → S1 → Undo → S0` 与 `S0 → Action → S1 → Undo → Redo → S1`。
