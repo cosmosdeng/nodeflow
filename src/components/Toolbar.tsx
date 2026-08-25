@@ -162,7 +162,7 @@ export default function Toolbar({
       if (ok) {
         setTimeout(() => fitView({ padding: 0.2, duration: 400 }), 80);
       } else {
-        alert('无法解析项目文件,请确认是 NodeFlow 保存的项目文件。');
+        alert(useGraphStore.getState().loadError ?? '无法解析项目文件,请确认是 NodeFlow 保存的项目文件。');
       }
     };
     reader.readAsText(file);

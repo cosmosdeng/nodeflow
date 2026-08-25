@@ -2,6 +2,30 @@
 
 > 按时间倒序记录开发历程。新功能、重要修复、里程碑都应在此追加。
 
+## 2026-08-25 · P6-04~07 Architecture Hardening 实施(完成)
+
+在 P6 设计(只读)基础上完成 Compatibility Foundation + Migration + Version Gate + Validation + Persistence Safety 实施。
+- **新增 `src/lib/document.ts`**(纯逻辑兼容层,无 React/Zustand/React Flow 依赖):
+  - `detectDocumentFormat`:Format+Version 共同识别(Project v3 / Export / Legacy Project v2 / Legacy Export v1 / unknown / future)
+  - `migrateProjectV2ToDocument`:Legacy Project v2 → 当前文档(剥离历史/脏标记/React Flow 字段;deterministic / non-mutating)
+  - `importLegacyExportToDocument`:Legacy Export v1 → 当前文档(Export Import/Conversion,非 Project Migration)
+  - `validateDocumentData`:最小结构校验(nodes/edges/viewport/annotations/stages)
+  - `buildProjectDocumentV3`:保存侧构建 v3 正式格式(清洗 selected/measured/hidden/draggable;不含 history)
+- **`serializeProject` 升级为 Project Format v3**:`{format:'nodeflow', version:3, exportedAt, document:{name,color,graph:{nodes,edges,annotations,stages},editor:{viewport,activeTabId,compositeTabs}}}`
+- **`loadProject` 接入兼容层**:Format Detection → Future Version Gate(version>3 安全拒绝+明确提示) → Migration/Import/Current 分流 → Current Validation → Runtime Hydration(生成新 doc id,history 从空开始)
+- **新增 `loadError` 状态**:加载失败时给出用户可见的明确错误(Toolbar/App 展示),不再笼统"无法解析"
+- **localStorage 增量版本化**:persistDocument 写入 `{version:1,...}`;loadPersistedDocument 兼容无 version 的 legacy 数据
+- 新增测试 `src/lib/__tests__/document.test.ts`(14 用例:format detection / future gate / migration determinism & non-mutation / export import / validation)
+
+验证:
+- ✅ tsc 通过
+- ✅ **143 测试全部通过**(129 + 14 document)
+- ✅ build 通过
+- ✅ 无 lint 错误
+- ✅ 未新增架构层(仅纯函数模块);未改 UI/产品行为/React Flow/Zustand
+
+---
+
 ## 2026-08-25 · P6 系列 Document Format & Persistence 设计(完成,只读)
 
 进入 P6(文档格式与持久化)。P6-01~P6-03 为**只读审计 / 设计**阶段,未修改任何代码。设计决策已固化到 `docs/P6_DESIGN.md`。

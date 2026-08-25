@@ -69,7 +69,9 @@ describe('P4-04 Serialization Round Trip', () => {
       viewport: { x: 120, y: 80, zoom: 1.25 },
     });
     const json = useGraphStore.getState().serializeProject();
-    expect(JSON.parse(json).type).toBe('nodeflow-project');
+    const parsed = JSON.parse(json) as { format: string; version: number };
+    expect(parsed.format).toBe('nodeflow');
+    expect(parsed.version).toBe(3);
 
     // 清空后加载
     useGraphStore.setState({ nodes: [], edges: [], stages: [], annotations: [] });

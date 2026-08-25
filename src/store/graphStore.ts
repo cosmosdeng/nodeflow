@@ -63,6 +63,16 @@ import {
 import { setEdgeArtifact, updateEdgeArtifact } from '../lib/artifact';
 import { createFlowEdge } from '../lib/edge';
 import { findStageEmptySpot, pushNodesAwayFromBox, pushOutOfRect, rectOverlaps, type Rect } from '../lib/geometry';
+import {
+  buildProjectDocumentV3,
+  detectDocumentFormat,
+  futureVersionMessage,
+  importLegacyExportToDocument,
+  migrateProjectV2ToDocument,
+  pickGraphNodesEdges,
+  validateDocumentData,
+  type NormalizedDocument,
+} from '../lib/document';
 
 const SAVE_KEY = 'nodeflow:graph:v1';
 const PREFS_KEY = 'nodeflow:prefs:v1';
@@ -108,6 +118,8 @@ interface FlowStore extends GraphState {
   stages: Stage[];
   /** 长按进入域时的闪烁反馈:正在闪烁的阶段域 id(700ms 后自动清除) */
   stageFlashId: string | null;
+  /** 最近一次项目加载失败的用户可见错误信息(null 表示无) */
+  loadError: string | null;
 
   // ---- 由 React Flow 直接回调 ----
   onNodesChange: OnNodesChange<FlowNode>;
@@ -487,6 +499,7 @@ function persistDocument(doc: Pick<GraphDocument, 'id' | 'nodes' | 'edges' | 'vi
     localStorage.setItem(
       docKey(doc.id),
       JSON.stringify({
+        version: 1, // localStorage 文档数据版本(向后兼容:旧数据无此字段视为 legacy)
         nodes,
         edges: doc.edges,
         viewport: doc.viewport,
@@ -1103,6 +1116,7 @@ export const useGraphStore = create<FlowStore>()(
     annotations: initialActiveDoc?.annotations ?? [],
     stages: initialActiveDoc?.stages ?? [],
     stageFlashId: null,
+    loadError: null,
     annotAutoEditId: null,
     past: initialActiveDoc?.past ?? [],
     future: initialActiveDoc?.future ?? [],
@@ -2071,10 +2085,12 @@ export const useGraphStore = create<FlowStore>()(
 
     serializeProject: () => {
       const s = get();
-      const doc: GraphDocument = {
-        id: s.activeDocumentId,
-        name: s.documents.find((d) => d.id === s.activeDocumentId)?.name ?? '未命名项目',
-        color: s.documents.find((d) => d.id === s.activeDocumentId)?.color ?? '#4ea1ff',
+      const name = s.documents.find((d) => d.id === s.activeDocumentId)?.name ?? '未命名项目';
+      const color = s.documents.find((d) => d.id === s.activeDocumentId)?.color ?? '#4ea1ff';
+      // 正式 Project Format v3:剥离历史/脏标记/React Flow 运行时字段
+      const document = buildProjectDocumentV3({
+        name,
+        color,
         nodes: s.nodes,
         edges: s.edges,
         viewport: s.viewport,
@@ -2082,13 +2098,9 @@ export const useGraphStore = create<FlowStore>()(
         stages: s.stages,
         compositeTabs: s.compositeTabs,
         activeTabId: s.activeTabId,
-        past: s.past,
-        future: s.future,
-        lastSavedAt: s.lastSavedAt,
-        dirty: s.dirty,
-      };
+      });
       return JSON.stringify(
-        { type: 'nodeflow-project', version: 2, exportedAt: new Date().toISOString(), project: doc },
+        { format: 'nodeflow', version: 3, exportedAt: new Date().toISOString(), document },
         null,
         2,
       );
@@ -2098,27 +2110,79 @@ export const useGraphStore = create<FlowStore>()(
       if (get().allLocked) return false;
       let doc: GraphDocument;
       try {
-        const data = JSON.parse(json);
-        const p = data?.type === 'nodeflow-project' ? data.project : data;
+        const data = JSON.parse(json) as unknown;
+        const info = detectDocumentFormat(data);
+        // Future Version Gate:安全拒绝
+        if (info.future) {
+          set({ loadError: futureVersionMessage(info) });
+          return false;
+        }
+        // Unknown 格式:安全拒绝
+        if (info.family === 'unknown') {
+          set({ loadError: '无法识别的文件格式,请确认是 NodeFlow 保存的项目文件。' });
+          return false;
+        }
+        // 按格式族 + 版本分流,得到标准化文档图数据
+        let norm: NormalizedDocument;
+        let name: string;
+        let color: string;
+        if (info.family === 'export') {
+          norm = importLegacyExportToDocument(data);
+          name = '导入项目';
+          color = DOCUMENT_COLORS[get().documents.length % DOCUMENT_COLORS.length];
+        } else if (info.legacy) {
+          // Legacy Project v2
+          norm = migrateProjectV2ToDocument(data);
+          const project = (data as Record<string, unknown> | undefined)?.project ?? {};
+          const p = project as Record<string, unknown>;
+          name = typeof p.name === 'string' ? p.name : '未命名项目';
+          color = typeof p.color === 'string' ? p.color : DOCUMENT_COLORS[get().documents.length % DOCUMENT_COLORS.length];
+        } else {
+          // Current Project v3
+          const document = (data as Record<string, unknown> | undefined)?.document ?? {};
+          const d = document as Record<string, unknown>;
+          const graph = (d.graph ?? {}) as Record<string, unknown>;
+          const editor = (d.editor ?? {}) as Record<string, unknown>;
+          const { nodes, edges } = pickGraphNodesEdges(graph);
+          norm = {
+            nodes,
+            edges,
+            viewport: (editor.viewport as ViewportState) ?? { x: 0, y: 0, zoom: 1 },
+            annotations: Array.isArray(graph.annotations) ? graph.annotations : [],
+            stages: Array.isArray(graph.stages) ? graph.stages : [],
+            compositeTabs: Array.isArray(editor.compositeTabs) ? editor.compositeTabs : [],
+            activeTabId: typeof editor.activeTabId === 'string' ? editor.activeTabId : 'main',
+          };
+          name = typeof d.name === 'string' ? d.name : '未命名项目';
+          color = typeof d.color === 'string' ? d.color : DOCUMENT_COLORS[get().documents.length % DOCUMENT_COLORS.length];
+        }
+        // Current Validation:标准化后确保结构可安全进入 Runtime
+        const issues = validateDocumentData(norm);
+        if (issues.length > 0) {
+          set({ loadError: `项目文件结构无效:${issues.map((i) => i.field).join(', ')}。` });
+          return false;
+        }
         doc = {
           id: uid('doc'),
-          name: p?.name ?? '未命名项目',
-          color: p?.color ?? DOCUMENT_COLORS[get().documents.length % DOCUMENT_COLORS.length],
-          nodes: Array.isArray(p?.nodes) ? p.nodes : [],
-          edges: Array.isArray(p?.edges) ? p.edges : [],
-          viewport: p?.viewport ?? { x: 0, y: 0, zoom: 1 },
-          annotations: Array.isArray(p?.annotations) ? p.annotations : [],
-          stages: Array.isArray(p?.stages) ? p.stages : [],
-          compositeTabs: Array.isArray(p?.compositeTabs) ? p.compositeTabs : [],
-          activeTabId: p?.activeTabId ?? 'main',
-          past: Array.isArray(p?.past) ? p.past : [],
-          future: Array.isArray(p?.future) ? p.future : [],
-          lastSavedAt: p?.lastSavedAt ?? null,
+          name,
+          color,
+          nodes: norm.nodes,
+          edges: norm.edges,
+          viewport: norm.viewport,
+          annotations: norm.annotations,
+          stages: norm.stages,
+          compositeTabs: norm.compositeTabs,
+          activeTabId: norm.activeTabId,
+          past: [],
+          future: [],
+          lastSavedAt: null,
           dirty: false,
         };
       } catch {
+        set({ loadError: '无法解析项目文件,请确认是有效的 NodeFlow 项目文件。' });
         return false;
       }
+      set({ loadError: null });
       set((s) => ({
         documents: [...s.documents, doc],
         activeDocumentId: doc.id,

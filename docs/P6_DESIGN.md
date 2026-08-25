@@ -37,15 +37,19 @@ P6-01 当前文件格式审计        ✅ 完成(只读)
 P6-02 Document/Version 设计   ✅ 完成(只读)
 P6-02 Design Freeze Correction ✅ 完成(只读)
 P6-03 Backward Compatibility  ✅ 完成(只读)
-P6-04 Migration                ⏳ 待人工授权
-P6-05 Safe Persistence
-P6-06 Document Validation
-P6-07 Migration/Persistence Tests
-P6-08 Real Project Compatibility
+P6-04 Migration                ✅ 完成(实施:lib/document.ts + loadProject 接入)
+P6-05 Safe Persistence         ✅ 完成(实施:localStorage version 字段 + Load/Save 安全)
+P6-06 Document Validation      ✅ 完成(实施:validateDocumentData 接入 loadProject)
+P6-07 Migration/Persistence Tests ✅ 完成(实施:document.test.ts 14 用例)
+P6-08 Real Project Compatibility ⏳ 后续(与 P6-09/10 一起在 Feature Development 中按需补充)
 P6-09 Error Handling
 P6-10 Auto Save Safety
-P6 Gate
+P6 Gate(部分)
 ```
+
+> P6-04~07 已在本轮 Architecture Hardening 中实施并验证(143 测试通过)。P6-08~10(Real Project / Error Handling / Auto Save) 属增量增强,不在本轮范围。
+
+> **实施结果**:新增 `src/lib/document.ts`(纯逻辑兼容层,无 React/Zustand/React Flow 依赖),`serializeProject` 升级为 Project Format v3,`loadProject` 接入 Format Detection / Future Version Gate / Migration / Import / Validation。详细见 `docs/DEVELOPMENT_LOG.md`。
 
 ---
 
