@@ -2,6 +2,15 @@
 
 > 按时间倒序记录开发历程。新功能、重要修复、里程碑都应在此追加。
 
+## 2026-08-25 · P5-02 Graph Domain 抽取(完成)
+
+将 `graphStore.ts` 中全部 16 处 `nodes.find` / `edges.find`(按 id 查找)替换为 domain 查询函数 `findNodeById` / `findEdgeById`。
+- 语义完全等价,行为不变
+- 完整套件 **96 用例通过**;tsc / build 通过
+- `graphStore.ts` 的散落 find 全部收敛到 `src/domain/graph/queries.ts`
+
+---
+
 ## 2026-08-25 · P5 开始 — P5-02 Graph Domain 抽取(第一步)
 
 P5 目标:逐步把业务逻辑从 `graphStore.ts` 抽出,让 Store 调用 Domain。

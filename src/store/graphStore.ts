@@ -735,7 +735,7 @@ function collapseComposite(
   id: string,
 ) {
   const s = get();
-  const comp = s.nodes.find((n) => n.id === id);
+  const comp = findNodeById(s.nodes, id);
   if (!comp?.data?.composite) return;
   const directChildIds = comp.data.composite.childIds;
   const childSet = new Set(directChildIds);
@@ -936,7 +936,7 @@ function expandComposite(
   id: string,
 ) {
   const s = get();
-  const comp = s.nodes.find((n) => n.id === id);
+  const comp = findNodeById(s.nodes, id);
   if (!comp?.data?.composite) return;
   const directChildIds = comp.data.composite.childIds;
   const childSet = new Set(directChildIds);
@@ -1311,7 +1311,7 @@ export const useGraphStore = create<FlowStore>()(
         const removedCompositeIds = new Set<string>();
         // 删除组合节点前先展开,恢复其子节点
         for (const rid of removedIds) {
-          const node = get().nodes.find((n) => n.id === rid);
+          const node = findNodeById(get().nodes, rid);
           if (node?.data?.composite) {
             removedCompositeIds.add(rid);
             expandComposite(get, set, rid);
@@ -1534,7 +1534,7 @@ export const useGraphStore = create<FlowStore>()(
     },
     addNodeToComposite: (compositeId, position) => {
       if (get().allLocked) return '';
-      const comp = get().nodes.find((n) => n.id === compositeId);
+      const comp = findNodeById(get().nodes, compositeId);
       if (!comp?.data?.composite) return '';
       // 与 addNode 一致:新建节点作为一次原子历史记录
       get().markHistory();
@@ -1581,7 +1581,7 @@ export const useGraphStore = create<FlowStore>()(
     },
     deleteNode: (id) => {
       if (get().allLocked) return;
-      const target = get().nodes.find((n) => n.id === id);
+      const target = findNodeById(get().nodes, id);
       get().markHistory();
       if (target?.data?.composite) {
         // 删除组合节点:先展开恢复子节点,再删除组合节点自身
@@ -1620,7 +1620,7 @@ export const useGraphStore = create<FlowStore>()(
     duplicateNode: (id) => {
       if (get().allLocked) return;
       get().markHistory();
-      const src = get().nodes.find((n) => n.id === id);
+      const src = findNodeById(get().nodes, id);
       if (!src) return;
       // 组合节点共享 childIds,不能直接复制,否则复制品会与原组合互相干扰
       if (src.data.composite) return;
@@ -1644,7 +1644,7 @@ export const useGraphStore = create<FlowStore>()(
       const selNodes = s.nodes.filter((n) => n.selected);
       const selNodeId = s.selected?.kind === 'node' ? s.selected.id : null;
       if (selNodes.length === 0 && selNodeId) {
-        const n = s.nodes.find((x) => x.id === selNodeId);
+        const n = findNodeById(s.nodes, selNodeId);
         if (n) selNodes.push(n);
       }
       const selected = selNodes;
@@ -1959,7 +1959,7 @@ export const useGraphStore = create<FlowStore>()(
       let minW = 140;
       let minH = 100;
       for (const nid of stage.nodeIds) {
-        const n = s.nodes.find((x) => x.id === nid);
+        const n = findNodeById(s.nodes, nid);
         if (!n || n.hidden) continue;
         const { w, h } = getNodeSize(n);
         minW = Math.max(minW, n.position.x + w - stage.x + PAD);
@@ -2011,7 +2011,7 @@ export const useGraphStore = create<FlowStore>()(
       let maxX = -Infinity;
       let maxY = -Infinity;
       for (const nid of stage.nodeIds) {
-        const n = s.nodes.find((x) => x.id === nid);
+        const n = findNodeById(s.nodes, nid);
         if (!n || n.hidden) continue;
         const { w, h } = getNodeSize(n);
         minX = Math.min(minX, n.position.x);
@@ -2083,7 +2083,7 @@ export const useGraphStore = create<FlowStore>()(
     removePort: (id, kind, portId) => {
       if (get().allLocked) return;
       const s = get();
-      const node = s.nodes.find((n) => n.id === id);
+      const node = findNodeById(s.nodes, id);
       if (!node) return;
       const list = kind === 'input' ? node.data.inputs : node.data.outputs;
       // 每个方向至少保留 1 个端口
@@ -2165,7 +2165,7 @@ export const useGraphStore = create<FlowStore>()(
       let compId: string | null = null;
       if (s.activeTabId !== 'main') {
         compId = s.activeTabId;
-        const comp = s.nodes.find((n) => n.id === compId);
+        const comp = findNodeById(s.nodes, compId);
         if (comp?.data?.composite) {
           newNode = !comp.data.composite.expanded ? { ...node, hidden: true } : node;
         }
@@ -2628,7 +2628,7 @@ export const useGraphStore = create<FlowStore>()(
     },
     ungroup: (id) => {
       if (get().allLocked) return;
-      const node = get().nodes.find((n) => n.id === id);
+      const node = findNodeById(get().nodes, id);
       if (!node?.data?.composite) return;
       const firstChildId = node.data.composite.childIds[0];
       // 组合节点的注释:解除编组后合并到第一个子节点
@@ -2672,7 +2672,7 @@ export const useGraphStore = create<FlowStore>()(
     },
     toggleComposite: (id) => {
       if (get().allLocked) return;
-      const node = get().nodes.find((n) => n.id === id);
+      const node = findNodeById(get().nodes, id);
       if (!node?.data?.composite) return;
       get().markHistory();
       if (node.data.composite.expanded) {
@@ -2705,7 +2705,7 @@ export const useGraphStore = create<FlowStore>()(
       // 确定布局范围:全画布可见节点 或 组合的直接子节点
       let targetIds: Set<string>;
       if (scope?.compositeId) {
-        const comp = s.nodes.find((n) => n.id === scope.compositeId);
+        const comp = findNodeById(s.nodes, scope.compositeId);
         if (!comp?.data?.composite) return;
         targetIds = new Set(comp.data.composite.childIds);
       } else {
