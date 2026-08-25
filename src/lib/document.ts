@@ -152,6 +152,26 @@ export function pickGraphNodesEdges(graph: unknown): { nodes: FlowNode[]; edges:
   return pickNodesEdges(graph);
 }
 
+/** 从文档数据中提取参与方(v4 document.participants;旧格式为空数组) */
+export function extractParticipants(input: unknown): unknown[] {
+  const doc = ((input as Record<string, unknown> | undefined)?.document ??
+    (input as Record<string, unknown> | undefined)?.project ??
+    input ??
+    {}) as Record<string, unknown>;
+  const arr = doc.participants;
+  return Array.isArray(arr) ? arr : [];
+}
+
+/** 从文档数据中提取组织(v4 document.organizations;旧格式为空数组) */
+export function extractOrganizations(input: unknown): unknown[] {
+  const doc = ((input as Record<string, unknown> | undefined)?.document ??
+    (input as Record<string, unknown> | undefined)?.project ??
+    input ??
+    {}) as Record<string, unknown>;
+  const arr = doc.organizations;
+  return Array.isArray(arr) ? arr : [];
+}
+
 // ---- Migration: Legacy Project v2 → 当前 Document ----
 
 /**

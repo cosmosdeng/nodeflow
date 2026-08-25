@@ -24,6 +24,9 @@ import {
   type Annotation,
   type AnnotationTarget,
   type Stage,
+  type Participant,
+  type Organization,
+  type ParticipantType,
   DOCUMENT_COLORS,
   createDefaultNode,
   uid,
@@ -66,6 +69,8 @@ import { findStageEmptySpot, pushNodesAwayFromBox, pushOutOfRect, rectOverlaps, 
 import {
   buildProjectDocumentV3,
   detectDocumentFormat,
+  extractOrganizations,
+  extractParticipants,
   futureVersionMessage,
   importLegacyExportToDocument,
   migrateProjectV2ToDocument,
@@ -116,6 +121,10 @@ interface FlowStore extends GraphState {
   annotations: Annotation[];
   /** 当前活动文档的流程阶段域(Stage) */
   stages: Stage[];
+  /** 当前活动文档的参与方 */
+  participants: Participant[];
+  /** 当前活动文档的组织 */
+  organizations: Organization[];
   /** 长按进入域时的闪烁反馈:正在闪烁的阶段域 id(700ms 后自动清除) */
   stageFlashId: string | null;
   /** 最近一次项目加载失败的用户可见错误信息(null 表示无) */
@@ -489,7 +498,7 @@ function docKey(id: string): string {
 }
 
 /** 保存单个文档数据(仅图数据 + 内部画布标签) */
-function persistDocument(doc: Pick<GraphDocument, 'id' | 'nodes' | 'edges' | 'viewport' | 'annotations' | 'stages' | 'compositeTabs' | 'activeTabId'>) {
+function persistDocument(doc: Pick<GraphDocument, 'id' | 'nodes' | 'edges' | 'viewport' | 'annotations' | 'stages' | 'participants' | 'organizations' | 'compositeTabs' | 'activeTabId'>) {
   try {
     // 普通节点(非组合)的 draggable 是编辑文字的临时态,不持久化;保存时强制可拖,避免编辑态卡住导致刷新后无法拖拽
     const nodes = doc.nodes.map((n) => {
@@ -505,6 +514,8 @@ function persistDocument(doc: Pick<GraphDocument, 'id' | 'nodes' | 'edges' | 'vi
         viewport: doc.viewport,
         annotations: doc.annotations,
         stages: doc.stages,
+        participants: doc.participants,
+        organizations: doc.organizations,
         compositeTabs: doc.compositeTabs,
         activeTabId: doc.activeTabId,
       }),
@@ -517,12 +528,12 @@ function persistDocument(doc: Pick<GraphDocument, 'id' | 'nodes' | 'edges' | 'vi
 /** 加载单个文档数据,返回不含历史/脏标记的图数据(缺省返回空图) */
 function loadPersistedDocument(id: string): Pick<
   GraphDocument,
-  'nodes' | 'edges' | 'viewport' | 'annotations' | 'stages' | 'compositeTabs' | 'activeTabId'
+  'nodes' | 'edges' | 'viewport' | 'annotations' | 'stages' | 'participants' | 'organizations' | 'compositeTabs' | 'activeTabId'
 > {
   try {
     const raw = localStorage.getItem(docKey(id));
     if (!raw) {
-      return { nodes: [], edges: [], viewport: { x: 0, y: 0, zoom: 1 }, annotations: [], stages: [], compositeTabs: [], activeTabId: 'main' };
+      return { nodes: [], edges: [], viewport: { x: 0, y: 0, zoom: 1 }, annotations: [], stages: [], participants: [], organizations: [], compositeTabs: [], activeTabId: 'main' };
     }
     const data = JSON.parse(raw);
     const rawNodes: FlowNode[] = Array.isArray(data.nodes) ? data.nodes : [];
@@ -534,11 +545,13 @@ function loadPersistedDocument(id: string): Pick<
       viewport: data.viewport ?? { x: 0, y: 0, zoom: 1 },
       annotations: Array.isArray(data.annotations) ? data.annotations : [],
       stages: Array.isArray(data.stages) ? data.stages : [],
+      participants: Array.isArray(data.participants) ? data.participants : [],
+      organizations: Array.isArray(data.organizations) ? data.organizations : [],
       compositeTabs: Array.isArray(data.compositeTabs) ? data.compositeTabs : [],
       activeTabId: data.activeTabId ?? 'main',
     };
   } catch {
-    return { nodes: [], edges: [], viewport: { x: 0, y: 0, zoom: 1 }, annotations: [], stages: [], compositeTabs: [], activeTabId: 'main' };
+    return { nodes: [], edges: [], viewport: { x: 0, y: 0, zoom: 1 }, annotations: [], stages: [], participants: [], organizations: [], compositeTabs: [], activeTabId: 'main' };
   }
 }
 
@@ -587,6 +600,8 @@ function buildInitialDocuments(): { docs: GraphDocument[]; activeId: string } {
         viewport: data.viewport,
         annotations: data.annotations,
         stages: data.stages,
+        participants: Array.isArray(data.participants) ? data.participants : [],
+        organizations: Array.isArray(data.organizations) ? data.organizations : [],
         compositeTabs: data.compositeTabs,
         activeTabId: data.activeTabId,
         past: [],
@@ -610,6 +625,8 @@ function buildInitialDocuments(): { docs: GraphDocument[]; activeId: string } {
     viewport: legacy?.viewport ?? seedGraph.viewport,
     annotations: Array.isArray(legacy?.annotations) ? legacy.annotations : [],
     stages: [],
+    participants: [],
+    organizations: [],
     compositeTabs: [],
     activeTabId: 'main',
     past: [],
@@ -1087,6 +1104,8 @@ function syncActiveDoc(get: () => FlowStore, rawSet: (p: unknown) => void) {
             viewport: state.viewport,
             annotations: state.annotations,
             stages: state.stages,
+            participants: state.participants,
+            organizations: state.organizations,
             compositeTabs: state.compositeTabs,
             activeTabId: state.activeTabId,
             past: state.past,
@@ -1115,6 +1134,8 @@ export const useGraphStore = create<FlowStore>()(
     viewport: initialActiveDoc?.viewport ?? seedGraph.viewport,
     annotations: initialActiveDoc?.annotations ?? [],
     stages: initialActiveDoc?.stages ?? [],
+    participants: initialActiveDoc?.participants ?? [],
+    organizations: initialActiveDoc?.organizations ?? [],
     stageFlashId: null,
     loadError: null,
     annotAutoEditId: null,
@@ -1261,6 +1282,8 @@ export const useGraphStore = create<FlowStore>()(
             viewport: s.viewport,
             annotations: s.annotations,
             stages: s.stages,
+            participants: s.participants,
+            organizations: s.organizations,
             compositeTabs: s.compositeTabs,
             activeTabId: s.activeTabId,
             at: Date.now(),
@@ -1284,6 +1307,8 @@ export const useGraphStore = create<FlowStore>()(
               viewport: s.viewport,
               annotations: s.annotations,
               stages: s.stages,
+              participants: s.participants,
+              organizations: s.organizations,
               compositeTabs: s.compositeTabs,
               activeTabId: s.activeTabId,
               at: Date.now(),
@@ -1294,6 +1319,8 @@ export const useGraphStore = create<FlowStore>()(
           viewport: prev.viewport,
           annotations: prev.annotations ?? [],
           stages: prev.stages ?? [],
+          participants: prev.participants ?? [],
+          organizations: prev.organizations ?? [],
           ...restoreTabsFromSnapshot(s, prev),
         };
       });
@@ -1314,6 +1341,8 @@ export const useGraphStore = create<FlowStore>()(
               viewport: s.viewport,
               annotations: s.annotations,
               stages: s.stages,
+              participants: s.participants,
+              organizations: s.organizations,
               compositeTabs: s.compositeTabs,
               activeTabId: s.activeTabId,
               at: Date.now(),
@@ -1324,6 +1353,8 @@ export const useGraphStore = create<FlowStore>()(
           viewport: next.viewport,
           annotations: next.annotations ?? [],
           stages: next.stages ?? [],
+          participants: next.participants ?? [],
+          organizations: next.organizations ?? [],
           ...restoreTabsFromSnapshot(s, next),
         };
       });
@@ -2004,7 +2035,7 @@ export const useGraphStore = create<FlowStore>()(
     clearGraph: () => {
       if (get().allLocked) return;
       get().markHistory();
-      set({ nodes: [], edges: [], annotations: [], stages: [], compositeTabs: [], activeTabId: 'main' });
+      set({ nodes: [], edges: [], annotations: [], stages: [], participants: [], organizations: [], compositeTabs: [], activeTabId: 'main' });
     },
 
     loadGraph: (data) => {
@@ -2016,6 +2047,8 @@ export const useGraphStore = create<FlowStore>()(
         viewport: data.viewport,
         annotations: data.annotations ?? [],
         stages: data.stages ?? [],
+        participants: data.participants ?? [],
+        organizations: data.organizations ?? [],
         selected: null,
         compositeTabs: [],
         activeTabId: 'main',
@@ -2031,6 +2064,8 @@ export const useGraphStore = create<FlowStore>()(
         viewport: { x: 0, y: 0, zoom: 1 },
         annotations: [],
         stages: [],
+        participants: [],
+        organizations: [],
         selected: null,
         compositeTabs: [],
         activeTabId: 'main',
@@ -2171,6 +2206,8 @@ export const useGraphStore = create<FlowStore>()(
           viewport: norm.viewport,
           annotations: norm.annotations,
           stages: norm.stages,
+          participants: extractParticipants(data) as Participant[],
+          organizations: extractOrganizations(data) as Organization[],
           compositeTabs: norm.compositeTabs,
           activeTabId: norm.activeTabId,
           past: [],
@@ -2191,6 +2228,8 @@ export const useGraphStore = create<FlowStore>()(
         viewport: doc.viewport,
         annotations: doc.annotations,
         stages: doc.stages,
+        participants: doc.participants,
+        organizations: doc.organizations,
         compositeTabs: doc.compositeTabs,
         activeTabId: doc.activeTabId,
         past: doc.past,
@@ -2221,6 +2260,8 @@ export const useGraphStore = create<FlowStore>()(
         viewport: { x: 0, y: 0, zoom: 1 },
         annotations: [],
         stages: [],
+        participants: [],
+        organizations: [],
         compositeTabs: [],
         activeTabId: 'main',
         past: [],
@@ -2236,6 +2277,8 @@ export const useGraphStore = create<FlowStore>()(
         viewport: { x: 0, y: 0, zoom: 1 },
         annotations: [],
         stages: [],
+        participants: [],
+        organizations: [],
         compositeTabs: [],
         activeTabId: 'main',
         past: [],
@@ -2263,6 +2306,8 @@ export const useGraphStore = create<FlowStore>()(
         viewport: target.viewport,
         annotations: target.annotations,
         stages: target.stages,
+        participants: target.participants ?? [],
+        organizations: target.organizations ?? [],
         compositeTabs: target.compositeTabs,
         activeTabId: target.activeTabId,
         past: target.past,
@@ -2299,6 +2344,8 @@ export const useGraphStore = create<FlowStore>()(
           viewport: { x: 0, y: 0, zoom: 1 },
           annotations: [],
           stages: [],
+          participants: [],
+          organizations: [],
           compositeTabs: [],
           activeTabId: 'main',
           past: [],
@@ -2314,6 +2361,8 @@ export const useGraphStore = create<FlowStore>()(
           viewport: { x: 0, y: 0, zoom: 1 },
           annotations: [],
           stages: [],
+          participants: [],
+          organizations: [],
           compositeTabs: [],
           activeTabId: 'main',
           past: [],

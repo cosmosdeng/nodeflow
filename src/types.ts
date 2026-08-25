@@ -3,6 +3,31 @@ import type { Node, Edge } from '@xyflow/react';
 /** 节点执行主体类型 */
 export type ActorType = 'human' | 'machine' | 'hybrid';
 
+/** 参与方(流程责任主体)类型 */
+export type ParticipantType =
+  | 'person'
+  | 'role'
+  | 'organization'
+  | 'department'
+  | 'machine'
+  | 'software'
+  | 'ai-agent';
+
+/** 参与方(流程责任主体) */
+export interface Participant {
+  id: string;
+  name: string;
+  type: ParticipantType;
+  /** 所属组织 id(可选) */
+  organizationId?: string;
+}
+
+/** 组织(参与方的语义归属分组) */
+export interface Organization {
+  id: string;
+  name: string;
+}
+
 /** 中间产物类型 */
 export type ArtifactKind = 'document' | 'image' | 'video' | 'audio' | 'code' | 'data' | 'other';
 
@@ -60,6 +85,8 @@ export interface FlowNodeData {
   composite?: CompositeMeta;
   /** 网关节点元数据(存在即表示该节点是 BPMN 网关) */
   gateway?: GatewayMeta;
+  /** 流程参与方 id(可选,指向 Participant.id;仅语义绑定,不影响几何) */
+  participantId?: string;
   [key: string]: unknown;
 }
 
@@ -132,6 +159,10 @@ export interface GraphSnapshot {
   annotations?: Annotation[];
   /** 快照创建时的流程阶段域 */
   stages?: Stage[];
+  /** 快照创建时的参与方 */
+  participants?: Participant[];
+  /** 快照创建时的组织 */
+  organizations?: Organization[];
   /** 快照创建时的组合标签页状态(用于撤销/重做时联动恢复) */
   compositeTabs?: string[];
   /** 快照创建时的激活标签页 id */
@@ -167,6 +198,10 @@ export interface GraphDocument {
   annotations: Annotation[];
   /** 该文档的流程阶段域 */
   stages: Stage[];
+  /** 该文档的参与方 */
+  participants: Participant[];
+  /** 该文档的组织 */
+  organizations: Organization[];
   /** 该文档内已打开的组合内部画布标签 */
   compositeTabs: string[];
   /** 该文档内当前激活的标签页:'main' 或组合节点 id */
