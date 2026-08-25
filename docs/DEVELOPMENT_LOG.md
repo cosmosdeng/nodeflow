@@ -2,6 +2,15 @@
 
 > 按时间倒序记录开发历程。新功能、重要修复、里程碑都应在此追加。
 
+## 2026-08-25 · P5-07 Edge Domain 抽取(完成)
+
+新建 `lib/edge.ts` 连线领域纯逻辑层(连线路径计算已在 `lib/edgePath.ts`)。
+- 新增纯函数:`createFlowEdge`(创建连线,可覆盖 data 与显式 id)、`canConnect`(端口连通性)
+- graphStore 改用:`onConnect` / `insertNodeOnEdge`(upstream/downstream 创建)
+- 新增 3 测试(创建默认/覆盖 id 与 data / 连通性),完整套件 122 → **125 用例通过**;tsc / build 通过
+
+---
+
 ## 2026-08-25 · P5-06 Annotation / Artifact Domain 抽取(完成)
 
 新建 `lib/annotation.ts` 与 `lib/artifact.ts`,抽取注释与中间产物的纯业务逻辑。

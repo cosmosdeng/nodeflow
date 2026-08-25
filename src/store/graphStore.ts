@@ -61,6 +61,7 @@ import {
   toggleAnnotationCollapsed as toggleAnnotationCollapsedIn,
 } from '../lib/annotation';
 import { setEdgeArtifact, updateEdgeArtifact } from '../lib/artifact';
+import { createFlowEdge } from '../lib/edge';
 
 const SAVE_KEY = 'nodeflow:graph:v1';
 const PREFS_KEY = 'nodeflow:prefs:v1';
@@ -1344,15 +1345,12 @@ export const useGraphStore = create<FlowStore>()(
     onConnect: (conn) => {
       if (get().allLocked) return;
       get().markHistory();
-      const edge: FlowEdge = {
-        id: uid('edge'),
-        source: conn.source!,
-        sourceHandle: conn.sourceHandle ?? undefined,
-        target: conn.target!,
-        targetHandle: conn.targetHandle ?? undefined,
-        type: 'flow',
-        data: { label: '', artifact: null },
-      };
+      const edge = createFlowEdge(
+        conn.source!,
+        conn.sourceHandle ?? undefined,
+        conn.target!,
+        conn.targetHandle ?? undefined,
+      );
       set((s) => ({ edges: [...s.edges, edge] }));
       // 若在塌缩组合内部画布中新增内部连线,同步隐藏状态
       refreshCompositeHidden(get, set);
@@ -2060,24 +2058,8 @@ export const useGraphStore = create<FlowStore>()(
       const { label = '', artifact = null } = edge.data ?? {};
       const upstreamId = uid('edge');
       const downstreamId = uid('edge');
-      const upstream: FlowEdge = {
-        id: upstreamId,
-        source: edge.source,
-        sourceHandle: edge.sourceHandle,
-        target: newNode.id,
-        targetHandle: 'in_1',
-        type: 'flow',
-        data: { label, artifact },
-      };
-      const downstream: FlowEdge = {
-        id: downstreamId,
-        source: newNode.id,
-        sourceHandle: 'out_1',
-        target: edge.target,
-        targetHandle: edge.targetHandle,
-        type: 'flow',
-        data: { label: '', artifact: null },
-      };
+      const upstream = createFlowEdge(edge.source, edge.sourceHandle, newNode.id, 'in_1', { label, artifact }, upstreamId);
+      const downstream = createFlowEdge(newNode.id, 'out_1', edge.target, edge.targetHandle, undefined, downstreamId);
       set((st) => ({
         edges: st.edges.filter((e) => e.id !== edgeId).concat(upstream, downstream),
         nodes: compId
