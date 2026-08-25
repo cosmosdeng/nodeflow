@@ -52,6 +52,15 @@ import {
   computeStageMinSize,
   detachNodeIdsFromStages,
 } from '../lib/stage';
+import {
+  annotationTargetMatches,
+  annotationTargetsEdge,
+  annotationTargetsNode,
+  anyAnnotationExpanded,
+  createAnnotation,
+  toggleAnnotationCollapsed as toggleAnnotationCollapsedIn,
+} from '../lib/annotation';
+import { setEdgeArtifact, updateEdgeArtifact } from '../lib/artifact';
 
 const SAVE_KEY = 'nodeflow:graph:v1';
 const PREFS_KEY = 'nodeflow:prefs:v1';
@@ -1119,29 +1128,6 @@ function edgeReferencesNode(e: FlowEdge, nodeId: string): boolean {
   return srcPath.includes(nodeId) || tgtPath.includes(nodeId);
 }
 
-/** 判断注释的归属是否引用了某节点(节点归属,或其归属的边连接了该节点) */
-function annotationTargetsNode(a: Annotation, nodeId: string): boolean {
-  if (a.target.kind === 'node' && a.target.nodeId === nodeId) return true;
-  return false;
-}
-
-/** 判断两个注释归属是否指向同一主体 */
-function annotationTargetMatches(a: AnnotationTarget, b: AnnotationTarget): boolean {
-  if (a.kind === 'canvas' && b.kind === 'canvas') return a.tabId === b.tabId;
-  if (a.kind === 'node' && b.kind === 'node') return a.nodeId === b.nodeId;
-  if (a.kind === 'edge' && b.kind === 'edge') return a.edgeId === b.edgeId;
-  if (a.kind === 'artifact' && b.kind === 'artifact') return a.edgeId === b.edgeId;
-  return false;
-}
-
-/** 判断注释的归属是否引用了某条边 */
-function annotationTargetsEdge(a: Annotation, edgeId: string): boolean {
-  if (a.target.kind === 'edge' || a.target.kind === 'artifact') {
-    return a.target.edgeId === edgeId;
-  }
-  return false;
-}
-
 /** 子节点被删除后,从所有组合的 childIds 中移除该 id */
 function removeChildFromComposites(
   get: () => FlowStore,
@@ -1749,14 +1735,7 @@ export const useGraphStore = create<FlowStore>()(
       if (already) return '';
       get().markHistory();
       const id = uid('annot');
-      const annot: Annotation = {
-        id,
-        title: '',
-        content: '',
-        target,
-        collapsed: false,
-        position,
-      };
+      const annot = createAnnotation(id, target, position);
       set((st) => ({
         annotations: [...st.annotations, annot],
         annotAutoEditId: id,
@@ -1776,11 +1755,7 @@ export const useGraphStore = create<FlowStore>()(
       set((s) => ({ annotations: s.annotations.filter((a) => a.id !== id) }));
     },
     toggleAnnotationCollapsed: (id) => {
-      set((s) => ({
-        annotations: s.annotations.map((a) =>
-          a.id === id ? { ...a, collapsed: !a.collapsed } : a,
-        ),
-      }));
+      set((s) => ({ annotations: toggleAnnotationCollapsedIn(s.annotations, id) }));
     },
     setAnnotationPosition: (id, position, commitHistory) => {
       // 拖拽过程不写历史,结束时(commitHistory=true)记录一次
@@ -1794,8 +1769,7 @@ export const useGraphStore = create<FlowStore>()(
     toggleAllAnnotations: () => {
       const s = get();
       // 若存在任意展开的注释 → 全部收起;否则全部展开
-      const anyExpanded = s.annotations.some((a) => !a.collapsed);
-      const nextCollapsed = anyExpanded;
+      const nextCollapsed = anyAnnotationExpanded(s.annotations);
       set((s2) => ({
         annotations: s2.annotations.map((a) => ({ ...a, collapsed: nextCollapsed })),
       }));
@@ -2144,31 +2118,14 @@ export const useGraphStore = create<FlowStore>()(
       if (get().allLocked) return;
       get().markHistory();
       set((s) => ({
-        edges: s.edges.map((e) =>
-          e.id === edgeId
-            ? {
-                ...e,
-                data: { ...(e.data ?? { label: '', artifact: null }), artifact } as FlowEdgeData,
-              }
-            : e,
-        ),
+        edges: s.edges.map((e) => (e.id === edgeId ? setEdgeArtifact(e, artifact) : e)),
       }));
     },
     updateArtifact: (edgeId, patch) => {
       if (get().allLocked) return;
       get().markHistory();
       set((s) => ({
-        edges: s.edges.map((e) =>
-          e.id === edgeId && e.data?.artifact
-            ? {
-                ...e,
-                data: {
-                  ...e.data,
-                  artifact: { ...e.data.artifact, ...patch },
-                } as FlowEdgeData,
-              }
-            : e,
-        ),
+        edges: s.edges.map((e) => (e.id === edgeId ? updateEdgeArtifact(e, patch) : e)),
       }));
     },
 

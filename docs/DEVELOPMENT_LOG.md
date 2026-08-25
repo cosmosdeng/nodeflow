@@ -2,6 +2,16 @@
 
 > 按时间倒序记录开发历程。新功能、重要修复、里程碑都应在此追加。
 
+## 2026-08-25 · P5-06 Annotation / Artifact Domain 抽取(完成)
+
+新建 `lib/annotation.ts` 与 `lib/artifact.ts`,抽取注释与中间产物的纯业务逻辑。
+- `lib/annotation.ts`:`annotationTargetMatches` / `annotationTargetsNode` / `annotationTargetsEdge`(自 graphStore 迁入)、`anyAnnotationExpanded`(一键收起判定)、`createAnnotation`(创建)、`toggleAnnotationCollapsed`(切换折叠)
+- `lib/artifact.ts`:`setEdgeArtifact` / `updateEdgeArtifact` / `hasArtifact`
+- graphStore 改用:`addAnnotation` / `toggleAnnotationCollapsed` / `toggleAllAnnotations` / `setArtifact` / `updateArtifact`(等价替换);删除 3 个内部注释辅助函数
+- 新增 8 测试(注释归属/创建/折叠判定 + 产物设置/更新/判断),完整套件 114 → **122 用例通过**;tsc / build 通过
+
+---
+
 ## 2026-08-25 · P5-05 Stage Domain 抽取(完成)
 
 新建 `lib/stage.ts` 阶段域领域纯逻辑层,graphStore 的 5 个 stage action 改用 domain 函数。
