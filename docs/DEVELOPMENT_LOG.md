@@ -2,6 +2,27 @@
 
 > 按时间倒序记录开发历程。新功能、重要修复、里程碑都应在此追加。
 
+## 2026-08-25 · F1-02 Participant & Swimlane 实施(完成)
+
+在 F1-01 v3 冻结设计基础上,按 A~G 安全递增实施 Participant / Organization / Swimlane。
+- **F1-02A Domain Model**:`ParticipantType`/`Participant`/`Organization` 类型 + `FlowNodeData.participantId`;`lib/participant.ts` 纯逻辑(validateParticipants / resolveParticipant / detachParticipantFromNodes / detachOrganizationFromParticipants / organizationOf / isAssignedTo)。graphStore 顶层 state + documents + history + persistence 同步。
+- **F1-02B Persistence/Migration**:`CURRENT_PROJECT_VERSION` 3→4;`serializeProject` 输出 v4(`document` 含 participants/organizations);`buildProjectDocumentV4`(保存侧清洗);`migrateProjectV3ToDocument`(v3→v4,participants 迁移为空);`loadProject` 分流(v3 legacy→migrateV3 / v2 legacy→migrateV2 / v4 current);Future Gate 保持(>4 拒绝)。
+- **F1-02C Outliner**:`ParticipantsPanel`(组织树 + 参与方新增/编辑/删除 + 未分配分组);Toolbar「👤 参与方」开关。
+- **F1-02D Assign**:`assignParticipant`(显式 Assign,只改 participantId 不改 position,atomic undo);PropertiesPanel 参与方下拉。
+- **F1-02E Optional Swimlane**:`lib/arrange.ts` `computeSwimlaneBounds`(derived bounds,不持久化);`swimlaneEnabled`/`toggleSwimlane`(纯展示开关,不改 graph/position/participant);FlowCanvas swimlane-layer 渲染。
+- **F1-02F Arrange**:`arrangeSwimlanes` 纯函数(只移动有 participant 的 node,不改 participantId/stage membership/edge semantics,deterministic);`arrangeAllSwimlanes`(单 undo,不 autoGrowStage/global layout);Toolbar「⇣ 整理泳道」。
+- **F1-02G Integration**:`graphStore.participant.test.ts` 7 行为测试(Assign/Drag/Delete/Arrange/Stage/Composite/Gateway invariant)。
+
+验证:
+- ✅ tsc 通过
+- ✅ **166 测试全部通过**(159 + 7 行为测试)
+- ✅ build 通过
+- ✅ 无 lint 错误
+- ✅ 未新增架构层(仅 lib/participant.ts + lib/arrange.ts 纯函数);未建 laneId 持久化绑定;Manual drag 不隐式改 participant;Arrange 不触发 autoGrowStage/global layout
+- ✅ dev server + preview 正常运行
+
+---
+
 ## 2026-08-25 · P6-04~07 Architecture Hardening 实施(完成)
 
 在 P6 设计(只读)基础上完成 Compatibility Foundation + Migration + Version Gate + Validation + Persistence Safety 实施。
