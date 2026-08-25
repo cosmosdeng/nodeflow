@@ -2,6 +2,16 @@
 
 > 按时间倒序记录开发历程。新功能、重要修复、里程碑都应在此追加。
 
+## 2026-08-25 · P5 收尾 · Geometry 抽取(完成)
+
+新建 `lib/geometry.ts` 几何工具层,从 graphStore 迁出纯几何逻辑。
+- 迁入:`Rect` / `rectOverlaps`(重叠判定)、`pushOutOfRect`(最小位移推出)、`findStageEmptySpot`(空位寻找)、`pushNodesAwayFromBox`(组合展开推挤)
+- graphStore 删除 127 行内部几何函数,改用 domain 函数(expandComposite / addStage / autoGrowStage)
+- 新增 4 测试(重叠/推出/空位),完整套件 125 → **129 用例通过**;tsc / build 通过
+- 至此 P5 系列核心领域(Graph/Composite/Gateway/Stage/Annotation/Artifact/Edge/Geometry)均已抽取为纯逻辑层并测试覆盖
+
+---
+
 ## 2026-08-25 · P5-07 Edge Domain 抽取(完成)
 
 新建 `lib/edge.ts` 连线领域纯逻辑层(连线路径计算已在 `lib/edgePath.ts`)。
