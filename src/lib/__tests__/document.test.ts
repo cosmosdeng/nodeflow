@@ -1,20 +1,29 @@
 import { describe, expect, it } from 'vitest';
 import {
+  buildProjectDocumentV4,
   CURRENT_PROJECT_VERSION,
   detectDocumentFormat,
   futureVersionMessage,
   importLegacyExportToDocument,
   migrateProjectV2ToDocument,
+  migrateProjectV3ToDocument,
   validateDocumentData,
 } from '../document';
 
 describe('lib/document 文档兼容层', () => {
   describe('format detection', () => {
-    it('识别正式 Project v3', () => {
+    it('识别正式 Project v4', () => {
+      const info = detectDocumentFormat({ format: 'nodeflow', version: CURRENT_PROJECT_VERSION, document: {} });
+      expect(info.family).toBe('project');
+      expect(info.version).toBe(CURRENT_PROJECT_VERSION);
+      expect(info.legacy).toBe(false);
+      expect(info.future).toBe(false);
+    });
+
+    it('识别 Legacy Project v3(version < current)', () => {
       const info = detectDocumentFormat({ format: 'nodeflow', version: 3, document: {} });
       expect(info.family).toBe('project');
-      expect(info.version).toBe(3);
-      expect(info.legacy).toBe(false);
+      expect(info.legacy).toBe(true);
       expect(info.future).toBe(false);
     });
 
@@ -134,6 +143,69 @@ describe('lib/document 文档兼容层', () => {
       const doc = migrateProjectV2ToDocument({ type: 'nodeflow-project', version: 2, project: { nodes: [], edges: [] } });
       const bad = validateDocumentData({ ...doc, viewport: { x: 0, y: 0, zoom: 'x' as unknown as number } });
       expect(bad.some((i) => i.field === 'viewport')).toBe(true);
+    });
+  });
+
+  describe('v4 持久化 / 迁移', () => {
+    it('buildProjectDocumentV4:包含 participants/organizations,不含历史/脏标记', () => {
+      const doc = buildProjectDocumentV4({
+        name: 'P',
+        color: '#ff0000',
+        nodes: [],
+        edges: [],
+        viewport: { x: 0, y: 0, zoom: 1 },
+        annotations: [],
+        stages: [],
+        participants: [{ id: 'p1', name: 'Artist', type: 'person' }],
+        organizations: [{ id: 'o1', name: 'Dept' }],
+        compositeTabs: [],
+        activeTabId: 'main',
+      });
+      expect(doc.participants).toEqual([{ id: 'p1', name: 'Artist', type: 'person' }]);
+      expect(doc.organizations).toEqual([{ id: 'o1', name: 'Dept' }]);
+      expect('past' in doc).toBe(false);
+      expect('dirty' in doc).toBe(false);
+    });
+
+    it('buildProjectDocumentV4:剥离 React Flow 运行时字段,保留 participantId', () => {
+      const doc = buildProjectDocumentV4({
+        name: 'P', color: '#ff0000', nodes: [], edges: [], viewport: { x: 0, y: 0, zoom: 1 },
+        annotations: [], stages: [], participants: [], organizations: [], compositeTabs: [], activeTabId: 'main',
+      });
+      const graph = doc.graph as { nodes: unknown[]; edges: unknown[] };
+      expect(graph.nodes).toEqual([]);
+      expect(graph.edges).toEqual([]);
+    });
+
+    it('migrateProjectV3ToDocument:v3 → v4(participants 迁移为空),数据保留', () => {
+      const v3 = {
+        format: 'nodeflow',
+        version: 3,
+        document: {
+          name: 'P',
+          color: '#fff',
+          graph: { nodes: [{ id: 'A' }], edges: [], annotations: [], stages: [] },
+          editor: { viewport: { x: 1, y: 2, zoom: 0.5 }, activeTabId: 'main', compositeTabs: [] },
+        },
+      };
+      const doc = migrateProjectV3ToDocument(v3);
+      expect(doc.nodes.map((n) => n.id)).toEqual(['A']);
+      expect(doc.viewport).toEqual({ x: 1, y: 2, zoom: 0.5 });
+      expect(doc.activeTabId).toBe('main');
+    });
+
+    it('migrateProjectV3ToDocument:deterministic 且不修改输入', () => {
+      const input = { format: 'nodeflow', version: 3, document: { graph: { nodes: [], edges: [] }, editor: {} } };
+      const a = migrateProjectV3ToDocument(input);
+      const b = migrateProjectV3ToDocument(input);
+      expect(a).toEqual(b);
+      expect(input).toEqual({ format: 'nodeflow', version: 3, document: { graph: { nodes: [], edges: [] }, editor: {} } });
+    });
+
+    it('future version rejection:v5+ 被拒绝', () => {
+      const info = detectDocumentFormat({ format: 'nodeflow', version: CURRENT_PROJECT_VERSION + 1, document: {} });
+      expect(info.future).toBe(true);
+      expect(futureVersionMessage(info)).toContain('升级 NodeFlow');
     });
   });
 });

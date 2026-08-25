@@ -1,4 +1,4 @@
-import type { Annotation, FlowEdge, FlowNode, Stage, ViewportState } from '../types';
+import type { Annotation, FlowEdge, FlowNode, Organization, Participant, Stage, ViewportState } from '../types';
 
 // ---- Format / Version 常量 ----
 
@@ -7,7 +7,7 @@ export const PROJECT_FORMAT = 'nodeflow';
 /** 静态导出格式标识(Export Format) */
 export const EXPORT_FORMAT = 'nodeflow-export';
 /** 当前 Project 版本(v3 起为正式 Project Format;v2 为 legacy project;v1 仅存在于 Export namespace) */
-export const CURRENT_PROJECT_VERSION = 3;
+export const CURRENT_PROJECT_VERSION = 4;
 /** 当前 Export 版本 */
 export const CURRENT_EXPORT_VERSION = 1;
 
@@ -236,8 +236,8 @@ function cleanEdgeForSave(e: FlowEdge): FlowEdge {
   return clone as FlowEdge;
 }
 
-/** 保存侧构建 v3 Project 的 document 图数据(不含历史/dirty;id 在 Runtime 决定) */
-export function buildProjectDocumentV3(input: {
+/** 保存侧构建当前 Project(v4)的 document 数据(不含历史/dirty;id 在 Runtime 决定) */
+export function buildProjectDocumentV4(input: {
   name: string;
   color: string;
   nodes: FlowNode[];
@@ -245,12 +245,16 @@ export function buildProjectDocumentV3(input: {
   viewport: ViewportState;
   annotations: Annotation[];
   stages: Stage[];
+  participants: Participant[];
+  organizations: Organization[];
   compositeTabs: string[];
   activeTabId: string;
 }): Record<string, unknown> {
   return {
     name: input.name,
     color: input.color,
+    participants: input.participants,
+    organizations: input.organizations,
     graph: {
       nodes: input.nodes.map(cleanNodeForSave),
       edges: input.edges.map(cleanEdgeForSave),
@@ -262,6 +266,29 @@ export function buildProjectDocumentV3(input: {
       activeTabId: input.activeTabId,
       compositeTabs: input.compositeTabs,
     },
+  };
+}
+
+/**
+ * 把 Legacy Project v3(format:'nodeflow', version:3)迁移为 v4:
+ * v3 无 participants/organizations,迁移为空数组;nodes/edges/... 原样保留。
+ * 纯函数 / deterministic / 不修改输入。
+ */
+export function migrateProjectV3ToDocument(input: unknown): NormalizedDocument {
+  const document = ((input as Record<string, unknown> | undefined)?.document ??
+    input ??
+    {}) as Record<string, unknown>;
+  const graph = (document.graph ?? {}) as Record<string, unknown>;
+  const editor = (document.editor ?? {}) as Record<string, unknown>;
+  const { nodes, edges } = pickNodesEdges(graph);
+  return {
+    nodes,
+    edges,
+    viewport: normalizeViewport(editor.viewport),
+    annotations: (Array.isArray(graph.annotations) ? graph.annotations : []) as Annotation[],
+    stages: (Array.isArray(graph.stages) ? graph.stages : []) as Stage[],
+    compositeTabs: Array.isArray(editor.compositeTabs) ? (editor.compositeTabs as string[]) : [],
+    activeTabId: typeof editor.activeTabId === 'string' ? editor.activeTabId : 'main',
   };
 }
 

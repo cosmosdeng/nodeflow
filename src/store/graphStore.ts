@@ -67,13 +67,14 @@ import { setEdgeArtifact, updateEdgeArtifact } from '../lib/artifact';
 import { createFlowEdge } from '../lib/edge';
 import { findStageEmptySpot, pushNodesAwayFromBox, pushOutOfRect, rectOverlaps, type Rect } from '../lib/geometry';
 import {
-  buildProjectDocumentV3,
+  buildProjectDocumentV4,
   detectDocumentFormat,
   extractOrganizations,
   extractParticipants,
   futureVersionMessage,
   importLegacyExportToDocument,
   migrateProjectV2ToDocument,
+  migrateProjectV3ToDocument,
   pickGraphNodesEdges,
   validateDocumentData,
   type NormalizedDocument,
@@ -2122,8 +2123,8 @@ export const useGraphStore = create<FlowStore>()(
       const s = get();
       const name = s.documents.find((d) => d.id === s.activeDocumentId)?.name ?? '未命名项目';
       const color = s.documents.find((d) => d.id === s.activeDocumentId)?.color ?? '#4ea1ff';
-      // 正式 Project Format v3:剥离历史/脏标记/React Flow 运行时字段
-      const document = buildProjectDocumentV3({
+      // 正式 Project Format v4:剥离历史/脏标记/React Flow 运行时字段;含 participants/organizations
+      const document = buildProjectDocumentV4({
         name,
         color,
         nodes: s.nodes,
@@ -2131,11 +2132,13 @@ export const useGraphStore = create<FlowStore>()(
         viewport: s.viewport,
         annotations: s.annotations,
         stages: s.stages,
+        participants: s.participants,
+        organizations: s.organizations,
         compositeTabs: s.compositeTabs,
         activeTabId: s.activeTabId,
       });
       return JSON.stringify(
-        { format: 'nodeflow', version: 3, exportedAt: new Date().toISOString(), document },
+        { format: 'nodeflow', version: 4, exportedAt: new Date().toISOString(), document },
         null,
         2,
       );
@@ -2165,6 +2168,13 @@ export const useGraphStore = create<FlowStore>()(
           norm = importLegacyExportToDocument(data);
           name = '导入项目';
           color = DOCUMENT_COLORS[get().documents.length % DOCUMENT_COLORS.length];
+        } else if (info.legacy && info.version === 3) {
+          // Legacy Project v3:迁移到 v4(v3 无 participants/organizations)
+          norm = migrateProjectV3ToDocument(data);
+          const document = (data as Record<string, unknown> | undefined)?.document ?? {};
+          const d = document as Record<string, unknown>;
+          name = typeof d.name === 'string' ? d.name : '未命名项目';
+          color = typeof d.color === 'string' ? d.color : DOCUMENT_COLORS[get().documents.length % DOCUMENT_COLORS.length];
         } else if (info.legacy) {
           // Legacy Project v2
           norm = migrateProjectV2ToDocument(data);
