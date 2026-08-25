@@ -67,6 +67,7 @@ import { setEdgeArtifact, updateEdgeArtifact } from '../lib/artifact';
 import { createFlowEdge } from '../lib/edge';
 import { findStageEmptySpot, pushNodesAwayFromBox, pushOutOfRect, rectOverlaps, type Rect } from '../lib/geometry';
 import { detachOrganizationFromParticipants, detachParticipantFromNodes } from '../lib/participant';
+import { arrangeSwimlanes } from '../lib/arrange';
 import {
   buildProjectDocumentV4,
   detectDocumentFormat,
@@ -222,6 +223,18 @@ interface FlowStore extends GraphState {
     kind: 'input' | 'output',
     portId: string,
   ) => void;
+
+  // ---- 泳道 (可选视觉组织,不改 geometry/语义) ----
+  /** 泳道是否开启(纯展示开关,不改任何 graph/position/participant) */
+  swimlaneEnabled: boolean;
+  /** 泳道顺序(参与方 id 数组,用户可调整) */
+  swimlaneOrder: string[];
+  /** 切换泳道 ON/OFF(不改变 node position / participantId / stage) */
+  toggleSwimlane: () => void;
+  /** 调整泳道顺序 */
+  setSwimlaneOrder: (order: string[]) => void;
+  /** Arrange into Swimlanes(显式:按 participantId 重排 node.position,不改语义,单 undo) */
+  arrangeAllSwimlanes: () => void;
 
   // ---- 参与方 / 组织 ----
   /** 新增参与方 */
@@ -1154,6 +1167,8 @@ export const useGraphStore = create<FlowStore>()(
     stages: initialActiveDoc?.stages ?? [],
     participants: initialActiveDoc?.participants ?? [],
     organizations: initialActiveDoc?.organizations ?? [],
+    swimlaneEnabled: false,
+    swimlaneOrder: [],
     stageFlashId: null,
     loadError: null,
     annotAutoEditId: null,
@@ -1886,6 +1901,33 @@ export const useGraphStore = create<FlowStore>()(
             ? { ...n, data: { ...n.data, participantId: participantId ?? undefined } }
             : n,
         ),
+      }));
+    },
+    toggleSwimlane: () => {
+      // 纯展示开关:不改变 graph / participantId / node position / stage / edge
+      set((s) => ({ swimlaneEnabled: !s.swimlaneEnabled }));
+    },
+    setSwimlaneOrder: (order) => {
+      set({ swimlaneOrder: order });
+    },
+    arrangeAllSwimlanes: () => {
+      const s = get();
+      if (s.allLocked) return;
+      get().markHistory();
+      // 只计算有 participant 的 node 的目标位置;未分配 node 保持原位
+      const positions = arrangeSwimlanes(
+        s.nodes,
+        s.edges,
+        s.participants,
+        s.swimlaneOrder.length ? s.swimlaneOrder : s.participants.map((p) => p.id),
+        s.layoutDirection,
+      );
+      if (positions.size === 0) return;
+      set((st) => ({
+        nodes: st.nodes.map((n) => {
+          const p = positions.get(n.id);
+          return p ? { ...n, position: { x: Math.round(p.x), y: Math.round(p.y) } } : n;
+        }),
       }));
     },
     autoGrowStage: (stageId) => {

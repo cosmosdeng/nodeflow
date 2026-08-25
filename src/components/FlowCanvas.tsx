@@ -23,7 +23,8 @@ import AnnotationBox from './AnnotationBox';
 import StageComponent from './StageComponent';
 import { useGraphStore } from '../store/graphStore';
 import { changeGatewayType, createGatewayNode, GATEWAY_KINDS, GATEWAY_META } from '../lib/gateway';
-import type { FlowNode, FlowEdge, EdgeStyle, Stage, GatewayType } from '../types';
+import { computeSwimlaneBounds } from '../lib/arrange';
+import { PARTICIPANT_TYPE_LABELS, type FlowNode, type FlowEdge, type EdgeStyle, type Stage, type GatewayType, type Participant } from '../types';
 
 const nodeTypes: NodeTypes = { flow: FlowNodeComponent };
 const edgeTypes: EdgeTypes = { flow: FlowEdgeComponent };
@@ -67,6 +68,9 @@ export default function FlowCanvas() {
   const stages = useGraphStore((s) => s.stages);
   const stageFlashId = useGraphStore((s) => s.stageFlashId);
   const addStage = useGraphStore((s) => s.addStage);
+  const swimlaneEnabled = useGraphStore((s) => s.swimlaneEnabled);
+  const participants = useGraphStore((s) => s.participants);
+  const swimlaneOrder = useGraphStore((s) => s.swimlaneOrder);
   const updateStage = useGraphStore((s) => s.updateStage);
   const deleteStage = useGraphStore((s) => s.deleteStage);
   const selectStage = useGraphStore((s) => s.selectStage);
@@ -192,6 +196,15 @@ export default function FlowCanvas() {
         .map((e) => ({ ...e, hidden: false })),
     };
   }, [activeTabId, nodes, edges, allLocked]);
+
+  // 泳道 derived bounds(仅当 swimlaneEnabled 时计算,不持久化、不改变任何 graph)
+  const swimlaneBounds = useMemo(
+    () =>
+      swimlaneEnabled
+        ? computeSwimlaneBounds(displayNodes, participants, swimlaneOrder, viewport)
+        : [],
+    [swimlaneEnabled, displayNodes, participants, swimlaneOrder, viewport],
+  );
 
   const handleNodeClick: NodeMouseHandler = useCallback(
     (_, node) => {
@@ -1143,6 +1156,30 @@ export default function FlowCanvas() {
             />
           ))}
         </div>
+
+        {/* 泳道(可选视觉层:derived bounds,不改 node position / participantId) */}
+        {swimlaneEnabled && (
+          <div className="swimlane-layer">
+            {swimlaneBounds.map((lane) => {
+              const part = participants.find((p) => p.id === lane.participantId);
+              const typeLabel = part ? PARTICIPANT_TYPE_LABELS[part.type] ?? part.type : '';
+              return (
+                <div
+                  key={lane.participantId}
+                  className="swimlane"
+                  style={{
+                    left: (lane.x - viewport.x) * viewport.zoom,
+                    top: (lane.y - viewport.y) * viewport.zoom,
+                    width: lane.width * viewport.zoom,
+                    height: lane.height * viewport.zoom,
+                  }}
+                >
+                  <span className="swimlane-label">{part?.name ?? '未分配'}{typeLabel ? ` · ${typeLabel}` : ''}</span>
+                </div>
+              );
+            })}
+          </div>
+        )}
       </ReactFlow>
       <ContextMenu menu={contextMenu} onClose={closeContextMenu} />
       <ConfirmDialog dialog={confirmDialog} onClose={closeConfirmDialog} />

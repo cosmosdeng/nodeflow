@@ -88,6 +88,9 @@ export default function Toolbar({
   const loadProject = useGraphStore((s) => s.loadProject);
   const closeDocument = useGraphStore((s) => s.closeDocument);
   const saveDocument = useGraphStore((s) => s.saveDocument);
+  const swimlaneEnabled = useGraphStore((s) => s.swimlaneEnabled);
+  const toggleSwimlane = useGraphStore((s) => s.toggleSwimlane);
+  const arrangeAllSwimlanes = useGraphStore((s) => s.arrangeAllSwimlanes);
   const { screenToFlowPosition, fitView, getViewport, setViewport } = useReactFlow();
 
   const handleAddNode = () => {
@@ -467,6 +470,16 @@ export default function Toolbar({
       </button>
       <button className={`tb-btn ${showParticipants ? 'active' : ''}`} onClick={onToggleParticipants}>
         👤 参与方
+      </button>
+      <button
+        className={`tb-btn ${swimlaneEnabled ? 'active' : ''}`}
+        onClick={toggleSwimlane}
+        title="泳道显示开关(不改变节点位置/参与方)"
+      >
+        🏊 泳道
+      </button>
+      <button className="tb-btn" onClick={arrangeAllSwimlanes} title="把节点按参与方整理到泳道(只改位置,不改参与方)">
+        ⇣ 整理泳道
       </button>
 
       <span className="sep" />
