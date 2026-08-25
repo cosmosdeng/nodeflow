@@ -2,6 +2,22 @@
 
 > 按时间倒序记录开发历程。新功能、重要修复、里程碑都应在此追加。
 
+## 2026-08-25 · P4 架构加固 — P4-01 基线 + P4-02 Graph Validation
+
+**P4-01 项目基线**:新建 `docs/P4_BASELINE.md`,记录 NodeFlow 当前真实状态(tsc / test / build 通过;`graphStore.ts` 2907 行;45 用例;关键入口定位),作为后续重构对照基准。未修改任何业务代码。
+
+**P4-02 Graph Validation**:新增 `src/lib/graphValidation.ts` 纯检查函数 `validateGraph()`,回答「Graph 是否合法」,与 React / Zustand / Electron 解耦,只发现问题不自动修复。
+- ID 唯一(Node / Edge / Stage / Annotation)
+- Edge:source / target 存在性、handle 引用合法性(普通端口 + `cid:` 聚合端口)
+- Composite:child 存在、不含自己、无重复 child
+- Gateway:type 合法、至少 1 输入 + 1 输出分支、端口 id 唯一
+- Stage:node 引用存在
+- Annotation:node / edge target 存在
+
+**测试**:新增 `src/lib/__tests__/graphValidation.test.ts` 17 用例(空图 / 单节点 / 正常边 / 悬空边 / 重复 ID / 非法 handle / Composite self-ref / Stage 非法引用 / Annotation 非法 target / Gateway 非法 type 与结构 / cid: handle),完整套件 45 → **62 用例通过**;tsc / build 通过。
+
+---
+
 ## 2026-08-24 · 修复网关连线锚点与端点错位
 
 **问题**:网关增删输入 / 输出端点后,连线锚点与端点视觉位置错位(截图确认)。
