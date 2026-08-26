@@ -2,6 +2,14 @@
 
 > 按时间倒序记录开发历程。新功能、重要修复、里程碑都应在此追加。
 
+## 2026-08-26 · 泳道坐标修复 + 阶段域注释(完成)
+
+- **泳道显示修复**:修复两个坐标 bug——`computeSwimlaneBounds` 误把 viewport 平移当原点(改为固定流坐标起点 START_X/START_Y)、FlowCanvas 渲染转换方向错误(`(lane.x - viewport.x)*zoom` 应为 `lane.x*zoom + viewport.x`,与 StageComponent 一致)。修复后参与方对应的泳道正常显示(空 lane 显示最小高度带)。
+- **阶段域支持注释**:`AnnotationTarget` 新增 `{kind:'stage', stageId}`;`lib/annotation.ts` 支持 stage 归属判定 + 去重(一个主体一条注释);`graphStore.deleteStage` 清理指向该阶段的注释;`StageComponent` hover 显示 `📌` 注释按钮(参照节点交互);`FlowCanvas` 在 annotation-layer 渲染 stage 归属注释(定位在域框下方)。新增 `annotation.test.ts` stage 用例。
+- 验证:167 测试通过;tsc / build 通过;已推送 origin/main。
+
+---
+
 ## 2026-08-25 · F1-02 Participant & Swimlane 实施(完成)
 
 在 F1-01 v3 冻结设计基础上,按 A~G 安全递增实施 Participant / Organization / Swimlane。
