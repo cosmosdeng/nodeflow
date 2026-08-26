@@ -59,6 +59,7 @@ import {
   annotationTargetMatches,
   annotationTargetsEdge,
   annotationTargetsNode,
+  annotationTargetsStage,
   anyAnnotationExpanded,
   createAnnotation,
   toggleAnnotationCollapsed as toggleAnnotationCollapsedIn,
@@ -1770,6 +1771,8 @@ export const useGraphStore = create<FlowStore>()(
       get().markHistory();
       set((s) => ({
         stages: s.stages.filter((st) => st.id !== id),
+        // 清理指向该阶段域的注释
+        annotations: s.annotations.filter((a) => !annotationTargetsStage(a, id)),
       }));
     },
     selectStage: (id) => {

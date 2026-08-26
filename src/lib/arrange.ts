@@ -22,13 +22,14 @@ export interface SwimlaneBounds {
 /**
  * 计算每条泳道的 derived bounds(不持久化)。
  * 依据:node.participantId + node.position + lane order。
+ * lane 使用固定的流坐标起点(START_X/START_Y),不依赖 viewport 平移。
  * 纯函数 / deterministic。
  */
 export function computeSwimlaneBounds(
   nodes: readonly FlowNode[],
   participants: readonly Participant[],
   order: readonly string[],
-  viewport: ViewportState,
+  _viewport: ViewportState,
 ): SwimlaneBounds[] {
   // 确定 lane 顺序:order 中的有效参与方;未在 order 的参与方追加
   const orderedIds = order.filter((id) => participants.some((p) => p.id === id));
@@ -39,13 +40,13 @@ export function computeSwimlaneBounds(
 
   const visible = nodes.filter((n) => !n.hidden);
   const lanes: SwimlaneBounds[] = [];
-  let cursorY = viewport.y - START_Y;
+  let cursorY = START_Y;
   for (const pid of laneIds) {
     const members = visible.filter((n) => n.data?.participantId === pid);
     if (members.length === 0) {
       // 空 lane:保留一条最小高度带
       const height = 60;
-      lanes.push({ participantId: pid, x: viewport.x - START_X, y: cursorY, width: 200, height });
+      lanes.push({ participantId: pid, x: START_X, y: cursorY, width: 200, height });
       cursorY += height + LANE_GAP;
       continue;
     }
@@ -61,7 +62,8 @@ export function computeSwimlaneBounds(
       maxX = Math.max(maxX, n.position.x + w);
       maxY = Math.max(maxY, n.position.y + h);
     }
-    const x = minX - LANE_PAD_X;
+    // lane 的 x 取节点包围盒左缘,使 lane 紧贴其节点;高度带由 cursorY 逐条纵向排列
+    const x = minX === Infinity ? START_X : minX - LANE_PAD_X;
     const y = cursorY;
     const width = maxX - minX + LANE_PAD_X * 2;
     const height = maxY - minY + LANE_PAD_Y * 2;

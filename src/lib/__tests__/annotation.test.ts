@@ -4,6 +4,7 @@ import {
   annotationTargetMatches,
   annotationTargetsEdge,
   annotationTargetsNode,
+  annotationTargetsStage,
   anyAnnotationExpanded,
   createAnnotation,
   toggleAnnotationCollapsed,
@@ -31,6 +32,15 @@ describe('lib/annotation 注释领域', () => {
     expect(annotationTargetsEdge(edgeE, 'e')).toBe(true);
     expect(annotationTargetsEdge(artE, 'e')).toBe(true);
     expect(annotationTargetsEdge(nodeA, 'e')).toBe(false);
+  });
+
+  it('annotationTargetMatches / annotationTargetsStage:阶段域归属', () => {
+    expect(annotationTargetMatches({ kind: 'stage', stageId: 's1' }, { kind: 'stage', stageId: 's1' })).toBe(true);
+    expect(annotationTargetMatches({ kind: 'stage', stageId: 's1' }, { kind: 'stage', stageId: 's2' })).toBe(false);
+    expect(annotationTargetMatches({ kind: 'stage', stageId: 's1' }, { kind: 'node', nodeId: 's1' })).toBe(false);
+    const stageA = annot('9', { kind: 'stage', stageId: 's1' });
+    expect(annotationTargetsStage(stageA, 's1')).toBe(true);
+    expect(annotationTargetsStage(stageA, 's2')).toBe(false);
   });
 
   it('createAnnotation:创建默认不收起、空标题/内容', () => {

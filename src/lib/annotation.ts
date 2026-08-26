@@ -6,12 +6,18 @@ export function annotationTargetMatches(a: AnnotationTarget, b: AnnotationTarget
   if (a.kind === 'node' && b.kind === 'node') return a.nodeId === b.nodeId;
   if (a.kind === 'edge' && b.kind === 'edge') return a.edgeId === b.edgeId;
   if (a.kind === 'artifact' && b.kind === 'artifact') return a.edgeId === b.edgeId;
+  if (a.kind === 'stage' && b.kind === 'stage') return a.stageId === b.stageId;
   return false;
 }
 
 /** 判断注释的归属是否引用了某节点 */
 export function annotationTargetsNode(a: Annotation, nodeId: string): boolean {
   return a.target.kind === 'node' && a.target.nodeId === nodeId;
+}
+
+/** 判断注释的归属是否引用了某阶段域 */
+export function annotationTargetsStage(a: Annotation, stageId: string): boolean {
+  return a.target.kind === 'stage' && a.target.stageId === stageId;
 }
 
 /** 判断注释的归属是否引用了某条边(连线归属或产物归属都定位到边) */

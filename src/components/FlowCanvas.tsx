@@ -1103,6 +1103,12 @@ export default function FlowCanvas() {
                   pos = { x: n.position.x, y: n.position.y + h + 20 };
                 }
               }
+            } else if (t.kind === 'stage') {
+              // 阶段域注释:放在域框正下方(框线外侧)
+              const st = stages.find((x) => x.id === t.stageId);
+              if (st) {
+                pos = { x: st.x, y: st.y + st.height + 18 };
+              }
             }
             if (!pos) return null;
             const left = pos.x * viewport.zoom + viewport.x;
@@ -1168,8 +1174,8 @@ export default function FlowCanvas() {
                   key={lane.participantId}
                   className="swimlane"
                   style={{
-                    left: (lane.x - viewport.x) * viewport.zoom,
-                    top: (lane.y - viewport.y) * viewport.zoom,
+                    left: lane.x * viewport.zoom + viewport.x,
+                    top: lane.y * viewport.zoom + viewport.y,
                     width: lane.width * viewport.zoom,
                     height: lane.height * viewport.zoom,
                   }}

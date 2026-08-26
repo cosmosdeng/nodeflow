@@ -124,7 +124,8 @@ export type AnnotationTarget =
   | { kind: 'canvas'; tabId: string } // 画布归属(tabId: 'main' 或组合 id)
   | { kind: 'node'; nodeId: string } // 节点归属
   | { kind: 'edge'; edgeId: string } // 连线归属
-  | { kind: 'artifact'; edgeId: string }; // 连线中间产物归属(定位到具体连线)
+  | { kind: 'artifact'; edgeId: string } // 连线中间产物归属(定位到具体连线)
+  | { kind: 'stage'; stageId: string }; // 阶段域归属
 
 /** 注释框 */
 export interface Annotation {

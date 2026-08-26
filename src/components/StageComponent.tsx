@@ -1,6 +1,8 @@
+import { useState } from 'react';
 import type { Stage, ViewportState } from '../types';
 import EditableText from './EditableText';
 import { useGraphStore } from '../store/graphStore';
+import { annotationTargetsStage } from '../lib/annotation';
 
 interface Props {
   stage: Stage;
@@ -33,10 +35,17 @@ export default function StageComponent({
 }: Props) {
   const pendingAutoEdit = useGraphStore((s) => s.pendingAutoEdit);
   const requestAutoEdit = useGraphStore((s) => s.requestAutoEdit);
+  const annotations = useGraphStore((s) => s.annotations);
+  const addAnnotation = useGraphStore((s) => s.addAnnotation);
+  const toggleAnnotationCollapsed = useGraphStore((s) => s.toggleAnnotationCollapsed);
+  const [hovered, setHovered] = useState(false);
   const left = stage.x * viewport.zoom + viewport.x;
   const top = stage.y * viewport.zoom + viewport.y;
   const width = stage.width * viewport.zoom;
   const height = stage.height * viewport.zoom;
+
+  // 阶段域注释:最多一条(与其他主体一致)
+  const stageAnnots = annotations.filter((a) => annotationTargetsStage(a, stage.id));
 
   // 低饱和低明度光谱配色:按域水平位置从左到右映射 红(0°) → 蓝紫(300°)
   const hue = ((Math.round(stage.x / 6) % 300) + 300) % 300;
@@ -59,6 +68,8 @@ export default function StageComponent({
         e.stopPropagation();
         onSelect();
       }}
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
       onContextMenu={onContextMenu}
       onPointerDown={(e) => {
         // 名称编辑 / resize 手柄 / 右键不触发框体拖拽
@@ -100,6 +111,31 @@ export default function StageComponent({
           onAutoFocusConsumed={() => requestAutoEdit(null)}
         />
         <span className="nf-stage-count">{stage.nodeIds.length}</span>
+        {stageAnnots.length === 0 ? (
+          hovered && !locked && (
+            <button
+              className="stage-annot-btn pin"
+              title="添加注释"
+              onClick={(e) => {
+                e.stopPropagation();
+                addAnnotation({ kind: 'stage', stageId: stage.id });
+              }}
+            >
+              📌
+            </button>
+          )
+        ) : (
+          <button
+            className="stage-annot-btn pin has"
+            title={stageAnnots[0].title || '注释'}
+            onClick={(e) => {
+              e.stopPropagation();
+              toggleAnnotationCollapsed(stageAnnots[0].id);
+            }}
+          >
+            📌
+          </button>
+        )}
       </div>
 
       {/* 右下角调整大小手柄 */}
