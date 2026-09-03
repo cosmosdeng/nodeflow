@@ -17,6 +17,10 @@ import {
 import { buildSvg, downloadSvg } from '../lib/exportSvg';
 import { confirmAndCloseDocument } from '../lib/closeProject';
 
+// [experiment: hide-swimlane-ui] 泳道两个产品入口(开关/整理)隐藏,全部实现保留。
+// 置回 true 即恢复显示。
+const SWIMLANE_UI_VISIBLE = false;
+
 interface Props {
   showOutline: boolean;
   showProperties: boolean;
@@ -471,16 +475,20 @@ export default function Toolbar({
       <button className={`tb-btn ${showParticipants ? 'active' : ''}`} onClick={onToggleParticipants}>
         👤 参与方
       </button>
-      <button
-        className={`tb-btn ${swimlaneEnabled ? 'active' : ''}`}
-        onClick={toggleSwimlane}
-        title="泳道显示开关(不改变节点位置/参与方)"
-      >
-        🏊 泳道
-      </button>
-      <button className="tb-btn" onClick={arrangeAllSwimlanes} title="把节点按参与方整理到泳道(只改位置,不改参与方)">
-        ⇣ 整理泳道
-      </button>
+      {SWIMLANE_UI_VISIBLE && (
+        <>
+          <button
+            className={`tb-btn ${swimlaneEnabled ? 'active' : ''}`}
+            onClick={toggleSwimlane}
+            title="泳道显示开关(不改变节点位置/参与方)"
+          >
+            🏊 泳道
+          </button>
+          <button className="tb-btn" onClick={arrangeAllSwimlanes} title="把节点按参与方整理到泳道(只改位置,不改参与方)">
+            ⇣ 整理泳道
+          </button>
+        </>
+      )}
 
       <span className="sep" />
 
