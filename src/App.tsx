@@ -12,7 +12,8 @@ import { confirmAndCloseDocument } from './lib/closeProject';
 
 function MainApp() {
   const [showOutline, setShowOutline] = useState(false);
-  const [showProperties, setShowProperties] = useState(true);
+  // [product] 启动默认不打开属性面板,需要时点工具栏「⚙ 属性」打开
+  const [showProperties, setShowProperties] = useState(false);
   const [showHistory, setShowHistory] = useState(false);
   const [showParticipants, setShowParticipants] = useState(false);
 
