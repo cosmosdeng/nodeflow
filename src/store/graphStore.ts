@@ -26,6 +26,7 @@ import {
   type Stage,
   type Participant,
   type Organization,
+  type ParticipantOrderMode,
   type ParticipantType,
   DOCUMENT_COLORS,
   createDefaultNode,
@@ -70,7 +71,7 @@ import { findStageEmptySpot, pushNodesAwayFromBox, pushOutOfRect, rectOverlaps, 
 import { detachOrganizationFromParticipants, detachParticipantFromNodes } from '../lib/participant';
 import { arrangeSwimlanes } from '../lib/arrange';
 import {
-  buildProjectDocumentV4,
+  buildProjectDocumentV5,
   detectDocumentFormat,
   extractOrganizations,
   extractParticipants,
@@ -78,7 +79,10 @@ import {
   importLegacyExportToDocument,
   migrateProjectV2ToDocument,
   migrateProjectV3ToDocument,
+  migrateProjectV4ToDocument,
   pickGraphNodesEdges,
+  resolveParticipantOrder,
+  resolveStageOrder,
   validateDocumentData,
   type NormalizedDocument,
 } from '../lib/document';
@@ -129,6 +133,12 @@ interface FlowStore extends GraphState {
   participants: Participant[];
   /** 当前活动文档的组织 */
   organizations: Organization[];
+  /** 当前活动文档的参与方顺序(唯一权威,与 participants 保持联动) */
+  participantOrder: string[];
+  /** 当前活动文档的参与方排序模式 */
+  participantOrderMode: ParticipantOrderMode;
+  /** 当前活动文档的 Stage 线性顺序(唯一权威,与 stages 保持联动) */
+  stageOrder: string[];
   /** 长按进入域时的闪烁反馈:正在闪烁的阶段域 id(700ms 后自动清除) */
   stageFlashId: string | null;
   /** 最近一次项目加载失败的用户可见错误信息(null 表示无) */
@@ -530,7 +540,24 @@ function docKey(id: string): string {
 }
 
 /** 保存单个文档数据(仅图数据 + 内部画布标签) */
-function persistDocument(doc: Pick<GraphDocument, 'id' | 'nodes' | 'edges' | 'viewport' | 'annotations' | 'stages' | 'participants' | 'organizations' | 'compositeTabs' | 'activeTabId'>) {
+function persistDocument(
+  doc: Pick<
+    GraphDocument,
+    | 'id'
+    | 'nodes'
+    | 'edges'
+    | 'viewport'
+    | 'annotations'
+    | 'stages'
+    | 'participants'
+    | 'organizations'
+    | 'participantOrder'
+    | 'participantOrderMode'
+    | 'stageOrder'
+    | 'compositeTabs'
+    | 'activeTabId'
+  >,
+) {
   try {
     // 普通节点(非组合)的 draggable 是编辑文字的临时态,不持久化;保存时强制可拖,避免编辑态卡住导致刷新后无法拖拽
     const nodes = doc.nodes.map((n) => {
@@ -548,6 +575,9 @@ function persistDocument(doc: Pick<GraphDocument, 'id' | 'nodes' | 'edges' | 'vi
         stages: doc.stages,
         participants: doc.participants,
         organizations: doc.organizations,
+        participantOrder: doc.participantOrder,
+        participantOrderMode: doc.participantOrderMode,
+        stageOrder: doc.stageOrder,
         compositeTabs: doc.compositeTabs,
         activeTabId: doc.activeTabId,
       }),
@@ -560,30 +590,64 @@ function persistDocument(doc: Pick<GraphDocument, 'id' | 'nodes' | 'edges' | 'vi
 /** 加载单个文档数据,返回不含历史/脏标记的图数据(缺省返回空图) */
 function loadPersistedDocument(id: string): Pick<
   GraphDocument,
-  'nodes' | 'edges' | 'viewport' | 'annotations' | 'stages' | 'participants' | 'organizations' | 'compositeTabs' | 'activeTabId'
+  | 'nodes'
+  | 'edges'
+  | 'viewport'
+  | 'annotations'
+  | 'stages'
+  | 'participants'
+  | 'organizations'
+  | 'participantOrder'
+  | 'participantOrderMode'
+  | 'stageOrder'
+  | 'compositeTabs'
+  | 'activeTabId'
 > {
+  const emptyOrder = {
+    nodes: [],
+    edges: [],
+    viewport: { x: 0, y: 0, zoom: 1 },
+    annotations: [],
+    stages: [],
+    participants: [],
+    organizations: [],
+    participantOrder: [],
+    participantOrderMode: 'auto' as const,
+    stageOrder: [],
+    compositeTabs: [],
+    activeTabId: 'main',
+  };
   try {
     const raw = localStorage.getItem(docKey(id));
-    if (!raw) {
-      return { nodes: [], edges: [], viewport: { x: 0, y: 0, zoom: 1 }, annotations: [], stages: [], participants: [], organizations: [], compositeTabs: [], activeTabId: 'main' };
-    }
+    if (!raw) return emptyOrder;
     const data = JSON.parse(raw);
     const rawNodes: FlowNode[] = Array.isArray(data.nodes) ? data.nodes : [];
     // 普通节点(非组合)的 draggable 是编辑临时态,加载时强制可拖(避免旧持久化里的 false 导致不可拖)
     const nodes = rawNodes.map((n) => (n.data?.composite ? n : n.draggable === false ? { ...n, draggable: true } : n));
+    const participants: Participant[] = Array.isArray(data.participants) ? data.participants : [];
+    const stages: Stage[] = Array.isArray(data.stages) ? data.stages : [];
     return {
       nodes,
       edges: Array.isArray(data.edges) ? data.edges : [],
       viewport: data.viewport ?? { x: 0, y: 0, zoom: 1 },
       annotations: Array.isArray(data.annotations) ? data.annotations : [],
-      stages: Array.isArray(data.stages) ? data.stages : [],
-      participants: Array.isArray(data.participants) ? data.participants : [],
+      stages,
+      participants,
       organizations: Array.isArray(data.organizations) ? data.organizations : [],
+      // legacy localStorage 无 order:按参与方/stage 数组顺序补默认(auto)
+      participantOrder: Array.isArray(data.participantOrder)
+        ? data.participantOrder
+        : participants.map((p) => p.id),
+      participantOrderMode:
+        data.participantOrderMode === 'user' || data.participantOrderMode === 'auto'
+          ? data.participantOrderMode
+          : 'auto',
+      stageOrder: Array.isArray(data.stageOrder) ? data.stageOrder : stages.map((st) => st.id),
       compositeTabs: Array.isArray(data.compositeTabs) ? data.compositeTabs : [],
       activeTabId: data.activeTabId ?? 'main',
     };
   } catch {
-    return { nodes: [], edges: [], viewport: { x: 0, y: 0, zoom: 1 }, annotations: [], stages: [], participants: [], organizations: [], compositeTabs: [], activeTabId: 'main' };
+    return emptyOrder;
   }
 }
 
@@ -634,6 +698,9 @@ function buildInitialDocuments(): { docs: GraphDocument[]; activeId: string } {
         stages: data.stages,
         participants: Array.isArray(data.participants) ? data.participants : [],
         organizations: Array.isArray(data.organizations) ? data.organizations : [],
+        participantOrder: Array.isArray(data.participantOrder) ? data.participantOrder : [],
+        participantOrderMode: data.participantOrderMode ?? 'auto',
+        stageOrder: Array.isArray(data.stageOrder) ? data.stageOrder : [],
         compositeTabs: data.compositeTabs,
         activeTabId: data.activeTabId,
         past: [],
@@ -659,6 +726,9 @@ function buildInitialDocuments(): { docs: GraphDocument[]; activeId: string } {
     stages: [],
     participants: [],
     organizations: [],
+    participantOrder: [],
+    participantOrderMode: 'auto',
+    stageOrder: [],
     compositeTabs: [],
     activeTabId: 'main',
     past: [],
@@ -1138,6 +1208,9 @@ function syncActiveDoc(get: () => FlowStore, rawSet: (p: unknown) => void) {
             stages: state.stages,
             participants: state.participants,
             organizations: state.organizations,
+            participantOrder: state.participantOrder,
+            participantOrderMode: state.participantOrderMode,
+            stageOrder: state.stageOrder,
             compositeTabs: state.compositeTabs,
             activeTabId: state.activeTabId,
             past: state.past,
@@ -1168,6 +1241,12 @@ export const useGraphStore = create<FlowStore>()(
     stages: initialActiveDoc?.stages ?? [],
     participants: initialActiveDoc?.participants ?? [],
     organizations: initialActiveDoc?.organizations ?? [],
+    participantOrder:
+      initialActiveDoc?.participantOrder ??
+      (initialActiveDoc?.participants ? initialActiveDoc.participants.map((p) => p.id) : []),
+    participantOrderMode: initialActiveDoc?.participantOrderMode ?? 'auto',
+    stageOrder:
+      initialActiveDoc?.stageOrder ?? (initialActiveDoc?.stages ? initialActiveDoc.stages.map((st) => st.id) : []),
     swimlaneEnabled: false,
     swimlaneOrder: [],
     stageFlashId: null,
@@ -1318,6 +1397,9 @@ export const useGraphStore = create<FlowStore>()(
             stages: s.stages,
             participants: s.participants,
             organizations: s.organizations,
+            participantOrder: s.participantOrder,
+            participantOrderMode: s.participantOrderMode,
+            stageOrder: s.stageOrder,
             compositeTabs: s.compositeTabs,
             activeTabId: s.activeTabId,
             at: Date.now(),
@@ -1343,6 +1425,9 @@ export const useGraphStore = create<FlowStore>()(
               stages: s.stages,
               participants: s.participants,
               organizations: s.organizations,
+              participantOrder: s.participantOrder,
+              participantOrderMode: s.participantOrderMode,
+              stageOrder: s.stageOrder,
               compositeTabs: s.compositeTabs,
               activeTabId: s.activeTabId,
               at: Date.now(),
@@ -1355,6 +1440,9 @@ export const useGraphStore = create<FlowStore>()(
           stages: prev.stages ?? [],
           participants: prev.participants ?? [],
           organizations: prev.organizations ?? [],
+          participantOrder: prev.participantOrder ?? [],
+          participantOrderMode: prev.participantOrderMode ?? 'auto',
+          stageOrder: prev.stageOrder ?? [],
           ...restoreTabsFromSnapshot(s, prev),
         };
       });
@@ -1377,6 +1465,9 @@ export const useGraphStore = create<FlowStore>()(
               stages: s.stages,
               participants: s.participants,
               organizations: s.organizations,
+              participantOrder: s.participantOrder,
+              participantOrderMode: s.participantOrderMode,
+              stageOrder: s.stageOrder,
               compositeTabs: s.compositeTabs,
               activeTabId: s.activeTabId,
               at: Date.now(),
@@ -1389,6 +1480,9 @@ export const useGraphStore = create<FlowStore>()(
           stages: next.stages ?? [],
           participants: next.participants ?? [],
           organizations: next.organizations ?? [],
+          participantOrder: next.participantOrder ?? [],
+          participantOrderMode: next.participantOrderMode ?? 'auto',
+          stageOrder: next.stageOrder ?? [],
           ...restoreTabsFromSnapshot(s, next),
         };
       });
@@ -1853,7 +1947,11 @@ export const useGraphStore = create<FlowStore>()(
       if (get().allLocked) return '';
       const id = uid('participant');
       get().markHistory();
-      set((s) => ({ participants: [...s.participants, { id, name, type, organizationId }] }));
+      set((s) => ({
+        participants: [...s.participants, { id, name, type, organizationId }],
+        // order 镜像保持与新参与方一致(P2 用户显式 reorder 前 order 恒等于实体集合)
+        participantOrder: [...s.participantOrder, id],
+      }));
       return id;
     },
     updateParticipant: (id, patch) => {
@@ -1868,6 +1966,7 @@ export const useGraphStore = create<FlowStore>()(
       get().markHistory();
       set((s) => ({
         participants: s.participants.filter((p) => p.id !== id),
+        participantOrder: s.participantOrder.filter((pid) => pid !== id),
         // safe detach:指向该参与方的节点 participantId 置 undefined(不删除节点)
         nodes: detachParticipantFromNodes(s.nodes, id),
       }));
@@ -2155,7 +2254,7 @@ export const useGraphStore = create<FlowStore>()(
     clearGraph: () => {
       if (get().allLocked) return;
       get().markHistory();
-      set({ nodes: [], edges: [], annotations: [], stages: [], participants: [], organizations: [], compositeTabs: [], activeTabId: 'main' });
+      set({ nodes: [], edges: [], annotations: [], stages: [], participants: [], organizations: [], participantOrder: [], participantOrderMode: 'auto', stageOrder: [], compositeTabs: [], activeTabId: 'main' });
     },
 
     loadGraph: (data) => {
@@ -2169,6 +2268,9 @@ export const useGraphStore = create<FlowStore>()(
         stages: data.stages ?? [],
         participants: data.participants ?? [],
         organizations: data.organizations ?? [],
+        participantOrder: [],
+        participantOrderMode: 'auto',
+        stageOrder: [],
         selected: null,
         compositeTabs: [],
         activeTabId: 'main',
@@ -2242,8 +2344,9 @@ export const useGraphStore = create<FlowStore>()(
       const s = get();
       const name = s.documents.find((d) => d.id === s.activeDocumentId)?.name ?? '未命名项目';
       const color = s.documents.find((d) => d.id === s.activeDocumentId)?.color ?? '#4ea1ff';
-      // 正式 Project Format v4:剥离历史/脏标记/React Flow 运行时字段;含 participants/organizations
-      const document = buildProjectDocumentV4({
+      // 正式 Project Format v5:剥离历史/脏标记/React Flow 运行时字段;含 participants/organizations 与
+      // participantOrder / participantOrderMode / stageOrder(顺序持久化单一事实来源)
+      const document = buildProjectDocumentV5({
         name,
         color,
         nodes: s.nodes,
@@ -2253,11 +2356,14 @@ export const useGraphStore = create<FlowStore>()(
         stages: s.stages,
         participants: s.participants,
         organizations: s.organizations,
+        participantOrder: s.participantOrder,
+        participantOrderMode: s.participantOrderMode,
+        stageOrder: s.stageOrder,
         compositeTabs: s.compositeTabs,
         activeTabId: s.activeTabId,
       });
       return JSON.stringify(
-        { format: 'nodeflow', version: 4, exportedAt: new Date().toISOString(), document },
+        { format: 'nodeflow', version: 5, exportedAt: new Date().toISOString(), document },
         null,
         2,
       );
@@ -2294,6 +2400,14 @@ export const useGraphStore = create<FlowStore>()(
           const d = document as Record<string, unknown>;
           name = typeof d.name === 'string' ? d.name : '未命名项目';
           color = typeof d.color === 'string' ? d.color : DOCUMENT_COLORS[get().documents.length % DOCUMENT_COLORS.length];
+        } else if (info.legacy && info.version === 4) {
+          // Legacy Project v4:迁移到 v5(仅 schema 转换,不改写 membership/participantId;
+          // participant/stage order 由下方 resolveParticipantOrder/resolveStageOrder 补默认)
+          norm = migrateProjectV4ToDocument(data);
+          const document = (data as Record<string, unknown> | undefined)?.document ?? {};
+          const d = document as Record<string, unknown>;
+          name = typeof d.name === 'string' ? d.name : '未命名项目';
+          color = typeof d.color === 'string' ? d.color : DOCUMENT_COLORS[get().documents.length % DOCUMENT_COLORS.length];
         } else if (info.legacy) {
           // Legacy Project v2
           norm = migrateProjectV2ToDocument(data);
@@ -2326,6 +2440,11 @@ export const useGraphStore = create<FlowStore>()(
           set({ loadError: `项目文件结构无效:${issues.map((i) => i.field).join(', ')}。` });
           return false;
         }
+        const participantsArr = extractParticipants(data) as Participant[];
+        const organizationsArr = extractOrganizations(data) as Organization[];
+        // Participant/Stage Order:解析 v5 字段或按旧格式补默认(participant=实体顺序 auto;stage=旧 x 排序)
+        const { order: participantOrder, mode: participantOrderMode } = resolveParticipantOrder(data, participantsArr);
+        const stageOrder = resolveStageOrder(data, norm.stages);
         doc = {
           id: uid('doc'),
           name,
@@ -2335,8 +2454,11 @@ export const useGraphStore = create<FlowStore>()(
           viewport: norm.viewport,
           annotations: norm.annotations,
           stages: norm.stages,
-          participants: extractParticipants(data) as Participant[],
-          organizations: extractOrganizations(data) as Organization[],
+          participants: participantsArr,
+          organizations: organizationsArr,
+          participantOrder,
+          participantOrderMode,
+          stageOrder,
           compositeTabs: norm.compositeTabs,
           activeTabId: norm.activeTabId,
           past: [],
@@ -2359,6 +2481,9 @@ export const useGraphStore = create<FlowStore>()(
         stages: doc.stages,
         participants: doc.participants,
         organizations: doc.organizations,
+        participantOrder: doc.participantOrder,
+        participantOrderMode: doc.participantOrderMode,
+        stageOrder: doc.stageOrder,
         compositeTabs: doc.compositeTabs,
         activeTabId: doc.activeTabId,
         past: doc.past,
@@ -2391,6 +2516,9 @@ export const useGraphStore = create<FlowStore>()(
         stages: [],
         participants: [],
         organizations: [],
+        participantOrder: [],
+        participantOrderMode: 'auto',
+        stageOrder: [],
         compositeTabs: [],
         activeTabId: 'main',
         past: [],
@@ -2408,6 +2536,9 @@ export const useGraphStore = create<FlowStore>()(
         stages: [],
         participants: [],
         organizations: [],
+        participantOrder: [],
+        participantOrderMode: 'auto',
+        stageOrder: [],
         compositeTabs: [],
         activeTabId: 'main',
         past: [],
@@ -2437,6 +2568,9 @@ export const useGraphStore = create<FlowStore>()(
         stages: target.stages,
         participants: target.participants ?? [],
         organizations: target.organizations ?? [],
+        participantOrder: target.participantOrder ?? [],
+        participantOrderMode: target.participantOrderMode ?? 'auto',
+        stageOrder: target.stageOrder ?? [],
         compositeTabs: target.compositeTabs,
         activeTabId: target.activeTabId,
         past: target.past,
@@ -2475,6 +2609,9 @@ export const useGraphStore = create<FlowStore>()(
           stages: [],
           participants: [],
           organizations: [],
+          participantOrder: [],
+          participantOrderMode: 'auto',
+          stageOrder: [],
           compositeTabs: [],
           activeTabId: 'main',
           past: [],
@@ -2492,6 +2629,9 @@ export const useGraphStore = create<FlowStore>()(
           stages: [],
           participants: [],
           organizations: [],
+          participantOrder: [],
+          participantOrderMode: 'auto',
+          stageOrder: [],
           compositeTabs: [],
           activeTabId: 'main',
           past: [],

@@ -1,4 +1,13 @@
-import type { Annotation, FlowEdge, FlowNode, Organization, Participant, Stage, ViewportState } from '../types';
+import type {
+  Annotation,
+  FlowEdge,
+  FlowNode,
+  Organization,
+  Participant,
+  ParticipantOrderMode,
+  Stage,
+  ViewportState,
+} from '../types';
 
 // ---- Format / Version 常量 ----
 
@@ -7,7 +16,7 @@ export const PROJECT_FORMAT = 'nodeflow';
 /** 静态导出格式标识(Export Format) */
 export const EXPORT_FORMAT = 'nodeflow-export';
 /** 当前 Project 版本(v3 起为正式 Project Format;v2 为 legacy project;v1 仅存在于 Export namespace) */
-export const CURRENT_PROJECT_VERSION = 4;
+export const CURRENT_PROJECT_VERSION = 5;
 /** 当前 Export 版本 */
 export const CURRENT_EXPORT_VERSION = 1;
 
@@ -172,6 +181,60 @@ export function extractOrganizations(input: unknown): unknown[] {
   return Array.isArray(arr) ? arr : [];
 }
 
+/** 参与方排序状态(Participant Order 单一事实来源 + Auto/User 模式) */
+export interface ParticipantOrderInfo {
+  order: string[];
+  mode: ParticipantOrderMode;
+}
+
+/**
+ * 解析参与方排序:
+ * - v5 document.participantOrder / participantOrderMode 有效时直接采用;
+ * - 旧格式(v4 及更早,无显式用户排序)返回默认:participantOrder=现有参与方 id, mode='auto'。
+ * 纯函数 / deterministic / 不修改输入。
+ */
+export function resolveParticipantOrder(
+  input: unknown,
+  participants: readonly Participant[],
+): ParticipantOrderInfo {
+  const doc = ((input as Record<string, unknown> | undefined)?.document ??
+    input ??
+    {}) as Record<string, unknown>;
+  const rawOrder = doc.participantOrder;
+  const rawMode = doc.participantOrderMode;
+  if (Array.isArray(rawOrder) && (rawMode === 'auto' || rawMode === 'user')) {
+    return { order: rawOrder as string[], mode: rawMode };
+  }
+  return { order: participants.map((p) => p.id), mode: 'auto' };
+}
+
+/**
+ * 解析 Stage 线性顺序(单一事实来源 graph.stageOrder):
+ * - v5 graph.stageOrder 有效时直接采用(仅保留仍存在的 stage id,缺失的追加在后,保证确定性);
+ * - 旧格式(v4 及更早)使用旧 stages 的 x 坐标生成初始顺序:按 x ascending,相同 x 保持原数组顺序(stable)。
+ * 纯函数 / deterministic / 不修改输入。
+ */
+export function resolveStageOrder(input: unknown, stages: readonly Stage[]): string[] {
+  const doc = ((input as Record<string, unknown> | undefined)?.document ??
+    input ??
+    {}) as Record<string, unknown>;
+  const graph = (doc.graph ?? {}) as Record<string, unknown>;
+  const rawOrder = graph.stageOrder;
+  if (Array.isArray(rawOrder)) {
+    const present = (rawOrder as string[]).filter((id) => stages.some((st) => st.id === id));
+    const rest = stages.filter((st) => !present.includes(st.id)).map((st) => st.id);
+    return [...present, ...rest];
+  }
+  // 旧格式:按 x ascending 稳定排序(相同 x 保持原数组顺序)
+  const withIndex = stages.map((st, idx) => ({ st, idx }));
+  withIndex.sort((a, b) => {
+    const ax = typeof a.st.x === 'number' ? a.st.x : 0;
+    const bx = typeof b.st.x === 'number' ? b.st.x : 0;
+    return ax !== bx ? ax - bx : a.idx - b.idx;
+  });
+  return withIndex.map(({ st }) => st.id);
+}
+
 // ---- Migration: Legacy Project v2 → 当前 Document ----
 
 /**
@@ -236,8 +299,15 @@ function cleanEdgeForSave(e: FlowEdge): FlowEdge {
   return clone as FlowEdge;
 }
 
-/** 保存侧构建当前 Project(v4)的 document 数据(不含历史/dirty;id 在 Runtime 决定) */
-export function buildProjectDocumentV4(input: {
+/**
+ * 保存侧构建当前 Project(v5)的 document 数据(不含历史/dirty;id 在 Runtime 决定)。
+ * v5 新增 Participant/Stage Order 持久化:
+ * - participantOrder / participantOrderMode 在 document 顶层(与 participants 并列);
+ * - stageOrder 在 document.graph(与 stages 并列)。
+ * 说明:Stage 的 x/y/w/h 仍随 stages 保留,仅为 legacy/runtime compatibility,
+ * 不作为 v5 的 Stage geometry authority(未来由 order + membership + layout 派生)。
+ */
+export function buildProjectDocumentV5(input: {
   name: string;
   color: string;
   nodes: FlowNode[];
@@ -247,6 +317,9 @@ export function buildProjectDocumentV4(input: {
   stages: Stage[];
   participants: Participant[];
   organizations: Organization[];
+  participantOrder: string[];
+  participantOrderMode: ParticipantOrderMode;
+  stageOrder: string[];
   compositeTabs: string[];
   activeTabId: string;
 }): Record<string, unknown> {
@@ -254,8 +327,11 @@ export function buildProjectDocumentV4(input: {
     name: input.name,
     color: input.color,
     participants: input.participants,
+    participantOrder: input.participantOrder,
+    participantOrderMode: input.participantOrderMode,
     organizations: input.organizations,
     graph: {
+      stageOrder: input.stageOrder,
       nodes: input.nodes.map(cleanNodeForSave),
       edges: input.edges.map(cleanEdgeForSave),
       annotations: input.annotations,
@@ -281,6 +357,31 @@ export function migrateProjectV3ToDocument(input: unknown): NormalizedDocument {
   const graph = (document.graph ?? {}) as Record<string, unknown>;
   const editor = (document.editor ?? {}) as Record<string, unknown>;
   const { nodes, edges } = pickNodesEdges(graph);
+  return {
+    nodes,
+    edges,
+    viewport: normalizeViewport(editor.viewport),
+    annotations: (Array.isArray(graph.annotations) ? graph.annotations : []) as Annotation[],
+    stages: (Array.isArray(graph.stages) ? graph.stages : []) as Stage[],
+    compositeTabs: Array.isArray(editor.compositeTabs) ? (editor.compositeTabs as string[]) : [],
+    activeTabId: typeof editor.activeTabId === 'string' ? editor.activeTabId : 'main',
+  };
+}
+
+/**
+ * 把 Legacy Project v4(format:'nodeflow', version:4)迁移为 v5 标准文档:
+ * v4 无 participantOrder/stageOrder,顺序由加载侧 resolveParticipantOrder / resolveStageOrder
+ * 依据 participants / 旧 stage x 坐标补默认(auto)。
+ * 注意:只转换 persistence schema,不重算 Stage membership / participantId。
+ * 纯函数 / deterministic / 不修改输入。
+ */
+export function migrateProjectV4ToDocument(input: unknown): NormalizedDocument {
+  const document = ((input as Record<string, unknown> | undefined)?.document ??
+    input ??
+    {}) as Record<string, unknown>;
+  const graph = (document.graph ?? {}) as Record<string, unknown>;
+  const editor = (document.editor ?? {}) as Record<string, unknown>;
+  const { nodes, edges } = pickGraphNodesEdges(graph);
   return {
     nodes,
     edges,

@@ -1,22 +1,43 @@
 import { describe, expect, it } from 'vitest';
 import {
-  buildProjectDocumentV4,
+  buildProjectDocumentV5,
   CURRENT_PROJECT_VERSION,
   detectDocumentFormat,
   futureVersionMessage,
   importLegacyExportToDocument,
   migrateProjectV2ToDocument,
   migrateProjectV3ToDocument,
+  migrateProjectV4ToDocument,
+  resolveParticipantOrder,
+  resolveStageOrder,
   validateDocumentData,
+  type ParticipantOrderInfo,
 } from '../document';
+
+const stage = (id: string, x: number, nodeIds: string[] = []): { id: string; name: string; x: number; y: number; width: number; height: number; nodeIds: string[] } => ({
+  id,
+  name: id,
+  x,
+  y: 0,
+  width: 10,
+  height: 10,
+  nodeIds,
+});
 
 describe('lib/document 文档兼容层', () => {
   describe('format detection', () => {
-    it('识别正式 Project v4', () => {
+    it(`识别正式 Project v${CURRENT_PROJECT_VERSION}`, () => {
       const info = detectDocumentFormat({ format: 'nodeflow', version: CURRENT_PROJECT_VERSION, document: {} });
       expect(info.family).toBe('project');
       expect(info.version).toBe(CURRENT_PROJECT_VERSION);
       expect(info.legacy).toBe(false);
+      expect(info.future).toBe(false);
+    });
+
+    it('识别 Legacy Project v4(version < current)', () => {
+      const info = detectDocumentFormat({ format: 'nodeflow', version: 4, document: {} });
+      expect(info.family).toBe('project');
+      expect(info.legacy).toBe(true);
       expect(info.future).toBe(false);
     });
 
@@ -146,9 +167,9 @@ describe('lib/document 文档兼容层', () => {
     });
   });
 
-  describe('v4 持久化 / 迁移', () => {
-    it('buildProjectDocumentV4:包含 participants/organizations,不含历史/脏标记', () => {
-      const doc = buildProjectDocumentV4({
+  describe('v5 持久化', () => {
+    it('buildProjectDocumentV5:含 participants/organizations/order,不含历史/脏标记', () => {
+      const doc = buildProjectDocumentV5({
         name: 'P',
         color: '#ff0000',
         nodes: [],
@@ -158,26 +179,38 @@ describe('lib/document 文档兼容层', () => {
         stages: [],
         participants: [{ id: 'p1', name: 'Artist', type: 'person' }],
         organizations: [{ id: 'o1', name: 'Dept' }],
+        participantOrder: ['p1'],
+        participantOrderMode: 'auto',
+        stageOrder: [],
         compositeTabs: [],
         activeTabId: 'main',
       });
       expect(doc.participants).toEqual([{ id: 'p1', name: 'Artist', type: 'person' }]);
+      expect(doc.participantOrder).toEqual(['p1']);
+      expect(doc.participantOrderMode).toBe('auto');
       expect(doc.organizations).toEqual([{ id: 'o1', name: 'Dept' }]);
+      const graph = doc.graph as { stageOrder: string[]; stages: unknown[] };
+      expect(graph.stageOrder).toEqual([]);
+      expect(graph.stages).toEqual([]);
       expect('past' in doc).toBe(false);
       expect('dirty' in doc).toBe(false);
     });
 
-    it('buildProjectDocumentV4:剥离 React Flow 运行时字段,保留 participantId', () => {
-      const doc = buildProjectDocumentV4({
-        name: 'P', color: '#ff0000', nodes: [], edges: [], viewport: { x: 0, y: 0, zoom: 1 },
-        annotations: [], stages: [], participants: [], organizations: [], compositeTabs: [], activeTabId: 'main',
+    it('buildProjectDocumentV5:剥离 React Flow 运行时字段,保留 participantId,含 order', () => {
+      const doc = buildProjectDocumentV5({
+        name: 'P', color: '#ff0000', nodes: [{ id: 'A', type: 'flow', position: { x: 0, y: 0 }, data: { participantId: 'p1' } as never }], edges: [], viewport: { x: 0, y: 0, zoom: 1 },
+        annotations: [], stages: [], participants: [{ id: 'p1', name: 'A', type: 'person' }], organizations: [],
+        participantOrder: ['p1'], participantOrderMode: 'user', stageOrder: ['s1'],
+        compositeTabs: [], activeTabId: 'main',
       });
-      const graph = doc.graph as { nodes: unknown[]; edges: unknown[] };
-      expect(graph.nodes).toEqual([]);
+      const graph = doc.graph as { nodes: { data: { participantId: string } }[]; edges: unknown[]; stageOrder: string[] };
+      expect(graph.nodes[0].data.participantId).toBe('p1');
+      expect(doc.participantOrderMode).toBe('user');
+      expect(graph.stageOrder).toEqual(['s1']);
       expect(graph.edges).toEqual([]);
     });
 
-    it('migrateProjectV3ToDocument:v3 → v4(participants 迁移为空),数据保留', () => {
+    it('migrateProjectV3ToDocument:v3 → 当前(participants 为空),数据保留', () => {
       const v3 = {
         format: 'nodeflow',
         version: 3,
@@ -194,18 +227,81 @@ describe('lib/document 文档兼容层', () => {
       expect(doc.activeTabId).toBe('main');
     });
 
-    it('migrateProjectV3ToDocument:deterministic 且不修改输入', () => {
-      const input = { format: 'nodeflow', version: 3, document: { graph: { nodes: [], edges: [] }, editor: {} } };
-      const a = migrateProjectV3ToDocument(input);
-      const b = migrateProjectV3ToDocument(input);
-      expect(a).toEqual(b);
-      expect(input).toEqual({ format: 'nodeflow', version: 3, document: { graph: { nodes: [], edges: [] }, editor: {} } });
+    it('migrateProjectV4ToDocument:v4 数据保留,不改写 membership / participantId', () => {
+      const v4 = {
+        format: 'nodeflow',
+        version: 4,
+        document: {
+          name: 'P',
+          color: '#fff',
+          participants: [{ id: 'p1', name: 'Artist', type: 'person' }],
+          organizations: [],
+          graph: {
+            nodes: [{ id: 'n1', data: { participantId: 'p1' } }],
+            edges: [],
+            annotations: [],
+            stages: [{ id: 's1', name: 'S1', x: 10, y: 0, width: 50, height: 50, nodeIds: ['n1'] }],
+          },
+          editor: { viewport: { x: 1, y: 2, zoom: 0.5 }, activeTabId: 'main', compositeTabs: [] },
+        },
+      };
+      const doc = migrateProjectV4ToDocument(v4);
+      expect(doc.nodes[0].data?.participantId).toBe('p1'); // Test D:participantId 不改写
+      expect(doc.stages[0].nodeIds).toEqual(['n1']); // Test E:stage membership 不改写
+      expect(doc.stages[0].name).toBe('S1');
     });
 
-    it('future version rejection:v5+ 被拒绝', () => {
+    it(`future version rejection:v${CURRENT_PROJECT_VERSION + 1} 被拒绝`, () => {
       const info = detectDocumentFormat({ format: 'nodeflow', version: CURRENT_PROJECT_VERSION + 1, document: {} });
       expect(info.future).toBe(true);
       expect(futureVersionMessage(info)).toContain('升级 NodeFlow');
+    });
+  });
+
+  describe('v4→v5 order migration 语义', () => {
+    it('Test A:resolveStageOrder 旧 stage 按 x ascending 排序', () => {
+      const stages = [stage('A', 500), stage('B', 100), stage('C', 300)];
+      expect(resolveStageOrder({ document: {} }, stages)).toEqual(['B', 'C', 'A']);
+    });
+
+    it('Test B:相同 x 保持原数组顺序(stable/deterministic)', () => {
+      const stages = [stage('A', 100), stage('B', 100), stage('C', 200)];
+      expect(resolveStageOrder({ document: {} }, stages)).toEqual(['A', 'B', 'C']);
+    });
+
+    it('v5 提供 stageOrder 时采用,过滤缺失并追加新增 stage(保持确定性)', () => {
+      const data = { document: { graph: { stageOrder: ['s2', 's1'] } } };
+      const stages = [stage('s1', 0), stage('s2', 0), stage('s3', 0)];
+      expect(resolveStageOrder(data, stages)).toEqual(['s2', 's1', 's3']);
+    });
+
+    it('Test C:resolveParticipantOrder 无显式排序 → auto + 现有参与方顺序', () => {
+      const parts = [
+        { id: 'p1', name: 'A', type: 'person' as const },
+        { id: 'p2', name: 'B', type: 'person' as const },
+      ];
+      expect(resolveParticipantOrder({ document: {} }, parts)).toEqual<ParticipantOrderInfo>({
+        order: ['p1', 'p2'],
+        mode: 'auto',
+      });
+    });
+
+    it('resolveParticipantOrder:v5 user 顺序优先且原样保留', () => {
+      const parts = [
+        { id: 'p1', name: 'A', type: 'person' as const },
+        { id: 'p2', name: 'B', type: 'person' as const },
+      ];
+      const data = { document: { participantOrder: ['p2', 'p1'], participantOrderMode: 'user' } };
+      expect(resolveParticipantOrder(data, parts)).toEqual<ParticipantOrderInfo>({
+        order: ['p2', 'p1'],
+        mode: 'user',
+      });
+    });
+
+    it('resolveParticipantOrder:非法 mode 回退 auto', () => {
+      const parts = [{ id: 'p1', name: 'A', type: 'person' as const }];
+      const data = { document: { participantOrder: ['p1'], participantOrderMode: 'weird' } };
+      expect(resolveParticipantOrder(data, parts).mode).toBe('auto');
     });
   });
 });

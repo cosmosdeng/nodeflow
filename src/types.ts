@@ -28,6 +28,13 @@ export interface Organization {
   name: string;
 }
 
+/**
+ * 参与方排序模式:
+ * - 'auto':用户尚未显式锁定参与方顺序(顺序由 Auto Order 决定,算法后续阶段实现)
+ * - 'user':用户已通过 Outliner Drag Handle 显式调整过,Arrange 必须永远尊重该顺序
+ */
+export type ParticipantOrderMode = 'auto' | 'user';
+
 /** 参与方类型显示名 */
 export const PARTICIPANT_TYPE_LABELS: Record<ParticipantType, string> = {
   person: '个人',
@@ -175,6 +182,12 @@ export interface GraphSnapshot {
   participants?: Participant[];
   /** 快照创建时的组织 */
   organizations?: Organization[];
+  /** 快照创建时的参与方顺序(与 participants 联动恢复,保持单一事实来源一致) */
+  participantOrder?: string[];
+  /** 快照创建时的参与方排序模式 */
+  participantOrderMode?: ParticipantOrderMode;
+  /** 快照创建时的 Stage 顺序(与 stages 联动恢复) */
+  stageOrder?: string[];
   /** 快照创建时的组合标签页状态(用于撤销/重做时联动恢复) */
   compositeTabs?: string[];
   /** 快照创建时的激活标签页 id */
@@ -214,6 +227,12 @@ export interface GraphDocument {
   participants: Participant[];
   /** 该文档的组织 */
   organizations: Organization[];
+  /** 参与方顺序(唯一权威,见 ParticipantOrderMode;Auto 模式下由参与方实体派生/未来算法) */
+  participantOrder: string[];
+  /** 参与方排序模式:auto=用户未显式排序;user=用户已锁定顺序 */
+  participantOrderMode: ParticipantOrderMode;
+  /** Stage 线性 Process Sequence 顺序(唯一权威) */
+  stageOrder: string[];
   /** 该文档内已打开的组合内部画布标签 */
   compositeTabs: string[];
   /** 该文档内当前激活的标签页:'main' 或组合节点 id */

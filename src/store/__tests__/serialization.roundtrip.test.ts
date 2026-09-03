@@ -71,7 +71,7 @@ describe('P4-04 Serialization Round Trip', () => {
     const json = useGraphStore.getState().serializeProject();
     const parsed = JSON.parse(json) as { format: string; version: number };
     expect(parsed.format).toBe('nodeflow');
-    expect(parsed.version).toBe(4);
+    expect(parsed.version).toBe(5); // P1:v5(Participant/Stage Order 持久化)
 
     // 清空后加载
     useGraphStore.setState({ nodes: [], edges: [], stages: [], annotations: [] });
