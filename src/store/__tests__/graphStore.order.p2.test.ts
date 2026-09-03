@@ -204,23 +204,28 @@ describe('P2 Arrange Pending history(undo/redo)', () => {
     expect(s.arrangePending).toBe(true);
   });
 
-  it('runArrange 消费 pending(false),不改 position;undo 可回退 pending', () => {
+  it('runArrange(P3):按矩阵真实移动 position + 消费 pending;undo 恢复几何与 pending;redo 复现', () => {
     setupParticipantState();
     const st = useGraphStore.getState();
-    st.reorderParticipant(1, 0);
+    st.reorderParticipant(1, 0); // order:[p2,p1,p3]
     const nodesBefore = JSON.stringify(useGraphStore.getState().nodes);
     useGraphStore.getState().runArrange();
     let s = useGraphStore.getState();
     expect(s.arrangePending).toBe(false);
-    expect(JSON.stringify(s.nodes)).toBe(nodesBefore); // 占位:不改几何
+    // P3 起 runArrange 执行真实矩阵布局,position 发生变化
+    expect(JSON.stringify(s.nodes)).not.toBe(nodesBefore);
+    expect(s.nodes.find((n) => n.id === 'n1')?.position).not.toEqual({ x: 0, y: 0 });
 
     useGraphStore.getState().undo();
     s = useGraphStore.getState();
     expect(s.arrangePending).toBe(true); // undo 回到 pending
-    expect(s.participantOrder).toEqual(['p2', 'p1', 'p3']);
+    expect(s.participantOrder).toEqual(['p2', 'p1', 'p3']); // order 不被 arrange 修改
+    expect(JSON.stringify(s.nodes)).toBe(nodesBefore); // position 恢复到 P0
 
     useGraphStore.getState().redo();
-    expect(useGraphStore.getState().arrangePending).toBe(false);
+    s = useGraphStore.getState();
+    expect(s.arrangePending).toBe(false);
+    expect(s.nodes.find((n) => n.id === 'n1')?.position).not.toEqual({ x: 0, y: 0 });
   });
 
   it('pending=false 时 runArrange 为 no-op(不产生 history)', () => {

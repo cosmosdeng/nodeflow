@@ -1,4 +1,5 @@
-import type { FlowEdge, FlowNode, Organization, Participant, ViewportState } from '../types';
+import type { FlowEdge, FlowNode, Organization, Participant, Stage, ViewportState } from '../types';
+import { getNodeSize } from './composite';
 import { computeLayout } from './layout';
 
 /** 泳道横向内边距 */
@@ -122,4 +123,186 @@ export function arrangeSwimlanes(
 export function organizationNameOf(participant: Participant, organizations: readonly Organization[]): string {
   if (!participant.organizationId) return '';
   return organizations.find((o) => o.id === participant.organizationId)?.name ?? '';
+}
+
+// ---- Unified Matrix Arrange (P3):Semantic → Geometry ----
+// Participant → Y(row)、Stage → X(column)。node.position 为唯一几何权威,纯函数不改输入。
+
+/** 矩阵布局起点(world-space) */
+const MATRIX_START_X = 80;
+const MATRIX_START_Y = 80;
+/** 列间距 */
+const MATRIX_COL_GAP = 120;
+/** 行间距 */
+const MATRIX_ROW_GAP = 80;
+/** cell 水平内边距(节点距列左缘) */
+const MATRIX_CELL_PAD_X = 24;
+/** 同 cell 内节点纵向堆叠间距 */
+const MATRIX_STACK_GAP = 40;
+/** 空 Participant 行视觉带高(3 × label 高约 20) */
+const MATRIX_EMPTY_ROW_H = 60;
+
+/**
+ * 计算 Unified Matrix Arrange 后的节点目标位置。
+ *
+ * 语义 → 几何映射:
+ * - Participant → Y 行:顺序 = participantOrder(有效参与方)+ 未列入者追加;
+ *   non-empty 行在前,empty 行(无 Arrange scope Node)按名称稳定排序置于之后;
+ *   unassigned(participantId 缺失/指向不存在)节点归入尾随独立行。
+ * - Stage → X 列:顺序 = stageOrder(有效 stage)+ 未列入者追加;
+ *   无 stage membership 的节点归入尾随独立列(哨兵列,不创建虚拟 Stage)。
+ * - 同一 (Participant, Stage) cell 内多个 Node 沿 Y 纵向堆叠,次序 = position.y → x → id。
+ * - 只处理可见的顶层 Node(排除任意 composite.childIds 成员);不修改任何 semantic 数据。
+ *
+ * 纯函数 / deterministic / 不修改输入 / 不使用 viewport 坐标。
+ */
+export function computeMatrixLayout(input: {
+  nodes: readonly FlowNode[];
+  participants: readonly Participant[];
+  participantOrder: readonly string[];
+  stages: readonly Stage[];
+  stageOrder: readonly string[];
+}): Map<string, { x: number; y: number }> {
+  const { nodes, participants, participantOrder, stages, stageOrder } = input;
+  const result = new Map<string, { x: number; y: number }>();
+
+  const participantById = new Map(participants.map((p) => [p.id, p]));
+  const stageById = new Map(stages.map((st) => [st.id, st]));
+
+  // 顶层 scope:可见且不是任何组合的 child
+  const compositeChildIds = new Set<string>();
+  for (const n of nodes) {
+    for (const cid of n.data?.composite?.childIds ?? []) compositeChildIds.add(cid);
+  }
+  const top = nodes.filter((n) => !n.hidden && !compositeChildIds.has(n.id));
+
+  // Participant 行顺序:participantOrder(有效)+ 追加未列入;non-empty → empty(name 稳定排序)
+  const orderedIds = participantOrder.filter((id) => participantById.has(id));
+  const orderedSet = new Set(orderedIds);
+  const restIds = participants.filter((p) => !orderedSet.has(p.id)).map((p) => p.id);
+  const baseRowIds = [...orderedIds, ...restIds];
+
+  const nonEmptyRows: string[] = [];
+  const emptyRows: string[] = [];
+  for (const pid of baseRowIds) {
+    const hasMember = top.some((n) => n.data?.participantId === pid);
+    (hasMember ? nonEmptyRows : emptyRows).push(pid);
+  }
+  emptyRows.sort((a, b) => {
+    const na = participantById.get(a)!.name;
+    const nb = participantById.get(b)!.name;
+    const cmp = na.localeCompare(nb, 'zh-CN', { sensitivity: 'base', numeric: true });
+    return cmp || (a < b ? -1 : a > b ? 1 : 0);
+  });
+  const assignedRowIds = [...nonEmptyRows, ...emptyRows];
+  const rowIndexOf = new Map(assignedRowIds.map((id, idx) => [id, idx]));
+
+  // Stage 列顺序:stageOrder(有效)+ 追加未列入
+  const colStageIds = stageOrder.filter((id) => stageById.has(id));
+  const colStageSet = new Set(colStageIds);
+  for (const st of stages) {
+    if (!colStageSet.has(st.id)) {
+      colStageIds.push(st.id);
+      colStageSet.add(st.id);
+    }
+  }
+  const UNASSIGNED_COL = colStageIds.length; // 尾随 unassigned 列 index(不创建虚拟 Stage)
+  const colCount = UNASSIGNED_COL + 1;
+
+  /** 节点归属列:按列序取首个含它的 stage;都不含 → 哨兵 unassigned 列 */
+  const colIndexOfNode = (n: FlowNode): number => {
+    for (let i = 0; i < colStageIds.length; i++) {
+      const st = stageById.get(colStageIds[i])!;
+      if (st.nodeIds.includes(n.id)) return i;
+    }
+    return UNASSIGNED_COL;
+  };
+
+  // 归类到 cell(row,col),row 为参与方 index 或尾随 unassigned 行 index
+  const UNASSIGNED_ROW = assignedRowIds.length;
+  const cellKey = (r: number, c: number) => `${r}_${c}`;
+  const cells = new Map<string, { n: FlowNode; stackY: number }[]>();
+  let hasUnassignedRow = false;
+  const pushCell = (r: number, c: number, n: FlowNode) => {
+    const k = cellKey(r, c);
+    const arr = cells.get(k) ?? [];
+    arr.push({ n, stackY: 0 });
+    cells.set(k, arr);
+  };
+  for (const n of top) {
+    const pid = n.data?.participantId;
+    if (pid && participantById.has(pid)) {
+      pushCell(rowIndexOf.get(pid)!, colIndexOfNode(n), n);
+    } else {
+      hasUnassignedRow = true;
+      pushCell(UNASSIGNED_ROW, colIndexOfNode(n), n); // unassigned participant → 尾随行
+    }
+  }
+
+  // 同 cell 排序 + 纵向堆叠偏移(position.y → x → id)
+  for (const arr of cells.values()) {
+    arr.sort(
+      (a, b) =>
+        a.n.position.y - b.n.position.y ||
+        a.n.position.x - b.n.position.x ||
+        (a.n.id < b.n.id ? -1 : a.n.id > b.n.id ? 1 : 0),
+    );
+    let y = 0;
+    for (const it of arr) {
+      it.stackY = y;
+      y += getNodeSize(it.n).h + MATRIX_STACK_GAP;
+    }
+  }
+
+  // 列宽(跨所有行取该列最大节点宽)+ 列 X
+  const colWidths = new Array<number>(colCount).fill(0);
+  for (const [k, arr] of cells) {
+    const c = Number(k.slice(k.indexOf('_') + 1));
+    for (const it of arr) {
+      const w = getNodeSize(it.n).w;
+      if (w > colWidths[c]) colWidths[c] = w;
+    }
+  }
+  const colX = new Array<number>(colCount).fill(0);
+  let cx = MATRIX_START_X;
+  for (let c = 0; c < colCount; c++) {
+    colX[c] = cx;
+    cx += colWidths[c] + MATRIX_CELL_PAD_X * 2 + MATRIX_COL_GAP;
+  }
+
+  // 行内容高度(每 cell 顶部对齐;行高 = 该行最大 cell 堆叠高度)
+  const rowHeights = new Map<number, number>();
+  for (const [k, arr] of cells) {
+    const r = Number(k.slice(0, k.indexOf('_')));
+    const last = arr[arr.length - 1];
+    const h = last ? last.stackY + getNodeSize(last.n).h : 0;
+    const cur = rowHeights.get(r) ?? 0;
+    if (h > cur) rowHeights.set(r, h);
+  }
+
+  // 行 Y:assigned 行(non-empty 行高 = 内容;empty 行 = 固定视觉带),unassigned 行尾随
+  const rowY = new Map<number, number>();
+  let ry = MATRIX_START_Y;
+  for (const pid of assignedRowIds) {
+    const r = rowIndexOf.get(pid)!;
+    rowY.set(r, ry);
+    const content = rowHeights.get(r) ?? 0;
+    ry += (content > 0 ? content : MATRIX_EMPTY_ROW_H) + MATRIX_ROW_GAP;
+  }
+  if (hasUnassignedRow) {
+    rowY.set(UNASSIGNED_ROW, ry);
+  }
+
+  // 写位置(cell 内容顶部对齐于行顶;列内左对齐 + cell pad)
+  for (const [k, arr] of cells) {
+    const r = Number(k.slice(0, k.indexOf('_')));
+    const c = Number(k.slice(k.indexOf('_') + 1));
+    const baseY = rowY.get(r);
+    if (baseY === undefined) continue;
+    const baseX = colX[c] + MATRIX_CELL_PAD_X;
+    for (const it of arr) {
+      result.set(it.n.id, { x: baseX, y: baseY + it.stackY });
+    }
+  }
+  return result;
 }

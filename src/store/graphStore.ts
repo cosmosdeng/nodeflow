@@ -69,7 +69,7 @@ import { setEdgeArtifact, updateEdgeArtifact } from '../lib/artifact';
 import { createFlowEdge } from '../lib/edge';
 import { findStageEmptySpot, pushNodesAwayFromBox, pushOutOfRect, rectOverlaps, type Rect } from '../lib/geometry';
 import { detachOrganizationFromParticipants, detachParticipantFromNodes } from '../lib/participant';
-import { arrangeSwimlanes } from '../lib/arrange';
+import { arrangeSwimlanes, computeMatrixLayout } from '../lib/arrange';
 import {
   buildProjectDocumentV5,
   detectDocumentFormat,
@@ -2030,10 +2030,39 @@ export const useGraphStore = create<FlowStore>()(
     },
     runArrange: () => {
       if (get().allLocked) return;
-      // P2 占位:仅消费 Arrange Pending;本阶段不执行真实几何布局,不改 node.position。
+      // P3:no pending → no-op(不产生历史)
       if (!get().arrangePending) return;
+      const s = get();
+      // Unified Matrix Arrange:读取 semantic,计算 node.position 目标(world-space)
+      const positions = computeMatrixLayout({
+        nodes: s.nodes,
+        participants: s.participants,
+        participantOrder: s.participantOrder,
+        stages: s.stages,
+        stageOrder: s.stageOrder,
+      });
+      if (positions.size === 0) {
+        // 当前无可排顶层节点(如全部节点都是组合 child 或 hidden):不消费 pending,等待后续节点
+        return;
+      }
+      let changed = false;
+      const nodes = s.nodes.map((n) => {
+        const p = positions.get(n.id);
+        if (!p) return n;
+        const x = Math.round(p.x);
+        const y = Math.round(p.y);
+        if (x === n.position.x && y === n.position.y) return n;
+        changed = true;
+        return { ...n, position: { x, y } };
+      });
+      if (!changed) {
+        // 已处于 Arrange 目标位置:仅消费 pending(语义已完成),不产生额外历史
+        set({ arrangePending: false });
+        return;
+      }
+      // 原子:一次 Arrange = 一次 history(position + pending 一起写)
       get().markHistory();
-      set({ arrangePending: false });
+      set({ nodes, arrangePending: false });
     },
     addOrganization: (name) => {
       if (get().allLocked) return '';
