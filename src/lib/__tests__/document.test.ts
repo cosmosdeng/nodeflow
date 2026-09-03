@@ -182,12 +182,14 @@ describe('lib/document 文档兼容层', () => {
         participantOrder: ['p1'],
         participantOrderMode: 'auto',
         stageOrder: [],
+        arrangePending: false,
         compositeTabs: [],
         activeTabId: 'main',
       });
       expect(doc.participants).toEqual([{ id: 'p1', name: 'Artist', type: 'person' }]);
       expect(doc.participantOrder).toEqual(['p1']);
       expect(doc.participantOrderMode).toBe('auto');
+      expect(doc.arrangePending).toBe(false);
       expect(doc.organizations).toEqual([{ id: 'o1', name: 'Dept' }]);
       const graph = doc.graph as { stageOrder: string[]; stages: unknown[] };
       expect(graph.stageOrder).toEqual([]);
@@ -201,7 +203,7 @@ describe('lib/document 文档兼容层', () => {
         name: 'P', color: '#ff0000', nodes: [{ id: 'A', type: 'flow', position: { x: 0, y: 0 }, data: { participantId: 'p1' } as never }], edges: [], viewport: { x: 0, y: 0, zoom: 1 },
         annotations: [], stages: [], participants: [{ id: 'p1', name: 'A', type: 'person' }], organizations: [],
         participantOrder: ['p1'], participantOrderMode: 'user', stageOrder: ['s1'],
-        compositeTabs: [], activeTabId: 'main',
+        arrangePending: true, compositeTabs: [], activeTabId: 'main',
       });
       const graph = doc.graph as { nodes: { data: { participantId: string } }[]; edges: unknown[]; stageOrder: string[] };
       expect(graph.nodes[0].data.participantId).toBe('p1');

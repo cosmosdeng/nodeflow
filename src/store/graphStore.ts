@@ -81,6 +81,7 @@ import {
   migrateProjectV3ToDocument,
   migrateProjectV4ToDocument,
   pickGraphNodesEdges,
+  resolveArrangePending,
   resolveParticipantOrder,
   resolveStageOrder,
   validateDocumentData,
@@ -139,6 +140,8 @@ interface FlowStore extends GraphState {
   participantOrderMode: ParticipantOrderMode;
   /** 当前活动文档的 Stage 线性顺序(唯一权威,与 stages 保持联动) */
   stageOrder: string[];
+  /** Arrange Pending:语义顺序已改但 Canvas 几何未按新顺序组织(跨保存/切文档保留) */
+  arrangePending: boolean;
   /** 长按进入域时的闪烁反馈:正在闪烁的阶段域 id(700ms 后自动清除) */
   stageFlashId: string | null;
   /** 最近一次项目加载失败的用户可见错误信息(null 表示无) */
@@ -262,6 +265,14 @@ interface FlowStore extends GraphState {
   deleteOrganization: (id: string) => void;
   /** 给节点显式指定参与方(只改语义,不改 position) */
   assignParticipant: (nodeId: string, participantId: string | null) => void;
+
+  // ---- Order / Arrange Pending (P2:语义顺序管理;真正的 Arrange 布局在后续阶段) ----
+  /** 移动参与方到新位置(更新 participantOrder;首次手动排序 Auto→User;置 arrangePending;不动 position/membership) */
+  reorderParticipant: (fromIndex: number, toIndex: number) => void;
+  /** 移动阶段到新位置(更新 stageOrder;置 arrangePending;不动 position/membership) */
+  reorderStage: (fromIndex: number, toIndex: number) => void;
+  /** 消费 Arrange Pending(占位:仅 arrangePending→false;本阶段不执行真实几何布局,不改 node.position) */
+  runArrange: () => void;
 
   // ---- 连线操作 ----
   updateEdge: (id: string, patch: Partial<FlowEdgeData>) => void;
@@ -554,6 +565,7 @@ function persistDocument(
     | 'participantOrder'
     | 'participantOrderMode'
     | 'stageOrder'
+    | 'arrangePending'
     | 'compositeTabs'
     | 'activeTabId'
   >,
@@ -578,6 +590,7 @@ function persistDocument(
         participantOrder: doc.participantOrder,
         participantOrderMode: doc.participantOrderMode,
         stageOrder: doc.stageOrder,
+        arrangePending: doc.arrangePending,
         compositeTabs: doc.compositeTabs,
         activeTabId: doc.activeTabId,
       }),
@@ -600,22 +613,24 @@ function loadPersistedDocument(id: string): Pick<
   | 'participantOrder'
   | 'participantOrderMode'
   | 'stageOrder'
+  | 'arrangePending'
   | 'compositeTabs'
   | 'activeTabId'
-> {
+  > {
   const emptyOrder = {
-    nodes: [],
-    edges: [],
-    viewport: { x: 0, y: 0, zoom: 1 },
-    annotations: [],
-    stages: [],
-    participants: [],
-    organizations: [],
-    participantOrder: [],
-    participantOrderMode: 'auto' as const,
-    stageOrder: [],
-    compositeTabs: [],
-    activeTabId: 'main',
+  nodes: [],
+  edges: [],
+  viewport: { x: 0, y: 0, zoom: 1 },
+  annotations: [],
+  stages: [],
+  participants: [],
+  organizations: [],
+  participantOrder: [],
+  participantOrderMode: 'auto' as const,
+  stageOrder: [],
+  arrangePending: false,
+  compositeTabs: [],
+  activeTabId: 'main',
   };
   try {
     const raw = localStorage.getItem(docKey(id));
@@ -643,6 +658,7 @@ function loadPersistedDocument(id: string): Pick<
           ? data.participantOrderMode
           : 'auto',
       stageOrder: Array.isArray(data.stageOrder) ? data.stageOrder : stages.map((st) => st.id),
+      arrangePending: data.arrangePending === true,
       compositeTabs: Array.isArray(data.compositeTabs) ? data.compositeTabs : [],
       activeTabId: data.activeTabId ?? 'main',
     };
@@ -701,6 +717,7 @@ function buildInitialDocuments(): { docs: GraphDocument[]; activeId: string } {
         participantOrder: Array.isArray(data.participantOrder) ? data.participantOrder : [],
         participantOrderMode: data.participantOrderMode ?? 'auto',
         stageOrder: Array.isArray(data.stageOrder) ? data.stageOrder : [],
+        arrangePending: data.arrangePending === true,
         compositeTabs: data.compositeTabs,
         activeTabId: data.activeTabId,
         past: [],
@@ -729,6 +746,7 @@ function buildInitialDocuments(): { docs: GraphDocument[]; activeId: string } {
     participantOrder: [],
     participantOrderMode: 'auto',
     stageOrder: [],
+    arrangePending: false,
     compositeTabs: [],
     activeTabId: 'main',
     past: [],
@@ -1211,6 +1229,7 @@ function syncActiveDoc(get: () => FlowStore, rawSet: (p: unknown) => void) {
             participantOrder: state.participantOrder,
             participantOrderMode: state.participantOrderMode,
             stageOrder: state.stageOrder,
+            arrangePending: state.arrangePending,
             compositeTabs: state.compositeTabs,
             activeTabId: state.activeTabId,
             past: state.past,
@@ -1247,6 +1266,7 @@ export const useGraphStore = create<FlowStore>()(
     participantOrderMode: initialActiveDoc?.participantOrderMode ?? 'auto',
     stageOrder:
       initialActiveDoc?.stageOrder ?? (initialActiveDoc?.stages ? initialActiveDoc.stages.map((st) => st.id) : []),
+    arrangePending: initialActiveDoc?.arrangePending ?? false,
     swimlaneEnabled: false,
     swimlaneOrder: [],
     stageFlashId: null,
@@ -1400,6 +1420,7 @@ export const useGraphStore = create<FlowStore>()(
             participantOrder: s.participantOrder,
             participantOrderMode: s.participantOrderMode,
             stageOrder: s.stageOrder,
+            arrangePending: s.arrangePending,
             compositeTabs: s.compositeTabs,
             activeTabId: s.activeTabId,
             at: Date.now(),
@@ -1428,6 +1449,7 @@ export const useGraphStore = create<FlowStore>()(
               participantOrder: s.participantOrder,
               participantOrderMode: s.participantOrderMode,
               stageOrder: s.stageOrder,
+              arrangePending: s.arrangePending,
               compositeTabs: s.compositeTabs,
               activeTabId: s.activeTabId,
               at: Date.now(),
@@ -1443,6 +1465,7 @@ export const useGraphStore = create<FlowStore>()(
           participantOrder: prev.participantOrder ?? [],
           participantOrderMode: prev.participantOrderMode ?? 'auto',
           stageOrder: prev.stageOrder ?? [],
+          arrangePending: prev.arrangePending ?? false,
           ...restoreTabsFromSnapshot(s, prev),
         };
       });
@@ -1468,6 +1491,7 @@ export const useGraphStore = create<FlowStore>()(
               participantOrder: s.participantOrder,
               participantOrderMode: s.participantOrderMode,
               stageOrder: s.stageOrder,
+              arrangePending: s.arrangePending,
               compositeTabs: s.compositeTabs,
               activeTabId: s.activeTabId,
               at: Date.now(),
@@ -1483,6 +1507,7 @@ export const useGraphStore = create<FlowStore>()(
           participantOrder: next.participantOrder ?? [],
           participantOrderMode: next.participantOrderMode ?? 'auto',
           stageOrder: next.stageOrder ?? [],
+          arrangePending: next.arrangePending ?? false,
           ...restoreTabsFromSnapshot(s, next),
         };
       });
@@ -1841,7 +1866,7 @@ export const useGraphStore = create<FlowStore>()(
         nodeIds: [],
         selected: true,
       };
-      set((st) => ({ stages: [...st.stages, stage] }));
+      set((st) => ({ stages: [...st.stages, stage], stageOrder: [...st.stageOrder, id] }));
       return id;
     },
     updateStage: (id, patch) => {
@@ -1865,6 +1890,8 @@ export const useGraphStore = create<FlowStore>()(
       get().markHistory();
       set((s) => ({
         stages: s.stages.filter((st) => st.id !== id),
+        // 同步移除 order,不留 dangling reference
+        stageOrder: s.stageOrder.filter((sid) => sid !== id),
         // 清理指向该阶段域的注释
         annotations: s.annotations.filter((a) => !annotationTargetsStage(a, id)),
       }));
@@ -1970,6 +1997,43 @@ export const useGraphStore = create<FlowStore>()(
         // safe detach:指向该参与方的节点 participantId 置 undefined(不删除节点)
         nodes: detachParticipantFromNodes(s.nodes, id),
       }));
+    },
+
+    // ---- Order / Arrange Pending (P2:语义顺序管理;真实 Arrange 布局在后续阶段) ----
+    reorderParticipant: (fromIndex, toIndex) => {
+      if (get().allLocked) return;
+      const order = get().participantOrder;
+      // no-op:同位置 / 越界 / 空集合
+      if (fromIndex === toIndex || fromIndex < 0 || toIndex < 0) return;
+      if (fromIndex >= order.length || toIndex >= order.length) return;
+      const next = [...order];
+      const [moved] = next.splice(fromIndex, 1);
+      next.splice(toIndex, 0, moved);
+      // 原子:一次 reorder = 一次 history(顺序 + mode 翻转 + pending 一起恢复)
+      get().markHistory();
+      set(() => ({
+        participantOrder: next,
+        participantOrderMode: 'user', // 首次手动排序:Auto → User
+        arrangePending: true, // Order Change ≠ Arrange,仅标记 pending
+      }));
+    },
+    reorderStage: (fromIndex, toIndex) => {
+      if (get().allLocked) return;
+      const order = get().stageOrder;
+      if (fromIndex === toIndex || fromIndex < 0 || toIndex < 0) return;
+      if (fromIndex >= order.length || toIndex >= order.length) return;
+      const next = [...order];
+      const [moved] = next.splice(fromIndex, 1);
+      next.splice(toIndex, 0, moved);
+      get().markHistory();
+      set(() => ({ stageOrder: next, arrangePending: true }));
+    },
+    runArrange: () => {
+      if (get().allLocked) return;
+      // P2 占位:仅消费 Arrange Pending;本阶段不执行真实几何布局,不改 node.position。
+      if (!get().arrangePending) return;
+      get().markHistory();
+      set({ arrangePending: false });
     },
     addOrganization: (name) => {
       if (get().allLocked) return '';
@@ -2254,7 +2318,7 @@ export const useGraphStore = create<FlowStore>()(
     clearGraph: () => {
       if (get().allLocked) return;
       get().markHistory();
-      set({ nodes: [], edges: [], annotations: [], stages: [], participants: [], organizations: [], participantOrder: [], participantOrderMode: 'auto', stageOrder: [], compositeTabs: [], activeTabId: 'main' });
+      set({ nodes: [], edges: [], annotations: [], stages: [], participants: [], organizations: [], participantOrder: [], participantOrderMode: 'auto', stageOrder: [], arrangePending: false, compositeTabs: [], activeTabId: 'main' });
     },
 
     loadGraph: (data) => {
@@ -2271,6 +2335,7 @@ export const useGraphStore = create<FlowStore>()(
         participantOrder: [],
         participantOrderMode: 'auto',
         stageOrder: [],
+        arrangePending: false,
         selected: null,
         compositeTabs: [],
         activeTabId: 'main',
@@ -2359,6 +2424,7 @@ export const useGraphStore = create<FlowStore>()(
         participantOrder: s.participantOrder,
         participantOrderMode: s.participantOrderMode,
         stageOrder: s.stageOrder,
+        arrangePending: s.arrangePending,
         compositeTabs: s.compositeTabs,
         activeTabId: s.activeTabId,
       });
@@ -2445,6 +2511,7 @@ export const useGraphStore = create<FlowStore>()(
         // Participant/Stage Order:解析 v5 字段或按旧格式补默认(participant=实体顺序 auto;stage=旧 x 排序)
         const { order: participantOrder, mode: participantOrderMode } = resolveParticipantOrder(data, participantsArr);
         const stageOrder = resolveStageOrder(data, norm.stages);
+        const arrangePending = resolveArrangePending(data);
         doc = {
           id: uid('doc'),
           name,
@@ -2459,6 +2526,7 @@ export const useGraphStore = create<FlowStore>()(
           participantOrder,
           participantOrderMode,
           stageOrder,
+          arrangePending,
           compositeTabs: norm.compositeTabs,
           activeTabId: norm.activeTabId,
           past: [],
@@ -2484,6 +2552,7 @@ export const useGraphStore = create<FlowStore>()(
         participantOrder: doc.participantOrder,
         participantOrderMode: doc.participantOrderMode,
         stageOrder: doc.stageOrder,
+        arrangePending: doc.arrangePending,
         compositeTabs: doc.compositeTabs,
         activeTabId: doc.activeTabId,
         past: doc.past,
@@ -2519,6 +2588,7 @@ export const useGraphStore = create<FlowStore>()(
         participantOrder: [],
         participantOrderMode: 'auto',
         stageOrder: [],
+        arrangePending: false,
         compositeTabs: [],
         activeTabId: 'main',
         past: [],
@@ -2539,6 +2609,7 @@ export const useGraphStore = create<FlowStore>()(
         participantOrder: [],
         participantOrderMode: 'auto',
         stageOrder: [],
+        arrangePending: false,
         compositeTabs: [],
         activeTabId: 'main',
         past: [],
@@ -2571,6 +2642,7 @@ export const useGraphStore = create<FlowStore>()(
         participantOrder: target.participantOrder ?? [],
         participantOrderMode: target.participantOrderMode ?? 'auto',
         stageOrder: target.stageOrder ?? [],
+        arrangePending: target.arrangePending ?? false,
         compositeTabs: target.compositeTabs,
         activeTabId: target.activeTabId,
         past: target.past,
@@ -2612,6 +2684,7 @@ export const useGraphStore = create<FlowStore>()(
           participantOrder: [],
           participantOrderMode: 'auto',
           stageOrder: [],
+          arrangePending: false,
           compositeTabs: [],
           activeTabId: 'main',
           past: [],

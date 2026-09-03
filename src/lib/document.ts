@@ -209,6 +209,18 @@ export function resolveParticipantOrder(
 }
 
 /**
+ * 解析 Arrange Pending 状态(v5 document.arrangePending;旧格式/缺省为 false)。
+ * 该字段随 v5 同版本增量扩展,旧 v5 文件无此字段时按 false 处理。
+ * 纯函数 / deterministic / 不修改输入。
+ */
+export function resolveArrangePending(input: unknown): boolean {
+  const doc = ((input as Record<string, unknown> | undefined)?.document ??
+    input ??
+    {}) as Record<string, unknown>;
+  return doc.arrangePending === true;
+}
+
+/**
  * 解析 Stage 线性顺序(单一事实来源 graph.stageOrder):
  * - v5 graph.stageOrder 有效时直接采用(仅保留仍存在的 stage id,缺失的追加在后,保证确定性);
  * - 旧格式(v4 及更早)使用旧 stages 的 x 坐标生成初始顺序:按 x ascending,相同 x 保持原数组顺序(stable)。
@@ -320,6 +332,7 @@ export function buildProjectDocumentV5(input: {
   participantOrder: string[];
   participantOrderMode: ParticipantOrderMode;
   stageOrder: string[];
+  arrangePending: boolean;
   compositeTabs: string[];
   activeTabId: string;
 }): Record<string, unknown> {
@@ -329,6 +342,7 @@ export function buildProjectDocumentV5(input: {
     participants: input.participants,
     participantOrder: input.participantOrder,
     participantOrderMode: input.participantOrderMode,
+    arrangePending: input.arrangePending,
     organizations: input.organizations,
     graph: {
       stageOrder: input.stageOrder,

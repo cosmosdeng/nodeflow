@@ -188,6 +188,8 @@ export interface GraphSnapshot {
   participantOrderMode?: ParticipantOrderMode;
   /** 快照创建时的 Stage 顺序(与 stages 联动恢复) */
   stageOrder?: string[];
+  /** 快照创建时的 Arrange Pending 状态(与 order 联动恢复) */
+  arrangePending?: boolean;
   /** 快照创建时的组合标签页状态(用于撤销/重做时联动恢复) */
   compositeTabs?: string[];
   /** 快照创建时的激活标签页 id */
@@ -233,6 +235,11 @@ export interface GraphDocument {
   participantOrderMode: ParticipantOrderMode;
   /** Stage 线性 Process Sequence 顺序(唯一权威) */
   stageOrder: string[];
+  /**
+   * Arrange Pending:语义顺序(Participant/Stage Order)已被修改但 Canvas geometry 尚未按新顺序组织。
+   * 用户可见、跨保存/切文档保留的产品状态。
+   */
+  arrangePending: boolean;
   /** 该文档内已打开的组合内部画布标签 */
   compositeTabs: string[];
   /** 该文档内当前激活的标签页:'main' 或组合节点 id */
