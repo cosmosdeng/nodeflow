@@ -2487,3 +2487,153 @@ body,
   white-space: nowrap;
   pointer-events: none;
 }
+
+/* ---------- Phase A:Outliner 参与方/阶段排序段 + Arrange Pending ---------- */
+.mx-section {
+  margin-bottom: 8px;
+}
+
+.mx-sec-title {
+  font-size: 11px;
+  color: var(--text-faint);
+  font-weight: 600;
+  margin: 4px 2px 6px;
+}
+
+.mx-order-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin-bottom: 4px;
+}
+
+.mx-order-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 6px;
+  border-radius: 6px;
+  border: 1px solid transparent;
+  font-size: 12.5px;
+  color: var(--text);
+  cursor: default;
+  transition: background 0.12s, border-color 0.12s;
+}
+
+.mx-order-row:hover {
+  background: var(--bg-hover);
+}
+
+.mx-order-row.drop {
+  background: var(--accent-soft);
+  border-color: color-mix(in srgb, var(--accent) 45%, transparent);
+}
+
+/* 空参与方:整行 attention(红色文字),不做错误图标/提示 */
+.mx-order-row.empty {
+  color: var(--danger);
+}
+.mx-order-row.empty .mx-order-name,
+.mx-order-row.empty .mx-order-count {
+  color: var(--danger);
+}
+
+.mx-order-handle {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: grab;
+  color: var(--text-muted);
+  font-size: 15px;
+  font-weight: 600;
+  line-height: 1;
+  padding: 3px 5px;
+  border-radius: 4px;
+  user-select: none;
+}
+
+.mx-order-handle:hover {
+  background: var(--bg-hover);
+  color: var(--text);
+}
+
+.mx-order-name {
+  flex: 1;
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.mx-order-count {
+  flex-shrink: 0;
+  font-size: 10.5px;
+  color: var(--text-faint);
+  background: var(--bg-panel-2);
+  border-radius: 999px;
+  padding: 0 7px;
+  line-height: 1.6;
+}
+
+.mx-sec-divider {
+  border-top: 1px dashed var(--border);
+  margin: 10px 0 8px;
+}
+
+/* Arrange Pending:顶部「顺序已改变」提示条 */
+@keyframes mx-pending-note-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.55;
+  }
+}
+
+.mx-pending-note {
+  flex-shrink: 0;
+  padding: 5px 10px;
+  font-size: 11px;
+  font-weight: 600;
+  text-align: center;
+  color: #ffc53d;
+  background: rgba(255, 197, 61, 0.1);
+  border-bottom: 1px solid rgba(255, 197, 61, 0.4);
+  animation: mx-pending-note-pulse 1.6s ease-in-out infinite;
+}
+
+/* Arrange Pending:整个大纲面板轻微 glow / breathing */
+@keyframes mx-pending-pane {
+  0%,
+  100% {
+    box-shadow: inset 0 0 0 1px rgba(255, 197, 61, 0.08), 0 0 4px 0 rgba(255, 197, 61, 0.05);
+  }
+  50% {
+    box-shadow: inset 0 0 0 1px rgba(255, 197, 61, 0.5), 0 0 22px 2px rgba(255, 197, 61, 0.25);
+  }
+}
+
+.panel.pending {
+  animation: mx-pending-pane 1.8s ease-in-out infinite;
+}
+
+/* Arrange Pending:Toolbar Arrange 按钮高亮 pulse */
+@keyframes mx-arrange-pulse {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 rgba(255, 197, 61, 0);
+  }
+  50% {
+    box-shadow: 0 0 12px 1px rgba(255, 197, 61, 0.5);
+  }
+}
+
+.tb-btn.arrange-pending {
+  color: #ffc53d;
+  font-weight: 600;
+  background: rgba(255, 197, 61, 0.1);
+  border-color: rgba(255, 197, 61, 0.55);
+  animation: mx-arrange-pulse 1.5s ease-in-out infinite;
+}

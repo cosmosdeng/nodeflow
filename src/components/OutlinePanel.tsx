@@ -8,11 +8,84 @@ interface Props {
   onClose: () => void;
 }
 
+/** 排序段内一行的展示模型 */
+interface OrderItem {
+  id: string;
+  name: string;
+  count?: number;
+  empty?: boolean;
+}
+
+/**
+ * 参与方 / 阶段 通用排序行列表(仅 UI 排序):
+ * - drag handle 触发 HTML5 drag,drop 后调用 store 的 reorder action;
+ * - 不引入第三方 DnD 库;整行看起来不可拖(只有 handle 可拖)。
+ */
+function OrderRowList({
+  kind,
+  items,
+  onReorder,
+}: {
+  kind: string;
+  items: OrderItem[];
+  onReorder: (from: number, to: number) => void;
+}) {
+  const [dragOver, setDragOver] = useState<number | null>(null);
+  if (items.length === 0) return null;
+  return (
+    <div className="mx-order-list">
+      {items.map((it, i) => (
+        <div
+          key={it.id}
+          className={`mx-order-row${it.empty ? ' empty' : ''}${dragOver === i ? ' drop' : ''}`}
+          onDragOver={(e) => {
+            e.preventDefault();
+            e.dataTransfer.dropEffect = 'move';
+            setDragOver(i);
+          }}
+          onDragLeave={() => setDragOver((cur) => (cur === i ? null : cur))}
+          onDrop={(e) => {
+            e.preventDefault();
+            const from = Number(e.dataTransfer.getData(`text/mx-${kind}`));
+            if (Number.isInteger(from) && from >= 0 && from < items.length && from !== i) {
+              onReorder(from, i);
+            }
+            setDragOver(null);
+          }}
+        >
+          <span
+            className="mx-order-handle"
+            title="拖动调整顺序"
+            draggable
+            onDragStart={(e) => {
+              e.dataTransfer.setData(`text/mx-${kind}`, String(i));
+              e.dataTransfer.effectAllowed = 'move';
+            }}
+          >
+            ☰
+          </span>
+          <span className="mx-order-name" title={it.name}>
+            {it.name}
+          </span>
+          {typeof it.count === 'number' && <span className="mx-order-count">{it.count}</span>}
+        </div>
+      ))}
+    </div>
+  );
+}
+
 export default function OutlinePanel({ onClose }: Props) {
   const nodes = useGraphStore((s) => s.nodes);
   const edges = useGraphStore((s) => s.edges);
   const selected = useGraphStore((s) => s.selected);
   const setSelected = useGraphStore((s) => s.setSelected);
+  const participants = useGraphStore((s) => s.participants);
+  const participantOrder = useGraphStore((s) => s.participantOrder);
+  const reorderParticipant = useGraphStore((s) => s.reorderParticipant);
+  const stages = useGraphStore((s) => s.stages);
+  const stageOrder = useGraphStore((s) => s.stageOrder);
+  const reorderStage = useGraphStore((s) => s.reorderStage);
+  const arrangePending = useGraphStore((s) => s.arrangePending);
   const { setCenter } = useReactFlow();
 
   const [keyword, setKeyword] = useState('');
@@ -66,8 +139,45 @@ export default function OutlinePanel({ onClose }: Props) {
     }
   };
 
+  // 参与方显示顺序 = participantOrder(仅有效)+ 未列出者追加,与 P3 computeMatrixLayout 同规则;不改 store。
+  const orderedParticipantIds = useMemo(() => {
+    const valid = participantOrder.filter((id) => participants.some((p) => p.id === id));
+    const seen = new Set(valid);
+    return [...valid, ...participants.filter((p) => !seen.has(p.id)).map((p) => p.id)];
+  }, [participants, participantOrder]);
+
+  // 阶段显示顺序 = stageOrder(仅有效)+ 未列出者追加,同规则;不改 store。
+  const orderedStageIds = useMemo(() => {
+    const valid = stageOrder.filter((id) => stages.some((st) => st.id === id));
+    const seen = new Set(valid);
+    return [...valid, ...stages.filter((st) => !seen.has(st.id)).map((st) => st.id)];
+  }, [stages, stageOrder]);
+
+  const visibleCountOf = (participantId: string) =>
+    nodes.filter((n) => !n.hidden && n.data?.participantId === participantId).length;
+
+  const participantItems: OrderItem[] = useMemo(
+    () =>
+      orderedParticipantIds.map((pid) => {
+        const p = participants.find((x) => x.id === pid);
+        const count = visibleCountOf(pid);
+        return { id: pid, name: p?.name ?? '未命名参与方', count, empty: count === 0 };
+      }),
+    [orderedParticipantIds, participants, nodes],
+  );
+
+  const stageItems: OrderItem[] = useMemo(
+    () =>
+      orderedStageIds.map((sid) => {
+        const st = stages.find((x) => x.id === sid);
+        return { id: sid, name: st?.name ?? '未命名阶段' };
+      }),
+    [orderedStageIds, stages],
+  );
+
   return (
-    <aside className="panel" style={{ width: 260 }}>
+    <aside className={`panel${arrangePending ? ' pending' : ''}`} style={{ width: 260 }}>
+      {arrangePending && <div className="mx-pending-note">顺序已改变</div>}
       <div className="panel-header">
         <span>大纲 · {nodes.length} 个节点</span>
         <button className="panel-close" onClick={onClose} title="关闭大纲">
@@ -75,6 +185,35 @@ export default function OutlinePanel({ onClose }: Props) {
         </button>
       </div>
       <div className="panel-body">
+        {/* 参与方顺序(拖动 handle 排序 → reorderParticipant,不改节点位置) */}
+        {participantItems.length > 0 && (
+          <div className="mx-section">
+            <div className="mx-sec-title">参与方</div>
+            <OrderRowList
+              kind="participant"
+              items={participantItems}
+              onReorder={(from, to) => reorderParticipant(from, to)}
+            />
+          </div>
+        )}
+
+        {/* 阶段顺序(拖动 handle 排序 → reorderStage,不改节点位置) */}
+        {stageItems.length > 0 && (
+          <div className="mx-section">
+            <div className="mx-sec-title">阶段</div>
+            <OrderRowList
+              kind="stage"
+              items={stageItems}
+              onReorder={(from, to) => reorderStage(from, to)}
+            />
+          </div>
+        )}
+
+        {(participantItems.length > 0 || stageItems.length > 0) && (
+          <div className="mx-sec-divider" />
+        )}
+
+        <div className="mx-sec-title">节点</div>
         <div className="field">
           <input
             placeholder="搜索节点…"

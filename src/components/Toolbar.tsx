@@ -95,6 +95,8 @@ export default function Toolbar({
   const swimlaneEnabled = useGraphStore((s) => s.swimlaneEnabled);
   const toggleSwimlane = useGraphStore((s) => s.toggleSwimlane);
   const arrangeAllSwimlanes = useGraphStore((s) => s.arrangeAllSwimlanes);
+  const arrangePending = useGraphStore((s) => s.arrangePending);
+  const runArrange = useGraphStore((s) => s.runArrange);
   const { screenToFlowPosition, fitView, getViewport, setViewport } = useReactFlow();
 
   const handleAddNode = () => {
@@ -444,6 +446,21 @@ export default function Toolbar({
         }}
       >
         ⤺ 自动排列
+      </button>
+
+      <span className="sep" />
+
+      <button
+        className={`tb-btn${arrangePending ? ' arrange-pending' : ''}`}
+        disabled={allLocked || !arrangePending}
+        title={
+          arrangePending
+            ? '参与方或阶段顺序已改变:点击后按「参与方 × 阶段」矩阵重新排列节点(单次撤销可还原)'
+            : '先在大纲中调整参与方或阶段顺序,此按钮将变为 Arrange Pending'
+        }
+        onClick={runArrange}
+      >
+        ⟳ {arrangePending ? 'Arrange Pending' : 'Arrange'}
       </button>
 
       <span className="sep" />
