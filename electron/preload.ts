@@ -27,6 +27,12 @@ contextBridge.exposeInMainWorld('nodeflow', {
     ipcRenderer.on('agent:bridge:request', listener);
     return () => ipcRenderer.removeListener('agent:bridge:request', listener);
   },
+  /** 订阅主进程下发的 Agent capability 配置(当前仅 test.fixture 开关)。 */
+  onAgentBridgeCapabilities: (cb: (caps: { testCmdsEnabled: boolean }) => void) => {
+    const listener = (_e: unknown, caps: { testCmdsEnabled: boolean }) => cb(caps);
+    ipcRenderer.on('agent:bridge:capabilities', listener);
+    return () => ipcRenderer.removeListener('agent:bridge:capabilities', listener);
+  },
   /** 把 AgentResponse 回传给主进程 Agent Bridge(固定白名单 channel)。 */
   sendAgentBridgeResponse: (resp: unknown) => {
     ipcRenderer.send('agent:bridge:response', resp);

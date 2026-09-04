@@ -9,6 +9,10 @@ interface Window {
     ) => () => void;
     /** 订阅 Agent Bridge 转发进来的 AgentRequest,返回取消订阅函数 */
     onAgentBridgeRequest?: (cb: (req: unknown) => void) => () => void;
+    /** 订阅主进程下发的 Agent capability 配置(当前仅 test.fixture 开关) */
+    onAgentBridgeCapabilities?: (
+      cb: (caps: { testCmdsEnabled: boolean }) => void,
+    ) => () => void;
     /** 把 AgentResponse 回传给主进程 Agent Bridge */
     sendAgentBridgeResponse?: (resp: unknown) => void;
     /** 请求主进程对整个窗口截图(capturePage),返回 {format,mimeType,data,width,height} */

@@ -4,7 +4,7 @@
  * 语义(assignment / membership)与几何(containment / overlap / band)严格分离。
  */
 import { useGraphStore } from '../store/graphStore';
-import { getNodesDto, getParticipantsDto, getStagesDto } from './queries';
+import { getAnnotationsDto, getNodesDto, getParticipantsDto, getStagesDto } from './queries';
 import { isNodeInsideParticipantBand, isNodeInsideStageBand, nodeRect, rectsOverlap, zonesOf } from './geometry';
 import { asOptionalString, asPayloadRecord, asString, asStringArray, asNumber, asOptionalNumber, asBoolean } from './validation';
 import type { AgentAssertionResult, AgentAssertionType } from './types';
@@ -203,6 +203,90 @@ export function assertNodePosition(p: Record<string, unknown>): AgentAssertionRe
   return fail('assertNodePosition', '节点位置不匹配', { nodeId, position: { x: px, y: py } }, { x, y, tolerance: tol });
 }
 
+export function assertCompositeContains(p: Record<string, unknown>): AgentAssertionResult {
+  const compositeId = asString(p.compositeId, 'compositeId');
+  const contains = Array.isArray(p.childIds) ? asStringArray(p.childIds, 'childIds') : null;
+  const missing = requireNode(compositeId, 'assertCompositeContains');
+  if (missing) return missing;
+  const dto = getNodesDto().find((n) => n.id === compositeId)!;
+  if (!dto.isComposite) {
+    return fail('assertCompositeContains', '节点不是 composite host', { isComposite: false }, { isComposite: true });
+  }
+  if (!contains || contains.length === 0) {
+    return pass('assertCompositeContains', { compositeId, childIds: dto.childIds }, { childIds: contains ?? [] });
+  }
+  const absent = contains.filter((c) => !dto.childIds.includes(c));
+  return absent.length === 0
+    ? pass('assertCompositeContains', { compositeId, childIds: dto.childIds }, { childIds: contains })
+    : fail('assertCompositeContains', 'composite 缺少子节点', { compositeId, missing: absent }, { childIds: contains });
+}
+
+export function assertNodeParent(p: Record<string, unknown>): AgentAssertionResult {
+  const nodeId = asString(p.nodeId, 'nodeId');
+  const expected = asOptionalString(p.compositeId, 'compositeId') ?? null;
+  const missing = requireNode(nodeId, 'assertNodeParent');
+  if (missing) return missing;
+  const actual = getNodesDto().find((n) => n.id === nodeId)!.parentCompositeId;
+  return actual === expected
+    ? pass('assertNodeParent', { nodeId, parentCompositeId: actual }, { compositeId: expected })
+    : fail('assertNodeParent', '节点所属 composite 不匹配', { nodeId, parentCompositeId: actual }, { compositeId: expected });
+}
+
+export function assertGatewayType(p: Record<string, unknown>): AgentAssertionResult {
+  const nodeId = asString(p.nodeId, 'nodeId');
+  const type = asString(p.expectedType, 'expectedType');
+  const missing = requireNode(nodeId, 'assertGatewayType');
+  if (missing) return missing;
+  const dto = getNodesDto().find((n) => n.id === nodeId)!;
+  return dto.isGateway && dto.gatewayType === type
+    ? pass('assertGatewayType', { nodeId, gatewayType: dto.gatewayType }, { type })
+    : fail('assertGatewayType', '网关类型不匹配', { nodeId, isGateway: dto.isGateway, gatewayType: dto.gatewayType }, { type });
+}
+
+export function assertEdgeArtifact(p: Record<string, unknown>): AgentAssertionResult {
+  const edgeId = asString(p.edgeId, 'edgeId');
+  const expectedKind = asOptionalString(p.kind, 'kind');
+  const edge = getEdgesOf();
+  const target = edge.find((e) => e.id === edgeId);
+  if (!target) return fail('assertEdgeArtifact', '连线不存在', null, edgeId);
+  const art = target.artifact;
+  if (!art) return fail('assertEdgeArtifact', '连线没有中间产物', { edgeId }, { artifact: true });
+  if (expectedKind && art.kind !== expectedKind) {
+    return fail('assertEdgeArtifact', '中间产物类型不匹配', { edgeId, kind: art.kind }, { kind: expectedKind });
+  }
+  return pass('assertEdgeArtifact', { edgeId, artifact: art }, { kind: expectedKind ?? 'any' });
+}
+
+export function assertAnnotationExists(p: Record<string, unknown>): AgentAssertionResult {
+  const id = asString(p.id, 'id');
+  const content = asOptionalString(p.content, 'content');
+  const title = asOptionalString(p.title, 'title');
+  const found = getAnnotationsDto().find((a) => a.id === id);
+  if (!found) return fail('assertAnnotationExists', '注释不存在', null, id);
+  if (content !== undefined && found.content !== content) {
+    return fail('assertAnnotationExists', '注释内容不匹配', { id, content: found.content }, { content });
+  }
+  if (title !== undefined && found.title !== title) {
+    return fail('assertAnnotationExists', '注释标题不匹配', { id, title: found.title }, { title });
+  }
+  return pass('assertAnnotationExists', { id, title: found.title, content: found.content }, { id });
+}
+
+function getEdgesOf() {
+  return useGraphStore.getState().edges.map((e) => ({
+    id: e.id,
+    artifact:
+      e.data?.artifact && typeof e.data.artifact === 'object'
+        ? {
+            id: e.data.artifact.id,
+            kind: e.data.artifact.kind,
+            label: e.data.artifact.label,
+            description: e.data.artifact.description,
+          }
+        : null,
+  }));
+}
+
 const ASSERTIONS: Record<string, (p: Record<string, unknown>) => AgentAssertionResult> = {
   assertNodeExists,
   assertEdgeExists,
@@ -214,6 +298,11 @@ const ASSERTIONS: Record<string, (p: Record<string, unknown>) => AgentAssertionR
   assertBandVisible,
   assertBandOrder,
   assertNodePosition,
+  assertCompositeContains,
+  assertNodeParent,
+  assertGatewayType,
+  assertEdgeArtifact,
+  assertAnnotationExists,
 };
 
 export type { AgentAssertionResult };

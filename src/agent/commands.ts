@@ -6,7 +6,17 @@
  */
 import type { Connection } from '@xyflow/react';
 import { useGraphStore } from '../store/graphStore';
-import type { FlowNodeData, ParticipantType } from '../types';
+import { GATEWAY_META } from '../lib/gateway';
+import {
+  uid,
+  type AnnotationTarget,
+  type Artifact,
+  type ArtifactKind,
+  type FlowNodeData,
+  type GatewayType,
+  type ParticipantType,
+  type PortDef,
+} from '../types';
 import {
   asPayloadRecord,
   asPosition,
@@ -24,14 +34,34 @@ const PARTICIPANT_TYPES: ReadonlySet<string> = new Set([
   'person', 'role', 'organization', 'department', 'machine', 'software', 'ai-agent',
 ]);
 
-function snapshot(): { prev: number; run: (fn: () => void) => AgentCommandResult; } {
+const GATEWAY_TYPES: ReadonlySet<string> = new Set(['exclusive', 'parallel', 'inclusive']);
+const ARTIFACT_KINDS: ReadonlySet<string> = new Set([
+  'document', 'image', 'video', 'audio', 'code', 'data', 'other',
+]);
+
+/**
+ * A-001:revision 由 store「Graph Mutation Authority」统一推进(graph 指纹订阅)。
+ * Agent 侧不再手动 bump;此处只记录执行前 revision 并返回执行后实际值。
+ * 若 Store Action 实际没有改变 Agent 可观察 Graph State(如 assign 同值),
+ * 指纹不变 → revision 不前进。
+ */
+type EntityResult = Record<string, unknown> | undefined;
+
+function snapshot(): {
+  prev: number;
+  run: (fn: () => void, entity?: () => EntityResult) => AgentCommandResult;
+} {
   const prev = useGraphStore.getState().agentRevision;
   return {
     prev,
-    run: (fn) => {
+    run: (fn, entity) => {
       fn();
-      useGraphStore.getState().bumpAgentRevision();
-      return { previousRevision: prev, newRevision: useGraphStore.getState().agentRevision };
+      const result = entity?.();
+      return {
+        previousRevision: prev,
+        newRevision: useGraphStore.getState().agentRevision,
+        result: result && Object.keys(result).length ? result : undefined,
+      };
     },
   };
 }
@@ -51,6 +81,24 @@ function nodeDataFrom(payload: Record<string, unknown>): Partial<FlowNodeData> {
   return d;
 }
 
+function annotationTargetFrom(v: unknown): AnnotationTarget {
+  const o = asRecord(v, 'target');
+  const kind = asString(o.kind, 'target.kind');
+  switch (kind) {
+    case 'canvas':
+      return { kind, tabId: asString(o.tabId, 'target.tabId') };
+    case 'node':
+      return { kind, nodeId: asString(o.nodeId, 'target.nodeId') };
+    case 'edge':
+    case 'artifact':
+      return { kind, edgeId: asString(o.edgeId, `target.edgeId`) };
+    case 'stage':
+      return { kind, stageId: asString(o.stageId, 'target.stageId') };
+    default:
+      throw invalidPayload(`不支持的 annotation target kind: ${kind}`);
+  }
+}
+
 export function runCommand(type: string, payload: unknown): AgentCommandResult {
   // 无 payload 的 command(reset/seedFixture 等)视作空对象
   const p: Record<string, unknown> =
@@ -61,8 +109,9 @@ export function runCommand(type: string, payload: unknown): AgentCommandResult {
     case 'createNode': {
       const pos = p.position === undefined ? undefined : asPosition(p.position);
       const data = nodeDataFrom(p);
+      const m = snapshot();
       const id = useGraphStore.getState().addNode(Object.keys(data).length ? data : undefined, pos);
-      return snapshot().run(() => { void id; });
+      return m.run(() => undefined, () => ({ nodeId: id }));
     }
     case 'updateNode': {
       const nodeId = asString(p.nodeId, 'nodeId');
@@ -95,8 +144,9 @@ export function runCommand(type: string, payload: unknown): AgentCommandResult {
       const name = asString(p.name, 'name');
       const type = typeOfParticipant(p.type);
       const organizationId = asOptionalString(p.organizationId, 'organizationId');
+      const m = snapshot();
       const id = useGraphStore.getState().addParticipant(name, type, organizationId);
-      return snapshot().run(() => { void id; });
+      return m.run(() => undefined, () => ({ participantId: id }));
     }
     case 'updateParticipant': {
       const id = asString(p.id, 'id');
@@ -121,8 +171,9 @@ export function runCommand(type: string, payload: unknown): AgentCommandResult {
       const y = p.y === undefined ? undefined : asNumber(p.y, 'y');
       const width = asOptionalNumber(p.width, 'width') ?? 500;
       const height = asOptionalNumber(p.height, 'height') ?? 400;
+      const m = snapshot();
       const id = useGraphStore.getState().addStage(x ?? 0, y ?? 0, width, height, name);
-      return snapshot().run(() => { void id; });
+      return m.run(() => undefined, () => ({ stageId: id }));
     }
     case 'updateStage': {
       const id = asString(p.id, 'id');
@@ -148,13 +199,160 @@ export function runCommand(type: string, payload: unknown): AgentCommandResult {
         sourceHandle: sourceHandle ?? 'out_1',
         targetHandle: targetHandle ?? 'in_1',
       };
-      return snapshot().run(() => {
-        useGraphStore.getState().onConnect(conn);
-      });
+      const m = snapshot();
+      const beforeEdges = new Set(useGraphStore.getState().edges.map((e) => e.id));
+      return m.run(
+        () => {
+          useGraphStore.getState().onConnect(conn);
+        },
+        () => {
+          const created = useGraphStore.getState().edges.find((e) => !beforeEdges.has(e.id));
+          return created ? { edgeId: created.id } : undefined;
+        },
+      );
     }
     case 'deleteEdge': {
       const id = asString(p.id, 'id');
       return snapshot().run(() => useGraphStore.getState().deleteEdge(id));
+    }
+
+    // ---- Phase D:Gateway ----
+    case 'createGateway': {
+      const type = asString(p.type, 'type') as GatewayType;
+      if (!GATEWAY_TYPES.has(type)) throw invalidPayload(`不支持的网关类型: ${type}`);
+      const pos = p.position === undefined ? undefined : asPosition(p.position);
+      const outputs: PortDef[] = [
+        { id: 'out_1', name: '分支1' },
+        { id: 'out_2', name: '分支2' },
+      ];
+      const data: Partial<FlowNodeData> = {
+        label: GATEWAY_META[type].label,
+        actor: 'hybrid',
+        inputs: [{ id: 'in_1', name: '输入' }],
+        outputs,
+        gateway: { type },
+      };
+      const m = snapshot();
+      const id = useGraphStore.getState().addNode(data, pos);
+      return m.run(() => undefined, () => ({ gatewayId: id }));
+    }
+    case 'changeGatewayType': {
+      const nodeId = asString(p.nodeId, 'nodeId');
+      const type = asString(p.type, 'type') as GatewayType;
+      if (!GATEWAY_TYPES.has(type)) throw invalidPayload(`不支持的网关类型: ${type}`);
+      const cur = useGraphStore.getState().nodes.find((n) => n.id === nodeId);
+      if (!cur?.data?.gateway) throw invalidPayload(`节点不是网关: ${nodeId}`);
+      const m = snapshot();
+      return m.run(
+        () => {
+          useGraphStore
+            .getState()
+            .updateNode(nodeId, { gateway: { type }, label: GATEWAY_META[type].label });
+        },
+        () => ({ gatewayId: nodeId }),
+      );
+    }
+
+    // ---- Phase D:Artifact(edge.data.artifact) ----
+    case 'attachArtifact': {
+      const edgeId = asString(p.edgeId, 'edgeId');
+      const kind = asString(p.kind, 'kind') as ArtifactKind;
+      if (!ARTIFACT_KINDS.has(kind)) throw invalidPayload(`不支持的中间产物类型: ${kind}`);
+      const label = asOptionalString(p.label, 'label') ?? '';
+      const description = asOptionalString(p.description, 'description') ?? '';
+      const edge = useGraphStore.getState().edges.find((e) => e.id === edgeId);
+      if (!edge) throw invalidPayload(`连线不存在: ${edgeId}`);
+      const artifact: Artifact = { id: uid('art'), kind, label, description };
+      const m = snapshot();
+      return m.run(
+        () => {
+          useGraphStore.getState().setArtifact(edgeId, artifact);
+        },
+        () => ({ artifactId: artifact.id }),
+      );
+    }
+    case 'updateArtifact': {
+      const edgeId = asString(p.edgeId, 'edgeId');
+      const patch: Partial<Artifact> = {};
+      if (p.kind !== undefined) {
+        const kind = asString(p.kind, 'kind') as ArtifactKind;
+        if (!ARTIFACT_KINDS.has(kind)) throw invalidPayload(`不支持的中间产物类型: ${kind}`);
+        patch.kind = kind;
+      }
+      if (p.label !== undefined) patch.label = asString(p.label, 'label');
+      if (p.description !== undefined) patch.description = asString(p.description, 'description');
+      const edge = useGraphStore.getState().edges.find((e) => e.id === edgeId);
+      const curArtifact = edge?.data?.artifact;
+      if (!edge || !curArtifact) throw invalidPayload(`连线没有中间产物: ${edgeId}`);
+      const m = snapshot();
+      return m.run(
+        () => {
+          useGraphStore.getState().updateArtifact(edgeId, patch);
+        },
+        () => ({ artifactId: curArtifact.id }),
+      );
+    }
+    case 'removeArtifact': {
+      const edgeId = asString(p.edgeId, 'edgeId');
+      const m = snapshot();
+      return m.run(
+        () => {
+          useGraphStore.getState().setArtifact(edgeId, null);
+        },
+        () => ({ edgeId }),
+      );
+    }
+
+    // ---- Phase D:Annotation ----
+    case 'createAnnotation': {
+      const target = annotationTargetFrom(p.target);
+      const title = asOptionalString(p.title, 'title') ?? '';
+      const content = asOptionalString(p.content, 'content') ?? '';
+      const position = p.position === undefined ? undefined : asPosition(p.position);
+      const m = snapshot();
+      const id = useGraphStore.getState().addAnnotation(target, position);
+      return m.run(
+        () => undefined,
+        () => {
+          const run = useGraphStore.getState().annotations;
+          const found = id ? run.find((a) => a.id === id) : undefined;
+          return found ? { annotationId: id, title, content } : undefined;
+        },
+      );
+    }
+    case 'updateAnnotation': {
+      const id = asString(p.id, 'id');
+      const patch: { title?: string; content?: string } = {};
+      if (p.title !== undefined) patch.title = asString(p.title, 'title');
+      if (p.content !== undefined) patch.content = asString(p.content, 'content');
+      const m = snapshot();
+      return m.run(
+        () => {
+          useGraphStore.getState().updateAnnotation(id, patch);
+        },
+        () => ({ annotationId: id }),
+      );
+    }
+    case 'deleteAnnotation': {
+      const id = asString(p.id, 'id');
+      const m = snapshot();
+      return m.run(
+        () => {
+          useGraphStore.getState().deleteAnnotation(id);
+        },
+        () => ({ annotationId: id }),
+      );
+    }
+    case 'moveAnnotation': {
+      const id = asString(p.id, 'id');
+      const position = asPosition(p.position);
+      const m = snapshot();
+      return m.run(
+        () => {
+          useGraphStore.getState().setAnnotationPosition(id, position, true);
+        },
+        () => ({ annotationId: id }),
+      );
     }
 
     // ---- Arrange / History ----

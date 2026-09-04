@@ -5,6 +5,7 @@
  */
 import { AGENT_PROTOCOL_VERSION, type AgentRequest, type AgentResponse, type AgentErrorCode } from './types';
 import {
+  getAnnotationsDto,
   getDocumentDto,
   getEdgesDto,
   getGraphStateDto,
@@ -16,6 +17,7 @@ import {
 } from './queries';
 import { runCommand } from './commands';
 import { runAssertion } from './assertions';
+import { isAgentTestCommandsEnabled, TEST_ONLY_COMMANDS } from './capabilities';
 import { captureCanvasScreenshot, captureWindowScreenshot } from './screenshots';
 
 type QueryKey =
@@ -26,7 +28,8 @@ type QueryKey =
   | 'getStages'
   | 'getViewport'
   | 'getSelection'
-  | 'getGraphState';
+  | 'getGraphState'
+  | 'getAnnotations';
 
 const QUERIES: Record<QueryKey, () => unknown> = {
   getDocument: () => getDocumentDto(),
@@ -37,6 +40,7 @@ const QUERIES: Record<QueryKey, () => unknown> = {
   getViewport: () => getViewportDto(),
   getSelection: () => getSelectionDto(),
   getGraphState: () => getGraphStateDto(),
+  getAnnotations: () => getAnnotationsDto(),
 };
 
 function ok(requestId: string, data: unknown): AgentResponse {
@@ -55,6 +59,14 @@ export async function executeAgentRequest(req: AgentRequest): Promise<AgentRespo
       `不支持的 protocolVersion: ${req.protocolVersion}(期望 ${AGENT_PROTOCOL_VERSION})`,
       { expected: AGENT_PROTOCOL_VERSION, actual: req.protocolVersion },
     );
+  }
+
+  // A-002:test-only commands(reset / seedFixture)需要显式能力开启
+  if (TEST_ONLY_COMMANDS.has(req.type) && !isAgentTestCommandsEnabled()) {
+    return fail(req.requestId, 'CAPABILITY_NOT_ENABLED', 'test-only command 未开启(NODEFLOW_AGENT_TEST_CMDS=1)', {
+      command: req.type,
+      capability: 'test.fixture',
+    });
   }
 
   try {

@@ -19,6 +19,7 @@ export type AgentRequestType =
   | 'getViewport'
   | 'getSelection'
   | 'getGraphState'
+  | 'getAnnotations'
   // ---- Commands / Act ----
   | 'createNode'
   | 'updateNode'
@@ -37,6 +38,16 @@ export type AgentRequestType =
   | 'arrange'
   | 'undo'
   | 'redo'
+  // ---- Phase D:Gateway / Artifact / Annotation ----
+  | 'createGateway'
+  | 'changeGatewayType'
+  | 'attachArtifact'
+  | 'updateArtifact'
+  | 'removeArtifact'
+  | 'createAnnotation'
+  | 'updateAnnotation'
+  | 'deleteAnnotation'
+  | 'moveAnnotation'
   // ---- Test Bridge helpers(reset/seed 仅供本地测试) ----
   | 'reset'
   | 'seedFixture'
@@ -60,6 +71,7 @@ export type AgentErrorCode =
   | 'UNSUPPORTED_TYPE'
   | 'COMMAND_FAILED'
   | 'ASSERT_NOT_PASSED'
+  | 'CAPABILITY_NOT_ENABLED'
   | 'INTERNAL';
 
 export interface AgentError {
@@ -96,8 +108,21 @@ export interface AgentNodeDto {
   stageId: string | null;
   actor: string;
   locked: boolean;
+  /** composite host:该 host 的子节点 id(空数组表示普通节点) */
+  childIds: string[];
+  /** composite host id 或 null(由 host.childIds 派生,不新增持久化字段) */
+  parentCompositeId: string | null;
   isComposite: boolean;
   isGateway: boolean;
+  /** gateway 类型(仅 isGateway=true 时非空) */
+  gatewayType: 'exclusive' | 'parallel' | 'inclusive' | null;
+}
+
+export interface AgentArtifactDto {
+  id: string;
+  kind: string;
+  label: string;
+  description: string;
 }
 
 export interface AgentEdgeDto {
@@ -107,6 +132,22 @@ export interface AgentEdgeDto {
   sourceHandle: string | null;
   targetHandle: string | null;
   label: string;
+  /** edge.data.artifact(Edge 下属物) */
+  artifact: AgentArtifactDto | null;
+}
+
+export interface AgentAnnotationDto {
+  id: string;
+  title: string;
+  content: string;
+  collapsed: boolean;
+  target:
+    | { kind: 'canvas'; tabId: string }
+    | { kind: 'node'; nodeId: string }
+    | { kind: 'edge'; edgeId: string }
+    | { kind: 'stage'; stageId: string }
+    | { kind: 'artifact'; edgeId: string };
+  position: { x: number; y: number } | null;
 }
 
 export interface AgentParticipantDto {
@@ -138,6 +179,7 @@ export interface AgentGraphState {
   stages: AgentStageDto[];
   viewport: AgentViewportDto;
   selection: AgentSelectionDto;
+  annotations: AgentAnnotationDto[];
   arrangePending: boolean;
   showStageBands: boolean;
   showParticipantBands: boolean;
@@ -155,7 +197,13 @@ export type AgentAssertionType =
   | 'assertNoOverlap'
   | 'assertBandVisible'
   | 'assertBandOrder'
-  | 'assertNodePosition';
+  | 'assertNodePosition'
+  // ---- Phase D ----
+  | 'assertCompositeContains'
+  | 'assertNodeParent'
+  | 'assertGatewayType'
+  | 'assertEdgeArtifact'
+  | 'assertAnnotationExists';
 
 export interface AgentAssertionResult {
   passed: boolean;

@@ -6,6 +6,8 @@ import { startAgentBridge, AGENT_DEFAULT_PORT } from './agentBridge';
 const isDev = Boolean(process.env.ELECTRON_START_URL) || !app.isPackaged;
 /** Agent Local Test Bridge 默认关闭:仅 NODEFLOW_AGENT_BRIDGE=1 时启动(只监听 127.0.0.1)。 */
 const agentBridgeEnabled = process.env.NODEFLOW_AGENT_BRIDGE === '1';
+/** test-only commands(reset / seedFixture)默认关闭:仅 NODEFLOW_AGENT_TEST_CMDS=1 时下发能力。 */
+const agentBridgeTestEnabled = process.env.NODEFLOW_AGENT_TEST_CMDS === '1';
 
 const appIcon = path.join(__dirname, '..', 'assets', 'icon.png');
 
@@ -71,7 +73,15 @@ function createWindow(): void {
   });
 
   // 渲染进程就绪后,把启动时携带的项目文件发过去
-  win.webContents.on('did-finish-load', () => flushPendingFiles(win));
+  win.webContents.on('did-finish-load', () => {
+    flushPendingFiles(win);
+    // Agent capability 配置(A-002:test.fixture 默认关闭)
+    if (agentBridgeEnabled) {
+      win.webContents.send('agent:bridge:capabilities', {
+        testCmdsEnabled: agentBridgeTestEnabled,
+      });
+    }
+  });
 
   // 应用内弹窗(组合节点内部画布)创建独立窗体,其余外链交给系统浏览器
   win.webContents.setWindowOpenHandler(({ url }) => {

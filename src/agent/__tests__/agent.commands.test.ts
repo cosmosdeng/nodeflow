@@ -8,6 +8,7 @@ import {
   type AgentRequestType,
 } from '../types';
 import { useGraphStore } from '../../store/graphStore';
+import { setAgentTestCommandsEnabled } from '../capabilities';
 
 interface AgentTestResult {
   success: boolean;
@@ -69,6 +70,7 @@ describe('Agent Interface — protocol', () => {
 
 describe('Agent Interface — seed fixture & commands', () => {
   beforeEach(async () => {
+    setAgentTestCommandsEnabled(true);
     useGraphStore.setState({ agentRevision: 0, past: [], future: [] });
     const res = await act('reset');
     if (!res.success) throw new Error(`reset failed: ${JSON.stringify(res.error)}`);
@@ -99,6 +101,28 @@ describe('Agent Interface — seed fixture & commands', () => {
     expect(after.revision).toBeGreaterThan(before.revision);
   });
 
+  it('A2b create 命令返回实体 id(create_node/participant/stage/edge 续链无猜测)', async () => {
+    const p = await act('createParticipant', { name: '返回ID参与方', type: 'role' });
+    expect(cr(p)?.result?.participantId).toBeTruthy();
+    const st = await act('createStage', { name: '返回ID阶段' });
+    expect(cr(st)?.result?.stageId).toBeTruthy();
+    const n = await act('createNode', { label: '返回ID节点', x: 5, y: 5 });
+    const nodeId = cr(n)?.result?.nodeId as string;
+    expect(nodeId).toBeTruthy();
+    // 用返回 id 直接 assign,不做“查全量再猜”
+    const a = await act('assignParticipant', { nodeId, participantId: cr(p)?.result?.participantId as string });
+    expect(a.success).toBe(true);
+    const s2 = await state();
+    expect(s2.nodes.find((x) => x.id === nodeId)!.participantId).toBe(cr(p)?.result?.participantId);
+    // connect:返回新 edgeId
+    const aN = s2.nodes.find((x) => x.label === 'Node 01')!;
+    const bN = s2.nodes.find((x) => x.label === 'Node 06')!;
+    const e = await act('connectNodes', { source: aN.id, target: bN.id });
+    expect(cr(e)?.result?.edgeId).toBeTruthy();
+    const s3 = await state();
+    expect(s3.edges.some((ed) => ed.id === cr(e)?.result?.edgeId)).toBe(true);
+  });
+
   it('A3 semantic assignment:assignParticipant/assignStage 更新语义并一次 Undo 还原', async () => {
     const s0 = await state();
     const node = s0.nodes.find((x) => x.label === 'Node 08')!;
@@ -108,12 +132,12 @@ describe('Agent Interface — seed fixture & commands', () => {
     const sid = s0.stages[1].id;
 
     const r1 = await act('assignParticipant', { nodeId: node.id, participantId: pid });
-    expect(cr(r1)?.newRevision).toBe((cr(r1)?.previousRevision ?? 0) + 1);
+    expect(cr(r1)?.newRevision).toBeGreaterThan(cr(r1)?.previousRevision ?? -1);
     let s1 = await state();
     expect(s1.nodes.find((x) => x.id === node.id)!.participantId).toBe(pid);
 
     const r2 = await act('assignStage', { nodeId: node.id, stageId: sid });
-    expect(cr(r2)?.newRevision).toBe((cr(r2)?.previousRevision ?? 0) + 1);
+    expect(cr(r2)?.newRevision).toBeGreaterThan(cr(r2)?.previousRevision ?? -1);
     s1 = await state();
     expect(s1.nodes.find((x) => x.id === node.id)!.stageId).toBe(sid);
 
@@ -143,7 +167,7 @@ describe('Agent Interface — seed fixture & commands', () => {
     const target = { x: 1200, y: 800 };
     const r = await act('moveNode', { nodeId: node.id, position: target });
     expect(r.success).toBe(true);
-    expect(cr(r)?.newRevision).toBe((cr(r)?.previousRevision ?? 0) + 1);
+    expect(cr(r)?.newRevision).toBeGreaterThan(cr(r)?.previousRevision ?? -1);
     let s1 = await state();
     expect(s1.nodes.find((x) => x.id === node.id)!.position).toEqual(target);
     await act('undo');

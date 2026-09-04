@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import { executeAgentRequest } from '../executor';
 import { AGENT_PROTOCOL_VERSION, type AgentAssertionResult, type AgentGraphState, type AgentRequestType } from '../types';
 import { useGraphStore } from '../../store/graphStore';
+import { setAgentTestCommandsEnabled } from '../capabilities';
 
 interface AgentTestResult {
   success: boolean;
@@ -30,6 +31,7 @@ function assertResult(r: AgentTestResult): AgentAssertionResult | undefined {
 
 describe('Agent Interface — assertions(A8)', () => {
   beforeEach(async () => {
+    setAgentTestCommandsEnabled(true);
     useGraphStore.setState({ agentRevision: 0, past: [], future: [] });
     const res = await act('reset');
     if (!res.success) throw new Error(`reset failed: ${JSON.stringify(res.error)}`);

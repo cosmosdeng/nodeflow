@@ -5,11 +5,13 @@
  * 浏览器/无 Electron 环境自动 no-op。
  */
 import { executeAgentRequest } from './executor';
+import { setAgentTestCommandsEnabled } from './capabilities';
 import type { AgentRequest } from './types';
 
 type BridgeApi = {
   onAgentBridgeRequest?: (cb: (req: AgentRequest) => void) => () => void;
   sendAgentBridgeResponse?: (resp: unknown) => void;
+  onAgentBridgeCapabilities?: (cb: (caps: { testCmdsEnabled: boolean }) => void) => () => void;
 };
 
 let attached = false;
@@ -19,8 +21,12 @@ export function ensureAgentBridgeListening(): void {
   const api = (window as unknown as { nodeflow?: BridgeApi }).nodeflow;
   const onRequest = api?.onAgentBridgeRequest;
   const send = api?.sendAgentBridgeResponse;
+  const onCaps = api?.onAgentBridgeCapabilities;
   if (!onRequest || !send) return;
   attached = true;
+  if (onCaps) {
+    onCaps((caps) => setAgentTestCommandsEnabled(caps.testCmdsEnabled === true));
+  }
   onRequest((req) => {
     void executeAgentRequest(req).then((resp) => send(resp));
   });

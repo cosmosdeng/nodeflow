@@ -47,7 +47,14 @@ createNode / updateNode / deleteNode / moveNode / assignParticipant / assignStag
 createParticipant / updateParticipant / deleteParticipant
 createStage / updateStage / deleteStage
 connectNodes / deleteEdge / arrange / undo / redo
+createGateway / changeGatewayType
+attachArtifact / updateArtifact / removeArtifact
+createAnnotation / updateAnnotation / deleteAnnotation / moveAnnotation
 reset / seedFixture(仅 Local Test Bridge 用)
+
+Node DTO 派生表达 Composite(childIds / parentCompositeId)与 Gateway(gatewayType);
+Edge DTO 携带 edge.data.artifact;getAnnotations 观察注释。Composite 的 host 创建
+沿用既有 GUI 动作(groupSelected),Agent 侧当前为 Observe+Assert(见报告 Findings)。
 
 每个成功 mutation 返回：
 
@@ -81,9 +88,14 @@ getCanvasScreenshot / getWindowScreenshot
 
 ## 7. State Revision
 
-- `agentRevision` 初始 0，runtime-only。
-- 每个成功 mutation / undo / redo 由 Agent 层 +1；失败请求不产生 revision。
-- 读取状态返回 revision；undo/redo 后 revision 变化，便于 Agent 观察一致性。
+> `agentRevision` 是 Graph Runtime 的统一观察 revision(不是“Agent API 请求序号”)。
+
+- Graph mutation 会增加 revision(GUI 与 Agent 均如此——统一由 Store Graph Mutation Authority 的指纹订阅推进)。
+- Query 不增加 revision。
+- Failed command 不增加 revision。
+- Undo / Redo 是 Graph mutation,因此增加 revision。
+- 语义未变化(assign 同值等)的 mutation 不增加 revision。
+- revision 不属于持久化 GraphDocument;不属于 Undo Snapshot;reload 后允许归零(runtime 态)。
 
 ## 8. History Semantics
 
@@ -95,6 +107,17 @@ getCanvasScreenshot / getWindowScreenshot
 
 - 仅本机：`127.0.0.1:8787`(可用 `NODEFLOW_AGENT_BRIDGE_PORT` 覆盖)。
 - 默认关闭：只有 `NODEFLOW_AGENT_BRIDGE=1` 时启动；生产/普通用户不受影响。
+
+### Capabilities
+
+```text
+graph.read / graph.write / graph.assert / graph.screenshot / test.fixture
+```
+
+- `test.fixture`(reset / seedFixture)默认关闭；仅当 `NODEFLOW_AGENT_TEST_CMDS=1` 时可用。
+- Bridge enabled ≠ test capabilities enabled。
+- 未开启时返回结构化 `CAPABILITY_NOT_ENABLED`(不是 404 / unknown command)。
+- 未来 MCP 应对应抽象 capability(`test.fixture`),不感知具体环境变量。
 - 端点：
 
 ```text
