@@ -1,6 +1,6 @@
 import type { FlowEdge, FlowNode, Organization, Participant, Stage, ViewportState } from '../types';
 import { getNodeSize } from './composite';
-import { computeLayout } from './layout';
+import { computeLayout, computeLevels } from './layout';
 
 /** 泳道横向内边距 */
 const LANE_PAD_X = 40;
@@ -362,18 +362,36 @@ export interface MatrixGridLayoutOptions {
 }
 
 /**
- * 同一参与方行内、跨 Stage 共用一个「流等级」纵轴:
+ * 同一参与方行内的纵向「流层」分配:
  * - 每行任务含所属 col;对行内连边 u→v:同 col 时 level(v) ≥ level(u)+1,异 col 时 level(v) ≥ level(u);
  * - 同 cell(同 col)内 level 互不相同(冲突顺延),保证下游节点永远不会高于其行内上游;
- * - 环兜底:确定性取 (col, 列表序) 最小者先行。
- * 返回 nodeId → level。纯函数 / deterministic。
+ * - globalLevels(可选):跨 Participant/跨 Stage 计算的全局拓扑层,作为「就绪节点」选择时的
+ *   主要排序参考(global topology 参与行内相对顺序);缺省回退 (col, 列表序)。
+ * - 环兜底:确定性取 (global, col, 列表序) 最小者先行。
+ * 返回 nodeId → 行内纵向层(非绝对 Y)。纯函数 / deterministic。
  */
 const assignFlowLevels = (
   items: { id: string; col: number }[],
   edgePairs: ReadonlyArray<readonly [string, string]>,
+  globalLevels?: ReadonlyMap<string, number>,
 ): Map<string, number> => {
   const colOf = new Map(items.map((it) => [it.id, it.col]));
   const orderOf = new Map(items.map((it, i) => [it.id, i]));
+  const gOf = (id: string) => globalLevels?.get(id) ?? Number.MAX_SAFE_INTEGER;
+  // 每行内 preferred vertical slot = 该行内节点全局层经压缩后的序号(0..k):
+  // global topology 直接成为 Node 在 row 内的 Y placement 参考,而不是只影响队列顺序。
+  let prefRank = new Map<string, number>();
+  if (globalLevels && items.length > 0) {
+    const gs = items
+      .map((it) => globalLevels.get(it.id))
+      .filter((v): v is number => v !== undefined);
+    const uniq = [...new Set(gs)].sort((a, b) => a - b);
+    for (const it of items) {
+      const g = globalLevels.get(it.id);
+      const idx = g === undefined ? -1 : uniq.indexOf(g);
+      if (idx >= 0) prefRank.set(it.id, idx);
+    }
+  }
   const out = new Map<string, string[]>();
   const predsOf = new Map<string, string[]>();
   const indeg = new Map<string, number>();
@@ -398,16 +416,20 @@ const assignFlowLevels = (
     }
     return set;
   };
+  const pickCmp = (a: string, b: string) => {
+    const ga = gOf(a);
+    const gb = gOf(b);
+    if (globalLevels && ga !== gb) return ga - gb;
+    return (colOf.get(a)! - colOf.get(b)!) || (orderOf.get(a)! - orderOf.get(b)!);
+  };
   const remaining = new Set(items.map((it) => it.id));
   while (remaining.size > 0) {
     let cands = [...remaining].filter((id) => (indeg.get(id) ?? 0) === 0);
     if (cands.length === 0) {
-      // 行内成环:确定性兜底,取 (col, 列表序) 最小者
+      // 行内成环:确定性兜底
       cands = [...remaining];
     }
-    cands.sort(
-      (a, b) => (colOf.get(a)! - colOf.get(b)!) || (orderOf.get(a)! - orderOf.get(b)!),
-    );
+    cands.sort(pickCmp);
     const v = cands[0];
     remaining.delete(v);
     let base = 0;
@@ -417,8 +439,12 @@ const assignFlowLevels = (
       const need = lp + (colOf.get(p) === colOf.get(v) ? 1 : 0);
       if (need > base) base = need;
     }
+    // 行内同列依赖(同 cell):硬约束 source 必须在 target 上方;
+    // 行内异列:由 local 约束保证 target 不高于 source(preferred 常更大时自然下沉)。
+    const pref = prefRank.get(v);
+    const minLevel = pref !== undefined && pref > base ? pref : base;
     const used = usedOf(colOf.get(v)!);
-    let level = base;
+    let level = minLevel;
     while (used.has(level)) level += 1;
     used.add(level);
     levels.set(v, level);
@@ -512,6 +538,11 @@ export function computeMatrixGridGeometry(
     }
     const levels = new Map<string, number>();
     const rowStep = new Map<number, number>();
+    // 全局拓扑层(跨 Participant / 跨 Stage 都计入):作为行内 Y 的“主要参考序”,
+    // 保证 A(P1)→B(P2)→C(P3) 这类 handoff 不会因行内仅用局部序而各自从 0 漂移。
+    const assignedSet = new Set(assignedNodes.map((n) => n.id));
+    const scopeEdges = flowEdges.filter((e) => assignedSet.has(e.source) && assignedSet.has(e.target));
+    const gLevels = computeLevels(assignedNodes as FlowNode[], scopeEdges);
     for (const [r, list] of byRow) {
       const edgePairs: Array<readonly [string, string]> = [];
       for (const e of flowEdges) {
@@ -519,7 +550,7 @@ export function computeMatrixGridGeometry(
         const t = byRowCol.get(e.target);
         if (s && t && s.row === r && t.row === r) edgePairs.push([e.source, e.target]);
       }
-      const lv = assignFlowLevels(list, edgePairs);
+      const lv = assignFlowLevels(list, edgePairs, gLevels);
       for (const [id, level] of lv) levels.set(id, level);
       let maxH = 0;
       for (const it of list) {
@@ -668,6 +699,167 @@ export function computeMatrixLayout(
         { name: 1, x: colL - FREE_NODE_CLEAR - w, y: rowB + FREE_NODE_CLEAR }, // 左下外
         { name: 2, x: colR + FREE_NODE_CLEAR, y: rowT - FREE_NODE_CLEAR - h }, // 右上外
         { name: 3, x: colR + FREE_NODE_CLEAR, y: rowB + FREE_NODE_CLEAR }, // 右下外
+      ];
+      regions.sort(
+        (a, b) =>
+          Math.abs(a.x - x) +
+          Math.abs(a.y - y) -
+          (Math.abs(b.x - x) + Math.abs(b.y - y)) ||
+          a.name - b.name,
+      );
+      const pick = regions[0];
+      result.set(n.id, { x: Math.round(pick.x), y: Math.round(pick.y) });
+    }
+  }
+
+  return result;
+}
+
+/**
+ * 层主序 + 硬行带(V0 弹性带自动排列):
+ * - X 主序 = 全局拓扑层(globalLevel,含跨 Participant/Stage 边),从左到右 —— 复用旧 autoLayout 的
+ *   上下游可读性;Stage 带不再固定列位,后续由渲染层把 Stage 带作为 envelope 左右移动/增宽去包含节点。
+ * - Y = Participant 硬行带(顺序固定、可上下移动、带高随内容):同一参与方节点都落进它自己的行;
+ *   同一(参与方, 拓扑层)内的多个节点在该行内纵向堆叠(必要时),像旧矩阵的 cell。
+ * - rowOnly(有 participant、无 stage)也按自己的层排进其行带;free 不进入任何带并做带外避让。
+ * - 纯函数 / deterministic / O(V+E)。node.position 为唯一几何权威。
+ */
+export function computeTopologyBandLayout(
+  input: MatrixGridInput,
+  opts?: MatrixGridLayoutOptions,
+): Map<string, { x: number; y: number }> {
+  const result = new Map<string, { x: number; y: number }>();
+  const structure = computeMatrixGridStructure(input);
+  const { topNodes, rows, rowIndexOf } = structure;
+  const participantById = new Map(input.participants.map((p) => [p.id, p]));
+  const stageById = new Map(input.stages.map((st) => [st.id, st]));
+
+  // 参与层布局的有 participant 的可见顶层节点(assigned + rowOnly)
+  const members = topNodes.filter((n) => hasValidPid(n, participantById));
+  const memberSet = new Set(members.map((n) => n.id));
+  const scopeEdges = (opts?.edges ?? []).filter(
+    (e) => memberSet.has(e.source) && memberSet.has(e.target),
+  );
+  const levels = computeLevels(members as FlowNode[], scopeEdges);
+  const layerOf = (id: string) => levels.get(id) ?? 0;
+  const usedLayers = [...new Set(members.map((n) => layerOf(n.id)))].sort((a, b) => a - b);
+  const colIndexOf = new Map(usedLayers.map((lv, i) => [lv, i]));
+
+  // cell = (参与方 row, 拓扑层 col)
+  const cells = new Map<string, FlowNode[]>();
+  const cellOf = (r: number, c: number) => `${r}_${c}`;
+  const stageIdx = new Map(
+    input.stages.map((st, i) => [st.id, i]),
+  );
+  for (const n of members) {
+    const pid = n.data?.participantId as string;
+    const r = rowIndexOf.get(pid);
+    if (r === undefined) continue;
+    const c = colIndexOf.get(layerOf(n.id)) ?? 0;
+    const k = cellOf(r, c);
+    const arr = cells.get(k) ?? [];
+    arr.push(n);
+    cells.set(k, arr);
+  }
+
+  // 同 cell 排序:属于 stage 的按 stageOrder 先排,其它(rowOnly)在列尾;同层再稳定回退 position→id
+  const orderOf = new Map(members.map((n, i) => [n.id, i]));
+  const cellOrder = (a: FlowNode, b: FlowNode) => {
+    const sa = input.stages.findIndex((st) => st.nodeIds.includes(a.id));
+    const sb = input.stages.findIndex((st) => st.nodeIds.includes(b.id));
+    if (sa >= 0 && sb >= 0 && sa !== sb) return sa - sb;
+    if (sa >= 0 && sb < 0) return -1;
+    if (sa < 0 && sb >= 0) return 1;
+    return (orderOf.get(a.id) ?? 0) - (orderOf.get(b.id) ?? 0);
+  };
+  for (const arr of cells.values()) arr.sort(cellOrder);
+
+  // 列宽(每拓扑层取该层所有参与方中最宽节点)
+  const colCount = usedLayers.length;
+  const colWidths = new Array<number>(colCount).fill(0);
+  for (const [k, arr] of cells) {
+    const c = Number(k.slice(k.indexOf('_') + 1));
+    for (const n of arr) {
+      const w = getNodeSize(n).w;
+      if (w > colWidths[c]) colWidths[c] = w;
+    }
+  }
+  const colXs = new Array<number>(colCount).fill(0);
+  let cx = MATRIX_START_X;
+  for (let c = 0; c < colCount; c++) {
+    colXs[c] = cx;
+    cx += colWidths[c] + MATRIX_CELL_PAD_X * 2 + MATRIX_COL_GAP;
+  }
+
+  // 行内容:该参与方所有(层,cell)中堆叠到的最深位置
+  const rowBottomsRaw = new Map<number, number>();
+  for (const [k, arr] of cells) {
+    const r = Number(k.slice(0, k.indexOf('_')));
+    let y = 0;
+    for (const n of arr) {
+      const bottom = y + getNodeSize(n).h;
+      const cur = rowBottomsRaw.get(r) ?? 0;
+      if (bottom > cur) rowBottomsRaw.set(r, bottom);
+      y += getNodeSize(n).h + MATRIX_STACK_GAP;
+    }
+  }
+  const rowYs = new Map<number, number>();
+  let ry = MATRIX_START_Y;
+  for (const row of rows) {
+    const ri = rowIndexOf.get(row.participantId)!;
+    rowYs.set(ri, ry);
+    ry += (rowBottomsRaw.get(ri) ?? MATRIX_EMPTY_ROW_H) + MATRIX_ROW_GAP;
+  }
+
+  // 落位
+  const stackOf = new Map<string, number>(); // cellKey -> cursor
+  for (const [k, arr] of cells) {
+    const r = Number(k.slice(0, k.indexOf('_')));
+    const c = Number(k.slice(k.indexOf('_') + 1));
+    const baseY = rowYs.get(r);
+    if (baseY === undefined) continue;
+    let cursor = stackOf.get(k) ?? 0;
+    for (const n of arr) {
+      result.set(n.id, { x: colXs[c] + MATRIX_CELL_PAD_X, y: baseY + cursor });
+      cursor += getNodeSize(n).h + MATRIX_STACK_GAP;
+    }
+  }
+
+  // free(无有效 participant):避开所有行带(y)与所有 stage 节点 x 包络 —— 就近移到四角之外
+  const freeNodes = topNodes.filter((n) => !hasValidPid(n, participantById));
+  if (freeNodes.length > 0 && rows.length > 0) {
+    const firstTop = rowYs.get(0);
+    const lastBottom =
+      rowYs.get(rows.length - 1) ?? MATRIX_START_Y;
+    const lastBottomWithContent =
+      (rowYs.get(rows.length - 1) ?? 0) +
+      (rowBottomsRaw.get(rows.length - 1) ?? MATRIX_EMPTY_ROW_H);
+    const rowT = firstTop ?? MATRIX_START_Y;
+    const rowB = Math.max(lastBottom, lastBottomWithContent);
+    // stage 节点 x 包络(纵向无限;以最终落位为准)
+    let colL = Infinity;
+    let colR = -Infinity;
+    for (const n of members) {
+      if (!memberOfStage(n, input.stages)) continue;
+      const p = result.get(n.id);
+      if (!p) continue;
+      const w = getNodeSize(n).w;
+      colL = Math.min(colL, p.x);
+      colR = Math.max(colR, p.x + w);
+    }
+    const CLEAR = 64; // 与真实 band(含 pad/弹性扩展)保持可见的合理间距
+    for (const n of freeNodes) {
+      const { w, h } = getNodeSize(n);
+      const x = n.position.x;
+      const y = n.position.y;
+      const yHit = y < rowB && y + h > rowT;
+      const xHit = colL !== Infinity && x < colR && x + w > colL;
+      if (!yHit && !xHit) continue;
+      const regions = [
+        { name: 0, x: (colL !== Infinity ? colL : x) - CLEAR - w, y: rowT - CLEAR - h },
+        { name: 1, x: (colL !== Infinity ? colL : x) - CLEAR - w, y: rowB + CLEAR },
+        { name: 2, x: (colR !== Infinity ? colR : x + w) + CLEAR, y: rowT - CLEAR - h },
+        { name: 3, x: (colR !== Infinity ? colR : x + w) + CLEAR, y: rowB + CLEAR },
       ];
       regions.sort(
         (a, b) =>

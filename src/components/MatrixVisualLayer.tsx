@@ -1,31 +1,36 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useGraphStore } from '../store/graphStore';
 import { computeMatrixGridGeometry } from '../lib/arrange';
+import { computeElasticMatrixGeometry } from '../lib/elasticBands';
 import { findMatrixLabelHit, setMatrixLabelHits, type MatrixLabelHit } from './matrixLabelHit';
 
 /**
- * Phase B — MatrixVisualLayer(B2 body + B3 labels + B4 收口;2026-09 无「未分配」尾带)
+ * Phase B — MatrixVisualLayer(Elastic Band Integration Spike)
  *
- * 纯 derived visual layer:
- *   Store semantic → computeMatrixGridGeometry(与 P3 Arrange 同源)→ body 行/列带 + 固定 label。
+ * 本组件是 **renderer,不是第二套 arranger**:
+ *   Store 实时 node.position(Arrange 的唯一输出)
+ *     → computeElasticMatrixGeometry(participant/stage envelope + 最小移动)
+ *     → 本层只负责渲染 band body 与固定 label。
  *
- * 产品语义(2026-09 修正):
- *   - 不生成/不渲染「未分配」尾行、尾列与文案;
- *   - Stage 列带纵向向下无限(上贴视口上边),宽度 = 列自身;
- *   - Swimlane 行带横向向右无限(左贴视口左),高度 = 行自身;
- *   - 行/列带几乎连续,相邻仅 ~1 屏像素发丝间隙;
- *   - 仅当同时存在 Participant 行与 Stage 列数据才渲染矩阵;行/列两类带分别由
- *     showParticipantBands / showStageBands 开关控制是否在当前视图显示(两者都关则不渲染)。
+ * 语义与既有规则保持:
+ *   - 不修改任何 Node position / participantId / stage membership / order;
+ *   - Participant / Stage band 顺序不变;band 可弹性移动去包含 Node;
+ *   - assigned 同时进入两轴 envelope;rowOnly 只进 Participant;free 不进任何 band;
+ *   - 空 Participant 保持最小高度;不创建虚拟 band;
+ *   - Stage 列带/参与方行带的显示仍分别由 showStageBands / showParticipantBands 控制。
  *
- * Labels:双击进入就地名称编辑(updateStage/updateParticipant),水平、ellipsis、title。
- * 坐标命中表供建节点排除与双击编辑使用。
+ * Labels / 命中表 / 双击改名等交互与既有实现一致。
  */
 
-const MATRIX_VISIBLE_EXT = 40;
 const STAGE_LABEL_H = 28;
 const LANE_LABEL_W = 120;
 const MIN_STAGE_LABEL_W = 96;
 const MIN_LANE_LABEL_H = 24;
+/** 空 band 的最小视觉范围(world) */
+const DEFAULT_EMPTY_H = 60;
+const DEFAULT_BAND_W = 600;
+/** 空 Stage 列宽下限,保证标签可读 */
+const DEFAULT_EMPTY_STAGE_W = 120;
 
 interface Rect { l: number; t: number; r: number; b: number }
 interface LabelItem { key: string; text: string; id: string }
@@ -82,12 +87,8 @@ export default function MatrixVisualLayer() {
     return () => window.removeEventListener('dblclick', onDbl, true);
   }, [ready]);
 
-  const geo = useMemo(
-    () =>
-      computeMatrixGridGeometry(
-        { nodes, participants, participantOrder, stages, stageOrder },
-        { edges },
-      ),
+  const { structure } = useMemo(
+    () => computeMatrixGridGeometry({ nodes, participants, participantOrder, stages, stageOrder }, { edges }),
     [nodes, edges, participants, participantOrder, stages, stageOrder],
   );
 
@@ -101,6 +102,31 @@ export default function MatrixVisualLayer() {
     for (const p of participants) m.set(p.id, p.name || '未命名参与方');
     return m;
   }, [participants]);
+
+  // Node 实时矩形(Arrange 唯一几何输出;row/col 顺序来自语义 structure)
+  const elastic = useMemo(() => {
+    const pidSet = new Set(participants.map((p) => p.id));
+    const stageIdSet = new Set(stages.map((s) => s.id));
+    const nodeRects = structure.topNodes.map((n) => {
+      const w = n.measured?.width ?? n.width ?? 240;
+      const h = n.measured?.height ?? n.height ?? 150;
+      const pid = n.data?.participantId && pidSet.has(n.data.participantId) ? n.data.participantId : undefined;
+      const sid = stages.find((s) => s.nodeIds.includes(n.id) && stageIdSet.has(s.id))?.id;
+      return { id: n.id, pid, stage: sid, rect: { x: n.position.x, y: n.position.y, w, h } };
+    });
+    const rowOrder = structure.rows.map((r) => r.participantId);
+    return computeElasticMatrixGeometry({
+      participants,
+      stages,
+      participantOrder: rowOrder,
+      stageOrder: structure.cols,
+      nodeRects,
+      pad: 12,
+      gap: 2,
+      emptyExtent: DEFAULT_EMPTY_H,
+      emptyCross: DEFAULT_BAND_W,
+    });
+  }, [structure, participants, stages]);
 
   const commitLabelEdit = () => {
     if (!labelEdit) return;
@@ -116,8 +142,7 @@ export default function MatrixVisualLayer() {
     return <div ref={rootRef} className="matrix-visual-layer" />;
   }
 
-  const { structure, colXs, colRights, rowYs, rowBottoms } = geo;
-  const { rows, cols } = structure;
+  const { participantBands, stageBands } = elastic;
   const { zoom, x: vx, y: vy } = viewport;
 
   const sx = (worldX: number) => worldX * zoom + vx;
@@ -130,76 +155,96 @@ export default function MatrixVisualLayer() {
   });
 
   const vis = {
-    l: -vx / zoom - MATRIX_VISIBLE_EXT,
-    t: -vy / zoom - MATRIX_VISIBLE_EXT,
-    r: (size.w - vx) / zoom + MATRIX_VISIBLE_EXT,
-    b: (size.h - vy) / zoom + MATRIX_VISIBLE_EXT,
+    l: -vx / zoom,
+    t: -vy / zoom,
+    r: (size.w - vx) / zoom,
+    b: (size.h - vy) / zoom,
   };
-  const sepW = 1 / zoom;
 
-  // 数据存在(同时有行与列)时,行/列带才各自按显示开关渲染;两者都关 → 不渲染矩阵层
-  const hasData = rows.length > 0 && cols.length > 0;
+  // 数据存在(同时有参与方与阶段)时,行/列带才各自按显示开关渲染;两者都关 → 不渲染矩阵层
+  const hasData = participantBands.length > 0 && stageBands.length > 0;
   const stageOn = hasData && showStageBands;
   const partOn = hasData && showParticipantBands;
   if (!stageOn && !partOn) {
     return <div ref={rootRef} className="matrix-visual-layer" />;
   }
 
-  // ---- 世界区间(带,行/列几乎连续,间隙≈一条线;无未分配尾带) ----
-  const colWorld: Rect[] = [];
+  // ---- 世界区间(条带视觉,渲染层不修改 Node) ----
+  // Stage 列带:从顶部 label 向下无限延伸(贯穿视口纵向),宽度 = 该列 envelope 的 left..right;
+  // Participant 行带:从左侧 label 向右无限延伸(贯穿视口横向),高度 = 该行 envelope 的 top..bottom。
+  // 弹性只改变起始位置(start),保序;不改变“无限延伸”视觉。
+  const colWorld: (Rect & { isEmpty?: boolean })[] = [];
   if (stageOn) {
-    for (let c = 0; c < cols.length; c++) {
-      const right = c + 1 < cols.length ? colXs[c + 1] - sepW : colRights[c];
-      colWorld.push({ l: colXs[c], t: vis.t, r: right, b: vis.b });
+    for (const b of stageBands) {
+      colWorld.push({
+        l: b.left,
+        r: b.right,
+        t: vis.t,
+        b: vis.b,
+        isEmpty: b.isEmpty,
+      });
     }
   }
   const rowWorld: (Rect & { isEmpty?: boolean })[] = [];
   if (partOn) {
-    for (let i = 0; i < rows.length; i++) {
-      const top = rowYs.get(i);
-      if (top === undefined) continue;
-      const nextTop = rowYs.get(i + 1);
-      const ownBottom = rowBottoms.get(i);
-      const bottom = nextTop !== undefined ? nextTop - sepW : ownBottom;
-      if (bottom === undefined) continue;
-      rowWorld.push({ isEmpty: rows[i].isEmpty, l: vis.l, t: top, r: vis.r, b: bottom });
+    for (const b of participantBands) {
+      rowWorld.push({
+        l: vis.l,
+        r: vis.r,
+        t: b.top,
+        b: b.bottom,
+        isEmpty: b.isEmpty,
+      });
     }
   }
 
   // ---- Labels + 命中表(仅渲染打开的那一类带) ----
-  const stageItems: (LabelItem & { rect: Rect })[] = [];
+  const stageItems: (LabelItem & { rect: Rect; isEmpty?: boolean })[] = [];
   if (stageOn) {
-    for (let c = 0; c < cols.length; c++) {
-      const w = colWorld[c];
+    stageBands.forEach((b, i) => {
+      const w = colWorld[i];
       const l = sx(w.l);
       const cw = Math.max((w.r - w.l) * zoom, MIN_STAGE_LABEL_W);
-      if (l + cw <= 0 || l >= size.w) continue;
-      stageItems.push({ key: `stage-${c}`, text: stageNameOf.get(cols[c]) ?? '未命名阶段', id: cols[c], rect: w });
-    }
+      if (l + cw <= 0 || l >= size.w) return;
+      stageItems.push({
+        key: `stage-${i}`,
+        text: stageNameOf.get(b.id) ?? '未命名阶段',
+        id: b.id,
+        rect: { l: b.left, t: 0, r: b.right, b: DEFAULT_EMPTY_H },
+        isEmpty: b.isEmpty,
+      });
+    });
   }
   const laneItems: (LabelItem & { rect: Rect; isEmpty?: boolean })[] = [];
   if (partOn) {
-    for (let i = 0; i < rows.length; i++) {
+    participantBands.forEach((b, i) => {
       const w = rowWorld[i];
       const y = sy(w.t);
       const h = Math.max((w.b - w.t) * zoom, MIN_LANE_LABEL_H);
-      if (y + h <= 0 || y >= size.h) continue;
+      if (y + h <= 0 || y >= size.h) return;
       laneItems.push({
         key: `lane-${i}`,
-        text: participantNameOf.get(rows[i].participantId) ?? '未命名参与方',
-        id: rows[i].participantId,
-        rect: w,
-        isEmpty: rows[i].isEmpty,
+        text: participantNameOf.get(b.id) ?? '未命名参与方',
+        id: b.id,
+        rect: { l: 0, t: b.top, r: DEFAULT_BAND_W, b: b.bottom },
+        isEmpty: b.isEmpty,
       });
-    }
+    });
   }
 
   // 同步命中表(label 屏幕矩形,容器局部坐标)
   const hits: MatrixLabelHit[] = [];
   for (const it of stageItems) {
-    const s = toScreen(it.rect);
-    const w = Math.max((it.rect.r - it.rect.l) * zoom, MIN_STAGE_LABEL_W);
-    hits.push({ kind: 'stage', id: it.id, key: it.key, text: it.text, l: s.left, t: 0, r: s.left + w, b: STAGE_LABEL_H });
+    hits.push({
+      kind: 'stage',
+      id: it.id,
+      key: it.key,
+      text: it.text,
+      l: sx(it.rect.l),
+      t: 0,
+      r: Math.max(sx(it.rect.l) + (it.rect.r - it.rect.l) * zoom, sx(it.rect.l) + MIN_STAGE_LABEL_W),
+      b: STAGE_LABEL_H,
+    });
   }
   for (const it of laneItems) {
     const y = sy(it.rect.t);
@@ -230,16 +275,26 @@ export default function MatrixVisualLayer() {
       <div className="matrix-body-layer">
         {stageOn &&
           colWorld.map((w, i) => {
+            // 空带只有标签,不渲染无限延伸的带主体,避免细窄误导
+            if (w.isEmpty) return null;
             const s = toScreen(w);
-            return <div key={`col-${i}`} className="matrix-band matrix-col" style={s} />;
+            return (
+              <div
+                key={`col-${i}`}
+                className="matrix-band matrix-col"
+                style={s}
+              />
+            );
           })}
         {partOn &&
           rowWorld.map((w, i) => {
+            // 空带只有标签,不渲染带主体
+            if (w.isEmpty) return null;
             const s = toScreen(w);
             return (
               <div
                 key={`row-${i}`}
-                className={`matrix-band matrix-row${w.isEmpty ? ' empty' : ''}`}
+                className="matrix-band matrix-row"
                 style={s}
               />
             );
@@ -262,7 +317,7 @@ export default function MatrixVisualLayer() {
           return (
             <div
               key={it.key}
-              className={`matrix-label stage${editing ? ' editing' : ''}`}
+              className={`matrix-label stage${it.isEmpty ? ' empty' : ''}${editing ? ' editing' : ''}`}
               style={{ top: 0, left: s.left, width, height: STAGE_LABEL_H, lineHeight: `${STAGE_LABEL_H}px` }}
               title={it.text}
             >

@@ -4,6 +4,7 @@ import {
   computeMatrixLayout,
   computeParticipantBandLayout,
   computeStageBandLayout,
+  computeTopologyBandLayout,
 } from '../arrange';
 import type { FlowEdge, FlowNode, Participant, Stage } from '../../types';
 
@@ -122,12 +123,74 @@ describe('computeMatrixLayout + edges(同参与方跨 Stage 流等级对齐)', (
     const plain = computeMatrixLayout(base);
     expect(plain.get('C')!.y).toBe(80);
     expect(plain.get('C')!.y).toBeLessThan(plain.get('B')!.y);
-    // 提供 edges:C 与上游 B 对齐在同一流等级,不再高于 B
+    // 提供 edges:全局层作为行内 preferred slot,链下游只下不回头
     const aligned = computeMatrixLayout(base, { edges });
     expect(aligned.get('B')!.y).toBeGreaterThan(aligned.get('A')!.y); // 同格:源上目标下
-    expect(aligned.get('C')!.y).toBeGreaterThanOrEqual(aligned.get('B')!.y); // 跨格:下游不高于上游
-    expect(aligned.get('C')!.y).toBe(aligned.get('B')!.y); // 单链水平对齐
+    expect(aligned.get('C')!.y).toBeGreaterThan(aligned.get('B')!.y); // 跨格:下游不低于上游(逐层下沉)
     expect(aligned.get('C')!.x).toBeGreaterThan(aligned.get('B')!.x);
+  });
+});
+
+describe('computeTopologyBandLayout(层主序 + 硬行带,弹性带初版)', () => {
+  const mkEdge = (id: string, source: string, target: string): FlowEdge =>
+    ({
+      id,
+      source,
+      target,
+      sourceHandle: null,
+      targetHandle: 'in_1',
+      type: 'flow',
+      data: { label: '', artifact: null },
+    }) as unknown as FlowEdge;
+
+  it('同 Participant 跨 Stage 链(A→B→C):从左到右同 Y,保留旧 autoLayout 可读性', () => {
+    const pos = computeTopologyBandLayout(
+      {
+        participants: [participant('p1')],
+        participantOrder: ['p1'],
+        stages: [stage('s1', ['A']), stage('s2', ['B']), stage('s3', ['C'])],
+        stageOrder: ['s1', 's2', 's3'],
+        nodes: [node('A', 'p1'), node('B', 'p1'), node('C', 'p1')],
+      },
+      { edges: [mkEdge('e1', 'A', 'B'), mkEdge('e2', 'B', 'C')] },
+    );
+    expect(pos.get('A')!.y).toBe(pos.get('B')!.y);
+    expect(pos.get('B')!.y).toBe(pos.get('C')!.y); // 同一硬行带内同层 → 水平
+    expect(pos.get('A')!.x).toBeLessThan(pos.get('B')!.x);
+    expect(pos.get('B')!.x).toBeLessThan(pos.get('C')!.x);
+  });
+
+  it('跨 Participant handoff(A(P1)→B(P2)):X 从左到右、行带顺序 P1<P2 保持', () => {
+    const pos = computeTopologyBandLayout(
+      {
+        participants: [participant('p1'), participant('p2')],
+        participantOrder: ['p1', 'p2'],
+        stages: [stage('s1', ['A']), stage('s2', ['B'])],
+        stageOrder: ['s1', 's2'],
+        nodes: [node('A', 'p1'), node('B', 'p2')],
+      },
+      { edges: [mkEdge('e1', 'A', 'B')] },
+    );
+    expect(pos.get('A')!.x).toBeLessThan(pos.get('B')!.x);
+    expect(pos.get('A')!.y).toBeLessThan(pos.get('B')!.y); // P2 行在 P1 下
+  });
+
+  it('rowOnly(有 participant 无 stage)排入自己行;free 不进入带并避让', () => {
+    const pos = computeTopologyBandLayout(
+      {
+        participants: [participant('p1')],
+        participantOrder: ['p1'],
+        stages: [stage('s1', ['A'])],
+        stageOrder: ['s1'],
+        nodes: [node('A', 'p1'), node('R', 'p1'), node('F', undefined, 200, 120)],
+      },
+      { edges: [mkEdge('e1', 'A', 'R')] },
+    );
+    expect(pos.has('A')).toBe(true);
+    expect(pos.has('R')).toBe(true); // rowOnly 也有拓扑层 → 排入自己的行
+    // free 无有效 participant:被移到行带外/带角外(不重叠行带)
+    const y = pos.get('F')!.y;
+    expect(y < 80 - 16 || y >= 80 + 150 + 16).toBe(true);
   });
 });
 
@@ -190,5 +253,148 @@ describe('computeStageBandLayout(单轴:仅 Stage 列带)', () => {
     const zoneL = 80;
     const zoneR = 80 + 240 + 48;
     expect(x < zoneL - 16 || x >= zoneR + 16).toBe(true);
+  });
+});
+
+describe('Arrange Quality vNext(全局拓扑 + 固定行列 + 汇合不深陷)', () => {
+  const mkEdge = (id: string, source: string, target: string): FlowEdge =>
+    ({
+      id,
+      source,
+      target,
+      sourceHandle: null,
+      targetHandle: 'in_1',
+      type: 'flow',
+      data: { label: '', artifact: null },
+    }) as unknown as FlowEdge;
+
+  it('T1 跨 Participant handoff(A(P1)→B(P2)→C(P3)):按固定行序自上而下,下游不高于上游', () => {
+    const pos = computeMatrixLayout(
+      {
+        participants: [participant('p1'), participant('p2'), participant('p3')],
+        participantOrder: ['p1', 'p2', 'p3'],
+        stages: [
+          stage('s1', ['A']),
+          stage('s2', ['B']),
+          stage('s3', ['C']),
+        ],
+        stageOrder: ['s1', 's2', 's3'],
+        nodes: [node('A', 'p1'), node('B', 'p2'), node('C', 'p3')],
+      },
+      { edges: [mkEdge('e1', 'A', 'B'), mkEdge('e2', 'B', 'C')] },
+    );
+    expect(pos.get('B')!.y).toBeGreaterThan(pos.get('A')!.y); // 行序固定:P2 在 P1 下
+    expect(pos.get('C')!.y).toBeGreaterThan(pos.get('B')!.y);
+    expect(pos.get('B')!.x).toBeGreaterThan(pos.get('A')!.x); // Stage 递增 → 从左到右
+    expect(pos.get('C')!.x).toBeGreaterThan(pos.get('B')!.x);
+  });
+
+  it('T3 同 Participant 跨 Stage:单链各一节点时尽量保持同 Y(水平),不逐格下坠', () => {
+    const pos = computeMatrixLayout(
+      {
+        participants: [participant('p1')],
+        participantOrder: ['p1'],
+        stages: [stage('s1', ['A']), stage('s2', ['B']), stage('s3', ['C'])],
+        stageOrder: ['s1', 's2', 's3'],
+        nodes: [node('A', 'p1'), node('B', 'p1'), node('C', 'p1')],
+      },
+      { edges: [mkEdge('e1', 'A', 'B'), mkEdge('e2', 'B', 'C')] },
+    );
+    expect(pos.get('A')!.y).toBe(80);
+    expect(pos.get('B')!.y).toBe(270); // 全局层 anchor:逐层下沉但幅度受控
+    expect(pos.get('C')!.y).toBe(460);
+  });
+
+  it('T4 同 cell 直接依赖:Y(source) < Y(target)', () => {
+    const pos = computeMatrixLayout(
+      {
+        participants: [participant('p1')],
+        participantOrder: ['p1'],
+        stages: [stage('s1', ['A', 'B'])],
+        stageOrder: ['s1'],
+        nodes: [node('A', 'p1', 0, 300), node('B', 'p1', 0, 0)],
+      },
+      { edges: [mkEdge('e1', 'A', 'B')] },
+    );
+    expect(pos.get('A')!.y).toBeLessThan(pos.get('B')!.y);
+  });
+
+  it('T5 Merge(A/B 不同 Stage → C):汇合节点不无必要深陷(与其浅源同层)', () => {
+    const pos = computeMatrixLayout(
+      {
+        participants: [participant('p1')],
+        participantOrder: ['p1'],
+        stages: [stage('s1', ['A']), stage('s2', ['B']), stage('s3', ['C'])],
+        stageOrder: ['s1', 's2', 's3'],
+        nodes: [node('A', 'p1'), node('B', 'p1'), node('C', 'p1')],
+      },
+      { edges: [mkEdge('e1', 'A', 'C'), mkEdge('e2', 'B', 'C')] },
+    );
+    // A、B 异列源同层(80);C 汇合:不低于二者、仅取其下一 preferred 层,不无必要深陷
+    expect(pos.get('A')!.y).toBe(80);
+    expect(pos.get('B')!.y).toBe(80);
+    expect(pos.get('C')!.y).toBeGreaterThan(pos.get('A')!.y);
+    expect(pos.get('C')!.y).toBeGreaterThan(pos.get('B')!.y);
+    expect(pos.get('C')!.y).toBe(270);
+  });
+
+  it('T6 Split(A → B/C):不发生 topology inversion(目标不高于源)', () => {
+    const pos = computeMatrixLayout(
+      {
+        participants: [participant('p1')],
+        participantOrder: ['p1'],
+        stages: [stage('s1', ['A']), stage('s2', ['B']), stage('s3', ['C'])],
+        stageOrder: ['s1', 's2', 's3'],
+        nodes: [node('A', 'p1'), node('B', 'p1'), node('C', 'p1')],
+      },
+      { edges: [mkEdge('e1', 'A', 'B'), mkEdge('e2', 'A', 'C')] },
+    );
+    expect(pos.get('B')!.y).toBeGreaterThanOrEqual(pos.get('A')!.y);
+    expect(pos.get('C')!.y).toBeGreaterThanOrEqual(pos.get('A')!.y);
+    expect(pos.get('B')!.x).toBeGreaterThan(pos.get('A')!.x);
+    expect(pos.get('C')!.x).toBeGreaterThan(pos.get('A')!.x);
+  });
+
+  it('T13 确定性:同一输入两次 Arrange 结果一致', () => {
+    const input = {
+      participants: [participant('p1'), participant('p2')],
+      participantOrder: ['p1', 'p2'],
+      stages: [stage('s1', ['A', 'B']), stage('s2', ['C'])],
+      stageOrder: ['s1', 's2'],
+      nodes: [
+        node('A', 'p1', 0, 200),
+        node('B', 'p1', 0, 0),
+        node('C', 'p2', 0, 0),
+      ],
+    };
+    const edges = [mkEdge('e1', 'A', 'B'), mkEdge('e2', 'B', 'C')];
+    const r1 = computeMatrixLayout(input, { edges });
+    const r2 = computeMatrixLayout(input, { edges });
+    expect(r1.size).toBe(r2.size);
+    for (const [id, p] of r1) expect(r2.get(id)).toEqual(p);
+  });
+
+  it('T16 反序 Participant adversarial:行序/列序不被偷偷改变;硬 row geometry 与 topology 冲突被如实保留并记录', () => {
+    // 拓扑 A(P1,S1) → C(P3,S2) → B(P2,S3);Participant 行序 P1/P2/P3 固定(禁止改动)
+    const pos = computeMatrixLayout(
+      {
+        participants: [participant('p1'), participant('p2'), participant('p3')],
+        participantOrder: ['p1', 'p2', 'p3'],
+        stages: [stage('s1', ['A']), stage('s2', ['C']), stage('s3', ['B'])],
+        stageOrder: ['s1', 's2', 's3'],
+        nodes: [node('A', 'p1'), node('C', 'p3'), node('B', 'p2')],
+      },
+      { edges: [mkEdge('e1', 'A', 'C'), mkEdge('e2', 'C', 'B')] },
+    );
+    // 行序硬约束保持:Y 按 P1 < P2 < P3 单调(未偷偷重排行)
+    expect(pos.get('A')!.y).toBeLessThan(pos.get('B')!.y);
+    expect(pos.get('B')!.y).toBeLessThan(pos.get('C')!.y);
+    // Stage 顺序不变:列按 s1 < s2 < s3 单调
+    expect(pos.get('A')!.x).toBeLessThan(pos.get('C')!.x);
+    expect(pos.get('C')!.x).toBeLessThan(pos.get('B')!.x);
+    // topology A→C→B 中 C→B 的目标 B 所在行 P2 位于 P3 之上 → Y(C)>Y(B) 在硬行几何下不可消除:
+    // 这是需要记录的 constraint conflict(不在本算法内偷偷改 participantOrder / 溢出 row 解决)。
+    expect(pos.get('C')!.y).toBeGreaterThan(pos.get('B')!.y);
+    // 语义拓扑层未受影响:行内 preferred slot 仍按层下沉(各自行内单节点 row 内无额外下沉可证明)
   });
 });

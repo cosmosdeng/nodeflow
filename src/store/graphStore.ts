@@ -75,6 +75,7 @@ import {
   computeMatrixLayout,
   computeParticipantBandLayout,
   computeStageBandLayout,
+  computeTopologyBandLayout,
 } from '../lib/arrange';
 import {
   buildProjectDocumentV5,
@@ -2118,9 +2119,45 @@ export const useGraphStore = create<FlowStore>()(
       const s = get();
       const vRow = s.showParticipantBands && s.participants.length > 0;
       const vCol = s.showStageBands && s.stages.length > 0;
-      // 两种带都未显示 → 原「自动排列」(legacy autoLayout,不消费 Arrange Pending)
+      // 两种带都未显示 → 纯拓扑自动排列(层级横排,左→右保持上下游;不消费 Arrange Pending)
       if (!vRow && !vCol) {
-        s.autoLayout('horizontal');
+        const t = get();
+        const compChild = new Set<string>();
+        for (const n of t.nodes) {
+          for (const cid of n.data?.composite?.childIds ?? []) compChild.add(cid);
+        }
+        const tops = t.nodes.filter((n) => !n.hidden && !compChild.has(n.id));
+        if (tops.length === 0) return;
+        const topSet = new Set(tops.map((n) => n.id));
+        const pos = computeLayout(
+          tops,
+          t.edges.filter((e) => topSet.has(e.source) && topSet.has(e.target)),
+          'horizontal',
+        );
+        if (pos.size === 0) return;
+        let minX = Infinity;
+        let minY = Infinity;
+        for (const n of tops) {
+          const p = pos.get(n.id);
+          if (!p) continue;
+          if (p.x < minX) minX = p.x;
+          if (p.y < minY) minY = p.y;
+        }
+        const baseX = minX === Infinity ? 80 : 80 - minX;
+        const baseY = minY === Infinity ? 80 : 80 - minY;
+        let changed = false;
+        const nodes = t.nodes.map((n) => {
+          const p = pos.get(n.id);
+          if (!p) return n;
+          const x = Math.round(p.x + baseX);
+          const y = Math.round(p.y + baseY);
+          if (x === n.position.x && y === n.position.y) return n;
+          changed = true;
+          return { ...n, position: { x, y } };
+        });
+        if (!changed) return;
+        get().markHistory();
+        set({ nodes });
         return;
       }
 
@@ -2144,7 +2181,9 @@ export const useGraphStore = create<FlowStore>()(
         stageOrder: s.stageOrder,
       };
       let positions: Map<string, { x: number; y: number }>;
-      if (vRow && vCol) positions = computeMatrixLayout(input, { rankOf, edges: s.edges });
+      if (vRow && vCol)
+        // 双带:层主序 + 硬行带(旧 autoLayout 的横向可读性;Stage 带在渲染层左右移动包含)
+        positions = computeTopologyBandLayout(input, { rankOf, edges: s.edges });
       else if (vRow) positions = computeParticipantBandLayout(input, { rankOf, edges: s.edges });
       else positions = computeStageBandLayout(input, { rankOf, edges: s.edges });
       if (positions.size === 0) return; // 无可排节点:不消费 pending、不产生历史
