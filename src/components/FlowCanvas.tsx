@@ -26,6 +26,8 @@ import { findMatrixLabelHit } from './matrixLabelHit';
 import { useGraphStore } from '../store/graphStore';
 import { changeGatewayType, createGatewayNode, GATEWAY_KINDS, GATEWAY_META } from '../lib/gateway';
 import { computeSwimlaneBounds } from '../lib/arrange';
+import { computeMatrixTargetZones } from '../lib/matrixTargets';
+import { hoverCandidate, type ReassignmentAxis } from '../lib/semanticReassignment';
 import { PARTICIPANT_TYPE_LABELS, type FlowNode, type FlowEdge, type EdgeStyle, type Stage, type GatewayType, type Participant } from '../types';
 
 const nodeTypes: NodeTypes = { flow: FlowNodeComponent };
@@ -50,7 +52,6 @@ export default function FlowCanvas() {
   const pendingAutoEdit = useGraphStore((s) => s.pendingAutoEdit);
   const addNode = useGraphStore((s) => s.addNode);
   const addNodeToComposite = useGraphStore((s) => s.addNodeToComposite);
-  const markHistory = useGraphStore((s) => s.markHistory);
   const theme = useGraphStore((s) => s.theme);
   const allLocked = useGraphStore((s) => s.allLocked);
   const activeTabId = useGraphStore((s) => s.activeTabId);
@@ -95,6 +96,14 @@ export default function FlowCanvas() {
     if (!n) return;
     useGraphStore.getState().updateNode(id, { locked: !n.data.locked });
   };
+
+  // Phase C:拖拽释放在目标带后弹出的重分配确认(仅 runtime)
+  const [reassignRequest, setReassignRequest] = useState<{
+    nodeId: string;
+    dropPos: { x: number; y: number };
+    options: { axis: ReassignmentAxis; toId: string; label: string }[];
+    nodeLabel: string;
+  } | null>(null);
 
   // 右键菜单状态
   const [contextMenu, setContextMenu] = useState<ContextMenuState | null>(null);
@@ -166,7 +175,7 @@ export default function FlowCanvas() {
   // 记录「右键是否处于拖拽平移中」,用于右键松开时不弹菜单
   const rightDragRef = useRef(false);
 
-  const { screenToFlowPosition, fitView, getViewport, setViewport, getNode } = useReactFlow();
+  const { screenToFlowPosition, fitView, getViewport, setViewport, getNode, getNodes } = useReactFlow();
   const isDark = theme === 'dark';
 
   const handlePaneClick = useCallback(() => {
@@ -261,64 +270,222 @@ export default function FlowCanvas() {
     }, 700);
   }, []);
 
-  const handleNodeDragStart = useCallback(() => {
-    setIsNodeDragging(true);
-    clearStageEnterTimer();
-  }, [clearStageEnterTimer]);
+  // ---- Phase C Semantic Reassignment(drag → hover ≈1s → 反馈 → 确认) ----
+  // 运行时状态不持久化、不写历史;确认后唯一权威变更入口 = graphStore.reassignNode。
+  const draggingNodeRef = useRef<string | null>(null);
+  const multiDragRef = useRef(false);
+  const dwellRef = useRef<
+    { axis: ReassignmentAxis; timer: number | null; targetId: string | null; nodeId: string | null }[]
+  >([
+    { axis: 'participant', timer: null, targetId: null, nodeId: null },
+    { axis: 'stage', timer: null, targetId: null, nodeId: null },
+  ]);
 
-  // 拖拽过程中:检测节点是否完全位于某域内,并持续按住 1 秒后进入该域;
-  // 对已归属某域的节点,实时自动扩大该域以包裹节点(并推挤外部元素)
+  const clearDwellAxis = useCallback((axis: ReassignmentAxis) => {
+    const rec = dwellRef.current.find((r) => r.axis === axis);
+    if (!rec) return;
+    if (rec.timer != null) {
+      window.clearTimeout(rec.timer);
+      rec.timer = null;
+    }
+    rec.targetId = null;
+    rec.nodeId = null;
+  }, []);
+  const clearAllDwell = useCallback(() => {
+    clearDwellAxis('participant');
+    clearDwellAxis('stage');
+  }, [clearDwellAxis]);
+
+  const semanticsOfNode = useCallback((nodeId: string) => {
+    const st = useGraphStore.getState();
+    const n = st.nodes.find((x) => x.id === nodeId);
+    const pid =
+      n?.data?.participantId && st.participants.some((p) => p.id === n.data!.participantId)
+        ? n.data!.participantId
+        : undefined;
+    const sid = st.stages.find((s) => s.nodeIds.includes(nodeId))?.id;
+    return { participantId: pid, stageId: sid };
+  }, []);
+
+  // 命中判定与渲染层同源(横向无限行带只看 Y、纵向无限列带只看 X);同目标不算候选
+  const bandHitsOf = useCallback(
+    (node: FlowNode) => {
+      const st = useGraphStore.getState();
+      const zones = computeMatrixTargetZones({
+        nodes: st.nodes,
+        edges: st.edges,
+        participants: st.participants,
+        participantOrder: st.participantOrder,
+        stages: st.stages,
+        stageOrder: st.stageOrder,
+      });
+      const rf = getNode(node.id) as (FlowNode & { measured?: { width?: number; height?: number } }) | undefined;
+      const w = rf?.measured?.width ?? node.width ?? 230;
+      const h = rf?.measured?.height ?? node.height ?? 100;
+      const nx = node.position.x;
+      const ny = node.position.y;
+      let pid: string | null = null;
+      if (st.showParticipantBands) {
+        for (const z of zones.participants) {
+          if (ny < z.bottom && ny + h > z.top) {
+            pid = z.id;
+            break;
+          }
+        }
+      }
+      let sid: string | null = null;
+      if (st.showStageBands) {
+        for (const z of zones.stages) {
+          if (nx < z.right && nx + w > z.left) {
+            sid = z.id;
+            break;
+          }
+        }
+      }
+      const sem = semanticsOfNode(node.id);
+      const pCand = pid ? hoverCandidate(node.id, sem, { axis: 'participant', targetId: pid }) : null;
+      const sCand = sid ? hoverCandidate(node.id, sem, { axis: 'stage', targetId: sid }) : null;
+      return {
+        participantId: pCand ? pid : null,
+        stageId: sCand ? sid : null,
+      };
+    },
+    [getNode, semanticsOfNode],
+  );
+
+  const scheduleDwell = useCallback(
+    (axis: ReassignmentAxis, node: FlowNode, targetId: string) => {
+      const rec = dwellRef.current.find((r) => r.axis === axis)!;
+      if (rec.timer != null) {
+        window.clearTimeout(rec.timer);
+        rec.timer = null;
+      }
+      rec.targetId = targetId;
+      rec.nodeId = node.id;
+      const nodeId = node.id;
+      rec.timer = window.setTimeout(() => {
+        rec.timer = null;
+        if (draggingNodeRef.current !== nodeId) return;
+        const cur = getNode(nodeId) as (FlowNode & { measured?: unknown }) | undefined;
+        if (!cur) return;
+        // 触发前复核仍在本带:离开/换带则取消,防止 stale timer
+        const hit = bandHitsOf(cur as FlowNode);
+        const still = axis === 'participant' ? hit.participantId === targetId : hit.stageId === targetId;
+        if (!still) return;
+        // 两轴独立写,交叉格内 participant/stage 候选可同时存在
+        useGraphStore
+          .getState()
+          .setReassignHighlight(axis === 'participant' ? { participant: targetId } : { stage: targetId });
+      }, 950);
+    },
+    [bandHitsOf, getNode],
+  );
+
+  const handleNodeDragStart = useCallback(
+    (_: unknown, node: FlowNode) => {
+      setIsNodeDragging(true);
+      clearStageEnterTimer();
+      clearAllDwell();
+      const st = useGraphStore.getState();
+      draggingNodeRef.current = node.id;
+      multiDragRef.current = getNodes().filter((n) => n.selected).length > 1;
+      if (!st.allLocked) st.markHistory(); // 拖动开始即快照,保证 confirm 后一次 Undo 还原 position+semantic
+      st.setReassignHighlight(null);
+    },
+    [clearStageEnterTimer, clearAllDwell, getNodes],
+  );
+
+  // 拖拽过程中:对已归属节点实时收拢 legacy 域框;并检测矩阵带停留形成 Phase C 候选
   const handleNodeDrag = useCallback(
     (_: unknown, node: FlowNode) => {
       const st = useGraphStore.getState();
-      if (!st.stages.length) return;
-      // 若该节点已归属某域:实时扩大该域(包裹节点 + 推挤外部元素)
+      if (st.allLocked || st.activeTabId !== 'main') return;
+      if (multiDragRef.current || node.id !== draggingNodeRef.current) return;
       const ownedStage = st.stages.find((sg) => sg.nodeIds.includes(node.id));
-      if (ownedStage) {
-        st.autoGrowStage(ownedStage.id);
-        return;
+      if (ownedStage) st.autoGrowStage(ownedStage.id);
+      const hits = bandHitsOf(node);
+      if (hits.participantId) {
+        scheduleDwell('participant', node, hits.participantId);
+      } else {
+        clearDwellAxis('participant');
+        if (st.reassignHighlight?.participant != null) st.setReassignHighlight({ participant: null });
       }
-      const rf = getNode(node.id) as (FlowNode & { measured?: { width?: number; height?: number } }) | undefined;
-      const w = rf?.measured?.width ?? rf?.width ?? 230;
-      const h = rf?.measured?.height ?? rf?.height ?? 100;
-      const nx = node.position.x;
-      const ny = node.position.y;
-      // 找完全包含该节点的域
-      let target: string | null = null;
-      for (const s of st.stages) {
-        if (nx >= s.x && ny >= s.y && nx + w <= s.x + s.width && ny + h <= s.y + s.height) {
-          target = s.id;
-          break;
-        }
-      }
-      const cur = stageEnterTargetRef.current;
-      if (target && cur && cur.stageId === target && cur.nodeId === node.id) {
-        return; // 已开始计时,等待触发
-      }
-      clearStageEnterTimer();
-      if (target) {
-        stageEnterTargetRef.current = { stageId: target, nodeId: node.id };
-        stageEnterTimerRef.current = window.setTimeout(() => {
-          useGraphStore.getState().enterNodeToStage(target, node.id);
-          setStageFlash(target, node.id);
-          clearStageEnterTimer();
-        }, 1000);
+      if (hits.stageId) {
+        scheduleDwell('stage', node, hits.stageId);
+      } else {
+        clearDwellAxis('stage');
+        if (st.reassignHighlight?.stage != null) st.setReassignHighlight({ stage: null });
       }
     },
-    [getNode, clearStageEnterTimer, setStageFlash],
+    [bandHitsOf, clearDwellAxis, scheduleDwell],
   );
 
-  const handleNodeDragStop = useCallback(() => {
-    setIsNodeDragging(false);
-    clearStageEnterTimer();
-    markHistory();
-    // 拖拽结束:对归属域节点再收敛一次域框(可能缩小回节点包围盒)
+  const handleNodeDragStop = useCallback(
+    (_: unknown, node: FlowNode) => {
+      setIsNodeDragging(false);
+      draggingNodeRef.current = null;
+      multiDragRef.current = false;
+      clearStageEnterTimer();
+      clearAllDwell();
+      const st = useGraphStore.getState();
+      // 拖拽结束:对归属域节点再收敛一次域框(可能缩小回节点包围盒)
+      const owned = st.stages.filter((sg) =>
+        sg.nodeIds.some((nid) => st.nodes.find((n) => n.id === nid && !n.hidden)),
+      );
+      owned.forEach((sg) => st.autoGrowStage(sg.id));
+      // 仅在“停留形成候选 + 释放在同一带内”时弹出确认;否则保持语义不变
+      // 参与方 / 阶段两轴独立判定:交叉格内可同时出现两个选项,各自确认只改对应轴
+      const hl = st.reassignHighlight;
+      const hits = bandHitsOf(node);
+      const options: { axis: ReassignmentAxis; toId: string; label: string }[] = [];
+      if (hl?.participant != null && hits.participantId === hl.participant) {
+        const p = st.participants.find((x) => x.id === hl.participant);
+        options.push({ axis: 'participant', toId: hl.participant, label: `参与方 → ${p?.name ?? hl.participant}` });
+      }
+      if (hl?.stage != null && hits.stageId === hl.stage) {
+        const s = st.stages.find((x) => x.id === hl.stage);
+        options.push({ axis: 'stage', toId: hl.stage, label: `阶段 → ${s?.name ?? hl.stage}` });
+      }
+      if (options.length) {
+        const n = st.nodes.find((x) => x.id === node.id);
+        setReassignRequest({
+          nodeId: node.id,
+          dropPos: { x: node.position.x, y: node.position.y },
+          options,
+          nodeLabel: n?.data.label || node.id,
+        });
+      } else {
+        st.setReassignHighlight(null);
+      }
+    },
+    [clearStageEnterTimer, clearAllDwell, bandHitsOf],
+  );
+
+  // 确认/取消(取消不改变任何 semantic;位置已随普通拖动保留在同一条历史里)
+  const applyReassignAxis = useCallback(
+    (axis: ReassignmentAxis, toId: string) => {
+      const req = reassignRequest;
+      if (!req) return;
+      const st = useGraphStore.getState();
+      st.reassignNode(
+        req.nodeId,
+        {
+          position: req.dropPos,
+          participantId: axis === 'participant' ? toId : undefined,
+          stageId: axis === 'stage' ? toId : undefined,
+        },
+        { recordHistory: false },
+      );
+      st.setReassignHighlight(null);
+      setReassignRequest(null);
+    },
+    [reassignRequest],
+  );
+  const cancelReassign = useCallback(() => {
     const st = useGraphStore.getState();
-    const owned = st.stages.filter((sg) =>
-      sg.nodeIds.some((nid) => st.nodes.find((n) => n.id === nid && !n.hidden)),
-    );
-    owned.forEach((sg) => st.autoGrowStage(sg.id));
-  }, [clearStageEnterTimer, markHistory]);
+    st.setReassignHighlight(null);
+    setReassignRequest(null);
+  }, []);
 
   /**
    * 从端口拖出连线到画布空白处(未连接到有效端口)时,自动创建新节点并连接:
@@ -1214,6 +1381,37 @@ export default function FlowCanvas() {
       </ReactFlow>
       <ContextMenu menu={contextMenu} onClose={closeContextMenu} />
       <ConfirmDialog dialog={confirmDialog} onClose={closeConfirmDialog} />
+
+      {/* Phase C:拖放候选后的最小确认(仅 runtime;确认 = reassignNode 原子事务) */}
+      {reassignRequest && (
+        <div className="nf-modal-mask" onMouseDown={cancelReassign}>
+          <div
+            className="nf-modal"
+            onMouseDown={(e) => e.stopPropagation()}
+            role="dialog"
+            aria-modal="true"
+          >
+            <div className="nf-modal-title">语义重分配</div>
+            <div className="nf-modal-message">
+              将节点「{reassignRequest.nodeLabel}」重新分配?可分别确认参与方或阶段;取消则不改变归属。
+            </div>
+            <div className="nf-modal-actions" style={{ flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+              {reassignRequest.options.map((o) => (
+                <button
+                  key={`${o.axis}-${o.toId}`}
+                  className="nf-btn primary"
+                  onClick={() => applyReassignAxis(o.axis, o.toId)}
+                >
+                  {o.label}
+                </button>
+              ))}
+              <button className="nf-btn" onClick={cancelReassign}>
+                取消
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

@@ -47,6 +47,8 @@ export default function MatrixVisualLayer() {
   const showParticipantBands = useGraphStore((s) => s.showParticipantBands);
   const updateStage = useGraphStore((s) => s.updateStage);
   const updateParticipant = useGraphStore((s) => s.updateParticipant);
+  // Phase C:拖拽悬停形成的候选带高亮(仅 runtime 视觉;高亮≠语义变更)
+  const reassignHighlight = useGraphStore((s) => s.reassignHighlight);
 
   const rootRef = useRef<HTMLDivElement>(null);
   const [size, setSize] = useState({ w: 0, h: 0 });
@@ -278,10 +280,11 @@ export default function MatrixVisualLayer() {
             // 空带只有标签,不渲染无限延伸的带主体,避免细窄误导
             if (w.isEmpty) return null;
             const s = toScreen(w);
+            const hl = reassignHighlight?.stage != null && stageBands[i]?.id === reassignHighlight.stage;
             return (
               <div
                 key={`col-${i}`}
-                className="matrix-band matrix-col"
+                className={`matrix-band matrix-col${hl ? ' reassign-target' : ''}`}
                 style={s}
               />
             );
@@ -291,10 +294,11 @@ export default function MatrixVisualLayer() {
             // 空带只有标签,不渲染带主体
             if (w.isEmpty) return null;
             const s = toScreen(w);
+            const hl = reassignHighlight?.participant != null && participantBands[i]?.id === reassignHighlight.participant;
             return (
               <div
                 key={`row-${i}`}
-                className="matrix-band matrix-row"
+                className={`matrix-band matrix-row${hl ? ' reassign-target' : ''}`}
                 style={s}
               />
             );
@@ -317,7 +321,9 @@ export default function MatrixVisualLayer() {
           return (
             <div
               key={it.key}
-              className={`matrix-label stage${it.isEmpty ? ' empty' : ''}${editing ? ' editing' : ''}`}
+              className={`matrix-label stage${it.isEmpty ? ' empty' : ''}${editing ? ' editing' : ''}${
+                reassignHighlight?.stage === it.id ? ' reassign-target-label' : ''
+              }`}
               style={{ top: 0, left: s.left, width, height: STAGE_LABEL_H, lineHeight: `${STAGE_LABEL_H}px` }}
               title={it.text}
             >
@@ -332,7 +338,9 @@ export default function MatrixVisualLayer() {
           return (
             <div
               key={it.key}
-              className={`matrix-label lane${it.isEmpty ? ' empty' : ''}${editing ? ' editing' : ''}`}
+              className={`matrix-label lane${it.isEmpty ? ' empty' : ''}${editing ? ' editing' : ''}${
+                reassignHighlight?.participant === it.id ? ' reassign-target-label' : ''
+              }`}
               style={{ left: 0, top: y, width: LANE_LABEL_W, height: h, lineHeight: `${h}px` }}
               title={it.text}
             >

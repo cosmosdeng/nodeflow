@@ -155,6 +155,19 @@ interface FlowStore extends GraphState {
   showStageBands: boolean;
   /** Participant 行带显示开关(当前视图;同时参与 Arrange/避让行为判定,不持久化) */
   showParticipantBands: boolean;
+  /**
+   * Phase C:拖拽悬停时的高亮候选(runtime-only,不持久化)。
+   * 高亮 ≠ semantic assignment;只有确认后才会调用 reassignNode。
+   */
+  /**
+   * Phase C:拖拽悬停时的高亮候选(runtime-only,不持久化)。
+   * 可同时承载参与方 / 阶段两个轴(交叉格内两轴独立停留互不覆盖)。
+   */
+  reassignHighlight: { participant: string | null; stage: string | null } | null;
+  /** 设置 Phase C 候选高亮(合并式;传 null 全清;不写历史) */
+  setReassignHighlight: (
+    h: Partial<{ participant: string | null; stage: string | null }> | null,
+  ) => void;
   /** 长按进入域时的闪烁反馈:正在闪烁的阶段域 id(700ms 后自动清除) */
   stageFlashId: string | null;
   /** 最近一次项目加载失败的用户可见错误信息(null 表示无) */
@@ -280,6 +293,19 @@ interface FlowStore extends GraphState {
   assignParticipant: (nodeId: string, participantId: string | null) => void;
   /** 给节点显式指定所属阶段(单归属:会自动从其它阶段移出;null=脱离所有阶段;只改语义,不改 position) */
   assignNodeStage: (nodeId: string, stageId: string | null) => void;
+  /**
+   * Phase C:确认后的 semantic reassignment —— 一次原子事务同时写入
+   * position + (可选)participantId + (可选)stageId;Undo/Redo 一步恢复。
+   */
+  reassignNode: (
+    nodeId: string,
+    patch: {
+      position: { x: number; y: number };
+      participantId?: string | null;
+      stageId?: string | null;
+    },
+    opts?: { recordHistory?: boolean },
+  ) => void;
 
   // ---- Order / Arrange Pending (P2:语义顺序管理;真正的 Arrange 布局在后续阶段) ----
   /** 移动参与方到新位置(更新 participantOrder;首次手动排序 Auto→User;置 arrangePending;不动 position/membership) */
@@ -1297,6 +1323,7 @@ export const useGraphStore = create<FlowStore>()(
     arrangePendingKind: undefined,
     showStageBands: true,
     showParticipantBands: true,
+    reassignHighlight: null,
     swimlaneEnabled: false,
     swimlaneOrder: [],
     stageFlashId: null,
@@ -1434,6 +1461,12 @@ export const useGraphStore = create<FlowStore>()(
     setSelected: (sel) => set({ selected: sel }),
 
     requestAutoEdit: (t) => set({ pendingAutoEdit: t }),
+
+    setReassignHighlight: (h) =>
+      set((s) => ({
+        reassignHighlight:
+          h === null ? null : { participant: null, stage: null, ...(s.reassignHighlight ?? {}), ...h },
+      })),
 
     markHistory: () =>
       set((s) => ({
@@ -2268,6 +2301,36 @@ export const useGraphStore = create<FlowStore>()(
           ? addNodeToStage(st.stages, stageId, nodeId)
           : detachNodeIdsFromStages(st.stages, [nodeId]),
       }));
+    },
+    reassignNode: (nodeId, patch, opts) => {
+      if (get().allLocked) return;
+      const s = get();
+      const node = s.nodes.find((n) => n.id === nodeId);
+      if (!node) return;
+      if (patch.participantId && !s.participants.some((p) => p.id === patch.participantId)) return;
+      if (patch.stageId && !s.stages.some((st) => st.id === patch.stageId)) return;
+      const x = Math.round(patch.position.x);
+      const y = Math.round(patch.position.y);
+      // Phase C 拖拽路径:拖动开始处已记录历史(drag start),确认时跳过再记一次,
+      // 使「position + semantic」同属一条 Undo/Redo。
+      if (opts?.recordHistory !== false) get().markHistory();
+      set((st) => {
+        const nodes = st.nodes.map((n) => {
+          if (n.id !== nodeId) return n;
+          const data = { ...n.data };
+          if (patch.participantId !== undefined) {
+            data.participantId = patch.participantId ?? undefined;
+          }
+          return { ...n, position: { x, y }, data };
+        });
+        const stages =
+          patch.stageId !== undefined
+            ? patch.stageId
+              ? addNodeToStage(st.stages, patch.stageId, nodeId)
+              : detachNodeIdsFromStages(st.stages, [nodeId])
+            : st.stages;
+        return { nodes, stages };
+      });
     },
     toggleSwimlane: () => {
       // 纯展示开关:不改变 graph / participantId / node position / stage / edge
