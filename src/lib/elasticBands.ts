@@ -206,16 +206,22 @@ export function computeElasticMatrixGeometry(
     input.stages.some((s) => s.id === id),
   );
 
-  // 归类:assigned(pid+stage) 同时进两轴;rowOnly(仅 pid)只进 Participant;free 都不进
+  // 归类按轴独立(Participant/Stage 是两个正交视觉组织轴):
+  // - pid 有效 且 stage 有效(assigned)  → 同时进 Participant 与 Stage
+  // - 仅 pid 有效(rowOnly)              → 只进 Participant,不进任何 Stage
+  // - 仅 stage 有效(Stage-only)         → 只进 Stage,不进任何 Participant
+  // - 两者皆无(free)                    → 不进任何 band
+  // 不能因「没有 pid」就把 Stage-only 节点当 free 丢弃,否则阶段列包络为空、竖带永不出现。
   const pidRects = new Map<string, NodeRect[]>();
   const stageRects = new Map<string, NodeRect[]>();
   for (const n of input.nodeRects) {
     const hasPid = n.pid !== undefined && input.participants.some((p) => p.id === n.pid);
     const hasStage = n.stage !== undefined && input.stages.some((s) => s.id === n.stage);
-    if (!hasPid) continue; // free
-    const arr = pidRects.get(n.pid!) ?? [];
-    arr.push(n.rect);
-    pidRects.set(n.pid!, arr);
+    if (hasPid) {
+      const arr = pidRects.get(n.pid!) ?? [];
+      arr.push(n.rect);
+      pidRects.set(n.pid!, arr);
+    }
     if (hasStage) {
       const sarr = stageRects.get(n.stage!) ?? [];
       sarr.push(n.rect);

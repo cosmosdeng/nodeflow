@@ -53,6 +53,17 @@ describe('Band 几何数据侧:两轴独立产生 band 结构', () => {
     expect(g.stageBands).toEqual([]);
   });
 
+  it('P1 修复现场:存在空参与方 A + stage-only 节点 → Stage band 必须非空产生', () => {
+    // 复现 v0.4.0-next.1 人工场景:参与方 A 存在但无成员,节点只设了 Stage S1
+    const g = geo(['A'], ['S1'], [{ id: 'n1', stage: 'S1', x: 400, y: 400 }]);
+    const s1 = g.stageBands.find((b) => b.id === 'S1');
+    expect(s1).toBeDefined();
+    expect(s1!.isEmpty).toBe(false); // 有节点 => 应渲染竖带 body,而非只有 label
+    const a = g.participantBands.find((b) => b.id === 'A');
+    expect(a).toBeDefined();
+    expect(a!.isEmpty).toBe(true); // 空参与方仅保留空行带
+  });
+
   it('Empty Participant → 仍产生 empty Participant band', () => {
     const g = geo(['P1'], [], []);
     expect(g.participantBands).toHaveLength(1);
