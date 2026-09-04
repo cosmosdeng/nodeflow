@@ -17,59 +17,97 @@ interface OrderItem {
 }
 
 /**
- * 参与方 / 阶段 通用排序行列表(仅 UI 排序):
+ * 参与方 / 阶段 通用排序行列表(仅 UI 排序 + 双击改名):
  * - drag handle 触发 HTML5 drag,drop 后调用 store 的 reorder action;
+ * - 双击行进入就地名称编辑,commit 后调用 store 的 rename action;
  * - 不引入第三方 DnD 库;整行看起来不可拖(只有 handle 可拖)。
  */
 function OrderRowList({
   kind,
   items,
   onReorder,
+  onRename,
 }: {
   kind: string;
   items: OrderItem[];
   onReorder: (from: number, to: number) => void;
+  onRename: (id: string, name: string) => void;
 }) {
   const [dragOver, setDragOver] = useState<number | null>(null);
+  const [editing, setEditing] = useState<{ id: string; value: string } | null>(null);
   if (items.length === 0) return null;
+
+  const commitEdit = () => {
+    if (!editing) return;
+    const v = editing.value.trim();
+    if (v && v !== items.find((x) => x.id === editing.id)?.name) onRename(editing.id, v);
+    setEditing(null);
+  };
+
   return (
     <div className="mx-order-list">
-      {items.map((it, i) => (
-        <div
-          key={it.id}
-          className={`mx-order-row${it.empty ? ' empty' : ''}${dragOver === i ? ' drop' : ''}`}
-          onDragOver={(e) => {
-            e.preventDefault();
-            e.dataTransfer.dropEffect = 'move';
-            setDragOver(i);
-          }}
-          onDragLeave={() => setDragOver((cur) => (cur === i ? null : cur))}
-          onDrop={(e) => {
-            e.preventDefault();
-            const from = Number(e.dataTransfer.getData(`text/mx-${kind}`));
-            if (Number.isInteger(from) && from >= 0 && from < items.length && from !== i) {
-              onReorder(from, i);
-            }
-            setDragOver(null);
-          }}
-        >
-          <span
-            className="mx-order-handle"
-            title="拖动调整顺序"
-            draggable
-            onDragStart={(e) => {
-              e.dataTransfer.setData(`text/mx-${kind}`, String(i));
-              e.dataTransfer.effectAllowed = 'move';
+      {items.map((it, i) => {
+        const isEditing = editing?.id === it.id;
+        return (
+          <div
+            key={it.id}
+            className={`mx-order-row${it.empty ? ' empty' : ''}${dragOver === i ? ' drop' : ''}`}
+            onDragOver={(e) => {
+              e.preventDefault();
+              e.dataTransfer.dropEffect = 'move';
+              setDragOver(i);
+            }}
+            onDragLeave={() => setDragOver((cur) => (cur === i ? null : cur))}
+            onDrop={(e) => {
+              e.preventDefault();
+              const from = Number(e.dataTransfer.getData(`text/mx-${kind}`));
+              if (Number.isInteger(from) && from >= 0 && from < items.length && from !== i) {
+                onReorder(from, i);
+              }
+              setDragOver(null);
+            }}
+            onDoubleClick={(e) => {
+              e.stopPropagation();
+              if (it.name === '未分配') return; // 虚拟行不可改名
+              setEditing({ id: it.id, value: it.name });
             }}
           >
-            ☰
-          </span>
-          <span className="mx-order-name" title={it.name}>
-            {it.name}
-          </span>
-          {typeof it.count === 'number' && <span className="mx-order-count">{it.count}</span>}
-        </div>
-      ))}
+            <span
+              className="mx-order-handle"
+              title="拖动调整顺序;双击行可改名"
+              draggable
+              onDragStart={(e) => {
+                e.dataTransfer.setData(`text/mx-${kind}`, String(i));
+                e.dataTransfer.effectAllowed = 'move';
+              }}
+            >
+              ☰
+            </span>
+            {isEditing ? (
+              <input
+                className="mx-order-edit-input"
+                autoFocus
+                value={editing!.value}
+                onChange={(e) => setEditing((cur) => (cur ? { ...cur, value: e.target.value } : cur))}
+                onFocus={(e) => e.target.select()}
+                onBlur={commitEdit}
+                onKeyDown={(e) => {
+                  e.stopPropagation();
+                  if (e.key === 'Enter') commitEdit();
+                  else if (e.key === 'Escape') setEditing(null);
+                }}
+              />
+            ) : (
+              <span className="mx-order-name" title={it.name}>
+                {it.name}
+              </span>
+            )}
+            {!isEditing && typeof it.count === 'number' && (
+              <span className="mx-order-count">{it.count}</span>
+            )}
+          </div>
+        );
+      })}
     </div>
   );
 }
@@ -85,6 +123,8 @@ export default function OutlinePanel({ onClose }: Props) {
   const stages = useGraphStore((s) => s.stages);
   const stageOrder = useGraphStore((s) => s.stageOrder);
   const reorderStage = useGraphStore((s) => s.reorderStage);
+  const updateParticipant = useGraphStore((s) => s.updateParticipant);
+  const updateStage = useGraphStore((s) => s.updateStage);
   const arrangePending = useGraphStore((s) => s.arrangePending);
   const { setCenter } = useReactFlow();
 
@@ -193,6 +233,7 @@ export default function OutlinePanel({ onClose }: Props) {
               kind="participant"
               items={participantItems}
               onReorder={(from, to) => reorderParticipant(from, to)}
+              onRename={(id, name) => updateParticipant(id, { name })}
             />
           </div>
         )}
@@ -205,6 +246,7 @@ export default function OutlinePanel({ onClose }: Props) {
               kind="stage"
               items={stageItems}
               onReorder={(from, to) => reorderStage(from, to)}
+              onRename={(id, name) => updateStage(id, { name })}
             />
           </div>
         )}

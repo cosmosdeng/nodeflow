@@ -2637,3 +2637,133 @@ body,
   border-color: rgba(255, 197, 61, 0.55);
   animation: mx-arrange-pulse 1.5s ease-in-out infinite;
 }
+
+/* ---------- Phase B:MatrixVisualLayer(B2 body bands + B3 fixed labels) ---------- */
+.matrix-visual-layer {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+/* B2 body bands:Stage 列(冷 cyan/blue) + Swimlane 行(暖 amber) */
+.matrix-body-layer {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+  /* Spike 验证可行:置于 RF nodes/edges 之下,不吞节点交互 */
+  z-index: -1;
+}
+
+.matrix-band {
+  position: absolute;
+  box-sizing: border-box;
+  pointer-events: none;
+}
+
+/* Stage column:冷色、低饱和、低 alpha */
+.matrix-col {
+  background: color-mix(in srgb, var(--accent) 7%, transparent);
+  border-right: 1px solid color-mix(in srgb, var(--accent) 16%, transparent);
+}
+
+/* Swimlane row:暖 amber/orange、低 alpha */
+.matrix-row {
+  background: color-mix(in srgb, #ffb55e 9%, transparent);
+  border-bottom: 1px solid color-mix(in srgb, #ffb55e 14%, transparent);
+}
+
+.matrix-row.empty {
+  /* 空参与方带:更淡,避免误导为有内容 */
+  background: color-mix(in srgb, #ffb55e 5%, transparent);
+}
+
+/* B3 viewport-fixed labels:Stage 顶条 + Swimlane 左条,字号/尺寸视觉恒定 */
+.matrix-label-layer {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+  z-index: 3;
+}
+
+.matrix-label {
+  position: absolute;
+  box-sizing: border-box;
+  pointer-events: auto;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text);
+  cursor: default;
+}
+
+.matrix-label.stage {
+  background: color-mix(in srgb, var(--accent) 16%, var(--bg-panel));
+  border: 1px solid color-mix(in srgb, var(--accent) 45%, transparent);
+  border-top: none;
+  border-top-left-radius: 0;
+  border-top-right-radius: 0;
+  border-radius: 0 0 7px 7px;
+  padding: 0 8px;
+}
+
+.matrix-label.lane {
+  background: color-mix(in srgb, #ffb55e 16%, var(--bg-panel));
+  border: 1px solid color-mix(in srgb, #ffb55e 45%, transparent);
+  border-left: none;
+  border-radius: 0 7px 7px 0;
+  padding: 0 8px;
+}
+
+.matrix-label.lane.empty {
+  background: color-mix(in srgb, #ffb55e 9%, var(--bg-panel));
+  border-color: color-mix(in srgb, #ffb55e 30%, transparent);
+  opacity: 0.9;
+}
+
+/* 贴边守卫:承接顶部/左缘条区域的指针,避免双击 label 时误触发空白建节点 */
+.matrix-gutter-guard {
+  position: absolute;
+  pointer-events: auto;
+}
+
+.matrix-label.editing {
+  padding: 0;
+  border-color: var(--accent);
+}
+
+.matrix-label-input {
+  width: 100%;
+  height: 100%;
+  box-sizing: border-box;
+  border: none;
+  outline: none;
+  background: var(--bg);
+  color: var(--text);
+  font: inherit;
+  padding: 0 6px;
+  border-radius: inherit;
+}
+
+/* 大纲参与方/阶段 双击改名输入框 */
+.mx-order-edit-input {
+  flex: 1;
+  min-width: 0;
+  box-sizing: border-box;
+  border: 1px solid var(--accent);
+  border-radius: 4px;
+  background: var(--bg);
+  color: var(--text);
+  font: inherit;
+  font-size: 12.5px;
+  padding: 2px 6px;
+  outline: none;
+}
+
+.mx-order-edit-input:focus {
+  border-color: var(--accent);
+}

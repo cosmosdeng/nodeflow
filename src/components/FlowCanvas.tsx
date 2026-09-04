@@ -21,6 +21,8 @@ import ContextMenu, { type ContextMenuState } from './ContextMenu';
 import ConfirmDialog, { type ConfirmDialogState } from './ConfirmDialog';
 import AnnotationBox from './AnnotationBox';
 import StageComponent from './StageComponent';
+import MatrixVisualLayer from './MatrixVisualLayer';
+import { findMatrixLabelHit } from './matrixLabelHit';
 import { useGraphStore } from '../store/graphStore';
 import { changeGatewayType, createGatewayNode, GATEWAY_KINDS, GATEWAY_META } from '../lib/gateway';
 import { computeSwimlaneBounds } from '../lib/arrange';
@@ -99,6 +101,11 @@ export default function FlowCanvas() {
   // 删除确认对话框
   const [confirmDialog, setConfirmDialog] = useState<ConfirmDialogState | null>(null);
   const closeConfirmDialog = useCallback(() => setConfirmDialog(null), []);
+  // [B4] Legacy 视觉隔离:旧 Stage 框(StageComponent/stage-layer)与旧 Swimlane 渲染退出 render path。
+  // 数据、API、兼容性完全保留;MatrixVisualLayer 是唯一 Stage/Participant 视觉来源。
+  const LEGACY_STAGE_VISUAL = false;
+  const LEGACY_SWIMLANE_VISUAL = false;
+
   // 画布容器 ref,用于原生双击检测
   const flowAreaRef = useRef<HTMLDivElement>(null);
   // 拖拽节点中:临时将连线提升到节点之上,便于看清连线关系(方案 C)
@@ -910,6 +917,12 @@ export default function FlowCanvas() {
     let lastY = 0;
     const onPointerDown = (e: PointerEvent) => {
       if (e.button !== 0) return;
+      // 坐标级排除:命中 Matrix label 区域(即使浮层/事件时序导致 target 非 chip)不建节点
+      const rect = el.getBoundingClientRect();
+      if (findMatrixLabelHit(e.clientX - rect.left, e.clientY - rect.top)) {
+        last = 0;
+        return;
+      }
       const t = e.target as HTMLElement | null;
       // 排除节点内部(节点双击是编辑/选中)
       if (t?.closest?.('.react-flow__node')) {
@@ -932,6 +945,13 @@ export default function FlowCanvas() {
       }
       // 排除阶段域(名称框双击是编辑名称),避免双击名称时误建节点
       if (t?.closest?.('.nf-stage, .nf-stage-name, .nf-stage-head')) {
+        last = 0;
+        return;
+      }
+      // 排除 Matrix label 及贴边守卫(双击进入名称编辑),避免误建节点
+      if (
+        t?.closest?.('.matrix-label, .matrix-label-layer, .matrix-gutter-guard')
+      ) {
         last = 0;
         return;
       }
@@ -1145,26 +1165,28 @@ export default function FlowCanvas() {
           })}
         </div>
 
-        {/* 流程阶段域(独立 overlay 层,跟随 viewport) */}
-        <div className="stage-layer">
-          {stages.map((st) => (
-            <StageComponent
-              key={st.id}
-              stage={st}
-              viewport={viewport}
-              locked={allLocked}
-              flash={stageFlashId === st.id}
-              onRename={(name) => updateStage(st.id, { name })}
-              onSelect={() => selectStage(st.id)}
-              onContextMenu={(e) => handleStageContextMenu(e, st)}
-              onDragStart={(e) => handleStageDragStart(e, st)}
-              onResizeStart={(e) => handleStageResizeStart(e, st)}
-            />
-          ))}
-        </div>
+        {/* [B4] Legacy 阶段域框视觉已隔离(数据/机制保留,不再渲染)。MatrixVisualLayer 承担 Stage 视觉。 */}
+        {LEGACY_STAGE_VISUAL && (
+          <div className="stage-layer">
+            {stages.map((st) => (
+              <StageComponent
+                key={st.id}
+                stage={st}
+                viewport={viewport}
+                locked={allLocked}
+                flash={stageFlashId === st.id}
+                onRename={(name) => updateStage(st.id, { name })}
+                onSelect={() => selectStage(st.id)}
+                onContextMenu={(e) => handleStageContextMenu(e, st)}
+                onDragStart={(e) => handleStageDragStart(e, st)}
+                onResizeStart={(e) => handleStageResizeStart(e, st)}
+              />
+            ))}
+          </div>
+        )}
 
-        {/* 泳道(可选视觉层:derived bounds,不改 node position / participantId) */}
-        {swimlaneEnabled && (
+        {/* [B4] Legacy 泳道渲染已隔离(数据/函数保留,不再渲染)。MatrixVisualLayer 承担 Swimlane 视觉。 */}
+        {LEGACY_SWIMLANE_VISUAL && swimlaneEnabled && (
           <div className="swimlane-layer">
             {swimlaneBounds.map((lane) => {
               const part = participants.find((p) => p.id === lane.participantId);
@@ -1186,6 +1208,9 @@ export default function FlowCanvas() {
             })}
           </div>
         )}
+
+        {/* Phase B B2:Matrix body bands(derived visual layer,pointer-events:none) */}
+        <MatrixVisualLayer />
       </ReactFlow>
       <ContextMenu menu={contextMenu} onClose={closeContextMenu} />
       <ConfirmDialog dialog={confirmDialog} onClose={closeConfirmDialog} />

@@ -169,6 +169,38 @@ function ParticipantField({ nodeId, disabled }: { nodeId: string; disabled?: boo
   );
 }
 
+/** 所属阶段下拉(显式 Assign:只改 stage membership 语义,不改 position;单归属) */
+function StageField({ nodeId, disabled }: { nodeId: string; disabled?: boolean }) {
+  const node = useGraphStore((s) => s.nodes.find((n) => n.id === nodeId));
+  const stages = useGraphStore((s) => s.stages);
+  const assignNodeStage = useGraphStore((s) => s.assignNodeStage);
+  if (!node) return null;
+  // 一节点只属一个阶段(选中项即时同步;历史遗留重复数据时取第一个)
+  const current = stages.find((st) => st.nodeIds.includes(nodeId)) ?? null;
+  const value = current?.id ?? '';
+  return (
+    <Section title="阶段">
+      <div className="field">
+        <label>所属阶段</label>
+        <select
+          className="pp-input"
+          value={value}
+          disabled={disabled}
+          onChange={(e) => assignNodeStage(nodeId, e.target.value || null)}
+        >
+          <option value="">（未分配）</option>
+          {stages.map((st) => (
+            <option key={st.id} value={st.id}>{st.name || '未命名阶段'}</option>
+          ))}
+        </select>
+        <span className="helper">
+          只改语义不改位置:配合工具栏「⤺ 自动排列」把节点排入对应阶段列。
+        </span>
+      </div>
+    </Section>
+  );
+}
+
 function NodeProperties({ nodeId }: { nodeId: string }) {
   const node = useGraphStore((s) => s.nodes.find((n) => n.id === nodeId));
   const nodes = useGraphStore((s) => s.nodes);
@@ -317,6 +349,7 @@ function NodeProperties({ nodeId }: { nodeId: string }) {
       </Section>
 
       <ParticipantField nodeId={nodeId} disabled={disabled} />
+      <StageField nodeId={nodeId} disabled={disabled} />
 
       {isComposite && (
         <Section title="组合节点">

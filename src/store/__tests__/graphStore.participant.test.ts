@@ -156,3 +156,37 @@ describe('F1-02 Participant & Swimlane 行为', () => {
     expect(st.nodes[0].data.gateway?.type).toBe('exclusive');
   });
 });
+
+function stage(id: string, name = id, nodeIds: string[] = []): Stage {
+  return { id, name, x: 0, y: 0, width: 300, height: 200, nodeIds };
+}
+
+describe('F1-03 节点所属阶段(assignNodeStage)', () => {
+  it('Assign:只改 stage membership,不改 position;单归属(换阶段即移出旧阶段);undo 还原', () => {
+    const s = useGraphStore.getState();
+    useGraphStore.setState({
+      nodes: [node('A', 10, 20)],
+      stages: [stage('s1'), stage('s2')],
+    });
+    s.assignNodeStage('A', 's1');
+    let st = useGraphStore.getState();
+    expect(st.stages.find((x) => x.id === 's1')!.nodeIds).toEqual(['A']);
+    expect(st.stages.find((x) => x.id === 's2')!.nodeIds).toEqual([]);
+    expect(st.nodes[0].position).toEqual({ x: 10, y: 20 }); // position 不变
+    // 换到 s2 → 自动从 s1 移出(单归属)
+    s.assignNodeStage('A', 's2');
+    st = useGraphStore.getState();
+    expect(st.stages.find((x) => x.id === 's1')!.nodeIds).toEqual([]);
+    expect(st.stages.find((x) => x.id === 's2')!.nodeIds).toEqual(['A']);
+    // atomic undo:回到「A 在 s1」
+    st.undo();
+    st = useGraphStore.getState();
+    expect(st.stages.find((x) => x.id === 's1')!.nodeIds).toEqual(['A']);
+    expect(st.stages.find((x) => x.id === 's2')!.nodeIds).toEqual([]);
+    // 脱离(null)→ 从所有阶段移除
+    st.assignNodeStage('A', null);
+    st = useGraphStore.getState();
+    expect(st.stages.every((x) => !x.nodeIds.includes('A'))).toBe(true);
+    expect(st.nodes).toHaveLength(1);
+  });
+});

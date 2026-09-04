@@ -206,6 +206,11 @@ describe('P2 Arrange Pending history(undo/redo)', () => {
 
   it('runArrange(P3):按矩阵真实移动 position + 消费 pending;undo 恢复几何与 pending;redo 复现', () => {
     setupParticipantState();
+    // 2026-09 语义:入矩阵需 pid + stage membership;此处补 stage 使 n1/n2 可排布
+    useGraphStore.setState({
+      stages: [stage('s1', ['n1', 'n2'])],
+      stageOrder: ['s1'],
+    });
     const st = useGraphStore.getState();
     st.reorderParticipant(1, 0); // order:[p2,p1,p3]
     const nodesBefore = JSON.stringify(useGraphStore.getState().nodes);

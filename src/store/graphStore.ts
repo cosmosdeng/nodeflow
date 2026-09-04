@@ -69,7 +69,13 @@ import { setEdgeArtifact, updateEdgeArtifact } from '../lib/artifact';
 import { createFlowEdge } from '../lib/edge';
 import { findStageEmptySpot, pushNodesAwayFromBox, pushOutOfRect, rectOverlaps, type Rect } from '../lib/geometry';
 import { detachOrganizationFromParticipants, detachParticipantFromNodes } from '../lib/participant';
-import { arrangeSwimlanes, computeMatrixLayout } from '../lib/arrange';
+import {
+  arrangeSwimlanes,
+  computeFlowRank,
+  computeMatrixLayout,
+  computeParticipantBandLayout,
+  computeStageBandLayout,
+} from '../lib/arrange';
 import {
   buildProjectDocumentV5,
   detectDocumentFormat,
@@ -142,6 +148,12 @@ interface FlowStore extends GraphState {
   stageOrder: string[];
   /** Arrange Pending:语义顺序已改但 Canvas 几何未按新顺序组织(跨保存/切文档保留) */
   arrangePending: boolean;
+  /** Arrange Pending 由哪类顺序变更引起(participant/stage/both;会话态,加载旧文档时为 undefined≈both) */
+  arrangePendingKind?: 'participant' | 'stage' | 'both';
+  /** Stage 列带显示开关(当前视图;同时参与 Arrange/避让行为判定,不持久化) */
+  showStageBands: boolean;
+  /** Participant 行带显示开关(当前视图;同时参与 Arrange/避让行为判定,不持久化) */
+  showParticipantBands: boolean;
   /** 长按进入域时的闪烁反馈:正在闪烁的阶段域 id(700ms 后自动清除) */
   stageFlashId: string | null;
   /** 最近一次项目加载失败的用户可见错误信息(null 表示无) */
@@ -265,6 +277,8 @@ interface FlowStore extends GraphState {
   deleteOrganization: (id: string) => void;
   /** 给节点显式指定参与方(只改语义,不改 position) */
   assignParticipant: (nodeId: string, participantId: string | null) => void;
+  /** 给节点显式指定所属阶段(单归属:会自动从其它阶段移出;null=脱离所有阶段;只改语义,不改 position) */
+  assignNodeStage: (nodeId: string, stageId: string | null) => void;
 
   // ---- Order / Arrange Pending (P2:语义顺序管理;真正的 Arrange 布局在后续阶段) ----
   /** 移动参与方到新位置(更新 participantOrder;首次手动排序 Auto→User;置 arrangePending;不动 position/membership) */
@@ -273,6 +287,18 @@ interface FlowStore extends GraphState {
   reorderStage: (fromIndex: number, toIndex: number) => void;
   /** 消费 Arrange Pending(占位:仅 arrangePending→false;本阶段不执行真实几何布局,不改 node.position) */
   runArrange: () => void;
+  /** 切换 Stage 列带显示(当前视图;不持久化) */
+  toggleStageBands: () => void;
+  /** 切换 Participant 行带显示(当前视图;不持久化) */
+  toggleParticipantBands: () => void;
+  /**
+   * 合并按钮核心逻辑(替代旧「自动排列」+「Arrange」):
+   * - 选中的组合 → 组合内部自动排列(不进入 band 模式);
+   * - 有 Stage 列带 且 有 Participant 行带(均显示)→ 矩阵 Arrange + 流排序;
+   * - 仅其一显示 → 对应单轴排列(隐藏轴忽略,其变更的 Arrange Pending 保留);
+   * - 两者都隐藏 → 原自动排列(legacy autoLayout)。
+   */
+  runSmartArrange: () => void;
 
   // ---- 连线操作 ----
   updateEdge: (id: string, patch: Partial<FlowEdgeData>) => void;
@@ -1267,6 +1293,9 @@ export const useGraphStore = create<FlowStore>()(
     stageOrder:
       initialActiveDoc?.stageOrder ?? (initialActiveDoc?.stages ? initialActiveDoc.stages.map((st) => st.id) : []),
     arrangePending: initialActiveDoc?.arrangePending ?? false,
+    arrangePendingKind: undefined,
+    showStageBands: true,
+    showParticipantBands: true,
     swimlaneEnabled: false,
     swimlaneOrder: [],
     stageFlashId: null,
@@ -2010,11 +2039,13 @@ export const useGraphStore = create<FlowStore>()(
       const [moved] = next.splice(fromIndex, 1);
       next.splice(toIndex, 0, moved);
       // 原子:一次 reorder = 一次 history(顺序 + mode 翻转 + pending 一起恢复)
+      const prevKind = get().arrangePendingKind;
       get().markHistory();
       set(() => ({
         participantOrder: next,
         participantOrderMode: 'user', // 首次手动排序:Auto → User
         arrangePending: true, // Order Change ≠ Arrange,仅标记 pending
+        arrangePendingKind: prevKind === 'stage' ? 'both' : 'participant',
       }));
     },
     reorderStage: (fromIndex, toIndex) => {
@@ -2025,8 +2056,13 @@ export const useGraphStore = create<FlowStore>()(
       const next = [...order];
       const [moved] = next.splice(fromIndex, 1);
       next.splice(toIndex, 0, moved);
+      const prevKind = get().arrangePendingKind;
       get().markHistory();
-      set(() => ({ stageOrder: next, arrangePending: true }));
+      set(() => ({
+        stageOrder: next,
+        arrangePending: true,
+        arrangePendingKind: prevKind === 'participant' ? 'both' : 'stage',
+      }));
     },
     runArrange: () => {
       if (get().allLocked) return;
@@ -2057,12 +2093,96 @@ export const useGraphStore = create<FlowStore>()(
       });
       if (!changed) {
         // 已处于 Arrange 目标位置:仅消费 pending(语义已完成),不产生额外历史
-        set({ arrangePending: false });
+        set({ arrangePending: false, arrangePendingKind: undefined });
         return;
       }
       // 原子:一次 Arrange = 一次 history(position + pending 一起写)
       get().markHistory();
-      set({ nodes, arrangePending: false });
+      set({ nodes, arrangePending: false, arrangePendingKind: undefined });
+    },
+    toggleStageBands: () => {
+      set((st) => ({ showStageBands: !st.showStageBands }));
+    },
+    toggleParticipantBands: () => {
+      set((st) => ({ showParticipantBands: !st.showParticipantBands }));
+    },
+    runSmartArrange: () => {
+      if (get().allLocked) return;
+      const st = get();
+      // 选中的组合 → 组合内部自动排列(不进入 band 模式)
+      const selComp = st.nodes.find((n) => n.selected && !!n.data.composite);
+      if (selComp) {
+        st.autoLayout('horizontal', { compositeId: selComp.id });
+        return;
+      }
+      const s = get();
+      const vRow = s.showParticipantBands && s.participants.length > 0;
+      const vCol = s.showStageBands && s.stages.length > 0;
+      // 两种带都未显示 → 原「自动排列」(legacy autoLayout,不消费 Arrange Pending)
+      if (!vRow && !vCol) {
+        s.autoLayout('horizontal');
+        return;
+      }
+
+      // Arrange scope = 可见顶层节点(排除任意组合 child);用于流排序 rank
+      const compositeChildIds = new Set<string>();
+      for (const n of s.nodes) {
+        for (const cid of n.data?.composite?.childIds ?? []) compositeChildIds.add(cid);
+      }
+      const topNodes = s.nodes.filter((n) => !n.hidden && !compositeChildIds.has(n.id));
+      const topSet = new Set(topNodes.map((n) => n.id));
+      const rankOf = computeFlowRank(
+        topNodes,
+        s.edges.filter((e) => topSet.has(e.source) && topSet.has(e.target)),
+      );
+
+      const input = {
+        nodes: s.nodes,
+        participants: s.participants,
+        participantOrder: s.participantOrder,
+        stages: s.stages,
+        stageOrder: s.stageOrder,
+      };
+      let positions: Map<string, { x: number; y: number }>;
+      if (vRow && vCol) positions = computeMatrixLayout(input, { rankOf, edges: s.edges });
+      else if (vRow) positions = computeParticipantBandLayout(input, { rankOf, edges: s.edges });
+      else positions = computeStageBandLayout(input, { rankOf, edges: s.edges });
+      if (positions.size === 0) return; // 无可排节点:不消费 pending、不产生历史
+
+      // 本轮 Arrange 落实了哪些轴的顺序变更;未落实的变更保留 pending
+      const kind = s.arrangePendingKind ?? 'both'; // 旧数据无 kind≈两个轴都变更过
+      let remain: 'participant' | 'stage' | 'both' | undefined;
+      if (s.arrangePending) {
+        if (kind === 'participant' && !vRow) remain = 'participant';
+        else if (kind === 'stage' && !vCol) remain = 'stage';
+        else if (kind === 'both') {
+          if (!vRow && vCol) remain = 'participant';
+          else if (vRow && !vCol) remain = 'stage';
+          // 两个轴都可见 → 全部落实,remain=undefined
+        }
+      }
+
+      let changed = false;
+      const nodes = s.nodes.map((n) => {
+        const p = positions.get(n.id);
+        if (!p) return n;
+        const x = Math.round(p.x);
+        const y = Math.round(p.y);
+        if (x === n.position.x && y === n.position.y) return n;
+        changed = true;
+        return { ...n, position: { x, y } };
+      });
+      if (!changed) {
+        if (!s.arrangePending) return; // 无 pending 且位置未变:纯 no-op,不产生历史
+        // 已处于目标:仅结算 pending(落实部分)
+        set({
+          arrangePending: remain !== undefined,
+          arrangePendingKind: remain,
+        });
+        return;
+      }
+      get().markHistory();
+      set({ nodes, arrangePending: remain !== undefined, arrangePendingKind: remain });
     },
     addOrganization: (name) => {
       if (get().allLocked) return '';
@@ -2096,6 +2216,18 @@ export const useGraphStore = create<FlowStore>()(
             ? { ...n, data: { ...n.data, participantId: participantId ?? undefined } }
             : n,
         ),
+      }));
+    },
+    assignNodeStage: (nodeId, stageId) => {
+      if (get().allLocked) return;
+      const s = get();
+      if (stageId && !s.stages.some((st) => st.id === stageId)) return;
+      if (!s.nodes.some((n) => n.id === nodeId)) return;
+      get().markHistory();
+      set((st) => ({
+        stages: stageId
+          ? addNodeToStage(st.stages, stageId, nodeId)
+          : detachNodeIdsFromStages(st.stages, [nodeId]),
       }));
     },
     toggleSwimlane: () => {

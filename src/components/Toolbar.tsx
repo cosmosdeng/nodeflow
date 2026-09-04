@@ -81,7 +81,6 @@ export default function Toolbar({
   const toggleLockAll = useGraphStore((s) => s.toggleLockAll);
   const setSelected = useGraphStore((s) => s.setSelected);
   const requestAutoEdit = useGraphStore((s) => s.requestAutoEdit);
-  const autoLayout = useGraphStore((s) => s.autoLayout);
   const addStage = useGraphStore((s) => s.addStage);
   const selectStage = useGraphStore((s) => s.selectStage);
   const createDocument = useGraphStore((s) => s.createDocument);
@@ -96,7 +95,11 @@ export default function Toolbar({
   const toggleSwimlane = useGraphStore((s) => s.toggleSwimlane);
   const arrangeAllSwimlanes = useGraphStore((s) => s.arrangeAllSwimlanes);
   const arrangePending = useGraphStore((s) => s.arrangePending);
-  const runArrange = useGraphStore((s) => s.runArrange);
+  const runSmartArrange = useGraphStore((s) => s.runSmartArrange);
+  const showStageBands = useGraphStore((s) => s.showStageBands);
+  const showParticipantBands = useGraphStore((s) => s.showParticipantBands);
+  const toggleStageBands = useGraphStore((s) => s.toggleStageBands);
+  const toggleParticipantBands = useGraphStore((s) => s.toggleParticipantBands);
   const { screenToFlowPosition, fitView, getViewport, setViewport } = useReactFlow();
 
   const handleAddNode = () => {
@@ -437,30 +440,30 @@ export default function Toolbar({
       <span className="sep" />
 
       <button
-        className="tb-btn"
+        className={`tb-btn${arrangePending ? ' arrange-pending' : ''}`}
         disabled={allLocked}
-        title="按连线依赖关系自动横向排列;选中组合节点时对其内部节点排列,否则排列全画布"
-        onClick={() => {
-          const selComp = nodes.find((n) => n.selected && n.data.composite);
-          autoLayout('horizontal', selComp ? { compositeId: selComp.id } : undefined);
-        }}
+        title={
+          arrangePending
+            ? '顺序已改变(Pending):点击按当前语义排列节点并完成自动整理(单次撤销可还原)'
+            : '有 Stage/Participant 带时按「参与方×阶段」排列并沿连线整理节点;无带或带已隐藏时等同自动排列'
+        }
+        onClick={runSmartArrange}
       >
         ⤺ 自动排列
       </button>
-
-      <span className="sep" />
-
       <button
-        className={`tb-btn${arrangePending ? ' arrange-pending' : ''}`}
-        disabled={allLocked || !arrangePending}
-        title={
-          arrangePending
-            ? '参与方或阶段顺序已改变:点击后按「参与方 × 阶段」矩阵重新排列节点(单次撤销可还原)'
-            : '先在大纲中调整参与方或阶段顺序,此按钮将变为 Arrange Pending'
-        }
-        onClick={runArrange}
+        className={`tb-btn tb-band ${showStageBands ? 'active' : ''}`}
+        onClick={toggleStageBands}
+        title="Stage 列带显示开关:隐藏后当前视图不渲染该带,排列/避让也忽略 Stage(两个带都隐藏则退化为纯自动排列)"
       >
-        ⟳ {arrangePending ? 'Arrange Pending' : 'Arrange'}
+        ▮ 阶段带
+      </button>
+      <button
+        className={`tb-btn tb-band ${showParticipantBands ? 'active' : ''}`}
+        onClick={toggleParticipantBands}
+        title="Participant 行带显示开关:隐藏后当前视图不渲染该带,排列/避让也忽略 Participant(两个带都隐藏则退化为纯自动排列)"
+      >
+        ▬ 参与方带
       </button>
 
       <span className="sep" />
