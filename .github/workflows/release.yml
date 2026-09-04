@@ -78,4 +78,6 @@ jobs:
             artifacts/**/*.dmg
             artifacts/**/*.AppImage
             artifacts/**/*.deb
+          # `v*-next.*` 系列(如 v0.4.0-next.1)标记为 Pre-release;stable tag 保持正式 Release
+          prerelease: ${{ contains(github.ref_name, '-next.') }}
           generate_release_notes: true
