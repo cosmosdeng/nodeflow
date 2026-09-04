@@ -1,8 +1,11 @@
 import { app, BrowserWindow, Menu, shell, ipcMain } from 'electron';
 import fs from 'node:fs';
 import path from 'node:path';
+import { startAgentBridge, AGENT_DEFAULT_PORT } from './agentBridge';
 
 const isDev = Boolean(process.env.ELECTRON_START_URL) || !app.isPackaged;
+/** Agent Local Test Bridge 默认关闭:仅 NODEFLOW_AGENT_BRIDGE=1 时启动(只监听 127.0.0.1)。 */
+const agentBridgeEnabled = process.env.NODEFLOW_AGENT_BRIDGE === '1';
 
 const appIcon = path.join(__dirname, '..', 'assets', 'icon.png');
 
@@ -180,6 +183,16 @@ app.whenReady().then(() => {
   });
 
   createWindow();
+
+  if (agentBridgeEnabled) {
+    const rawPort = process.env.NODEFLOW_AGENT_BRIDGE_PORT;
+    const port = rawPort ? Number.parseInt(rawPort, 10) : AGENT_DEFAULT_PORT;
+    if (Number.isFinite(port) && port > 0 && port < 65536) {
+      startAgentBridge(port);
+    } else {
+      console.error(`[Agent Bridge] 非法端口 NODEFLOW_AGENT_BRIDGE_PORT=${rawPort},跳过启动`);
+    }
+  }
 
   // Windows/Linux:启动时若双击了 .nodeflow 文件,argv 里会带路径
   collectArgvFiles(process.argv);

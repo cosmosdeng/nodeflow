@@ -168,6 +168,13 @@ interface FlowStore extends GraphState {
   setReassignHighlight: (
     h: Partial<{ participant: string | null; stage: string | null }> | null,
   ) => void;
+  /**
+   * Agent Interface 状态修订号(runtime-only,不持久化、不进 history snapshot)。
+   * 仅由 Agent 层在成功 mutation / undo / redo 后推进;GUI 不受影响。
+   */
+  agentRevision: number;
+  /** 推进一次 Agent state revision(+1) */
+  bumpAgentRevision: () => void;
   /** 长按进入域时的闪烁反馈:正在闪烁的阶段域 id(700ms 后自动清除) */
   stageFlashId: string | null;
   /** 最近一次项目加载失败的用户可见错误信息(null 表示无) */
@@ -1324,6 +1331,7 @@ export const useGraphStore = create<FlowStore>()(
     showStageBands: true,
     showParticipantBands: true,
     reassignHighlight: null,
+    agentRevision: 0,
     swimlaneEnabled: false,
     swimlaneOrder: [],
     stageFlashId: null,
@@ -1467,6 +1475,8 @@ export const useGraphStore = create<FlowStore>()(
         reassignHighlight:
           h === null ? null : { participant: null, stage: null, ...(s.reassignHighlight ?? {}), ...h },
       })),
+
+    bumpAgentRevision: () => set((s) => ({ agentRevision: s.agentRevision + 1 })),
 
     markHistory: () =>
       set((s) => ({
