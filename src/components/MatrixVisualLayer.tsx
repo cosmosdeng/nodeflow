@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { useGraphStore } from '../store/graphStore';
 import { computeMatrixGridGeometry } from '../lib/arrange';
 import { computeElasticMatrixGeometry } from '../lib/elasticBands';
+import { resolveMatrixBandVisibility } from '../lib/matrixBandVisibility';
 import { findMatrixLabelHit, setMatrixLabelHits, type MatrixLabelHit } from './matrixLabelHit';
 
 /**
@@ -163,10 +164,15 @@ export default function MatrixVisualLayer() {
     b: (size.h - vy) / zoom,
   };
 
-  // 数据存在(同时有参与方与阶段)时,行/列带才各自按显示开关渲染;两者都关 → 不渲染矩阵层
-  const hasData = participantBands.length > 0 && stageBands.length > 0;
-  const stageOn = hasData && showStageBands;
-  const partOn = hasData && showParticipantBands;
+  // Participant(Y/Who)与 Stage(X/When)是两个正交独立视觉轴:
+  // 各自 band 结构存在且对应开关开启即渲染,不再用两轴联合条件互相门控;
+  // 两个轴都关闭/都无数据时 → 不渲染矩阵层。
+  const { participantOn: partOn, stageOn } = resolveMatrixBandVisibility({
+    participantBandCount: participantBands.length,
+    stageBandCount: stageBands.length,
+    showParticipantBands,
+    showStageBands,
+  });
   if (!stageOn && !partOn) {
     return <div ref={rootRef} className="matrix-visual-layer" />;
   }
