@@ -1,0 +1,23 @@
+{
+  "name": "NodeFlow",
+  "name_zh": "NodeFlow",
+  "name_en": "NodeFlow",
+  "description": "Operate a running NodeFlow process-flow canvas: create/edit nodes, connect edges, assign participants & stages, arrange, assert and screenshot the graph.",
+  "description_zh": "操作正在运行的 NodeFlow 流程画布:创建/编辑节点、连接关系、分配参与方与阶段、自动排列、验证图形与截图。",
+  "description_en": "Operate a running NodeFlow process-flow canvas: create/edit nodes, connect edges, assign participants & stages, arrange, assert and screenshot the graph.",
+  "source": "nodeflow",
+  "type": "mcp",
+  "version": "0.4.0-next.2",
+  "examples_zh": [
+    "把 NodeFlow 里新建一个\"开始\"节点",
+    "把两个节点连起来并自动排列",
+    "查一下当前画布上有哪些节点和参与方",
+    "给这条流程截图看看"
+  ],
+  "examples_en": [
+    "Create a \"Start\" node in NodeFlow",
+    "Connect two nodes and arrange them",
+    "List nodes and participants currently on the canvas",
+    "Take a screenshot of the current flow"
+  ]
+}

@@ -52,7 +52,7 @@
 | 交互 | 拖动节点到阶段域内长按归属 | 新增**语义再指派**:拖节点到带 / 交叉格悬停约 1 秒 → 候选高亮 → 确认,可单独改参与方或阶段 |
 | 自动排列 | 拓扑分层布局 + 阶段域整体块排列 | 有 Stage/Participant 带时按「参与方×阶段」矩阵语义排布并沿连线整理;无带 / 带隐藏时退化为自动排列 |
 | 持久化 | `.nodeflow` v4(含 v2/v3 旧档自动迁移、版本门校验) | `.nodeflow` v5(新增参与方 / 阶段排序状态) |
-| Agent / MCP | 不包含 | next 分支已实现:本地 Agent Bridge(仅本机 HTTP)+ MCP(stdio)适配层,支持 Observe / Command / Assert / Screenshot / Capabilities,与 GUI 共用 domain / history / revision;尚未随版本发布 |
+| Agent / MCP | 不包含 | next 分支已实现:本地 Agent Bridge(仅本机 HTTP)+ MCP(stdio)适配层,支持 Observe / Command / Assert / Screenshot / Capabilities,与 GUI 共用 domain / history / revision。另有独立 npm 包 `@cosmosdeng/nodeflow-mcp` 与 WorkBuddy Connector(见下方 [AI / WorkBuddy Integration](#ai--workbuddy-integration)) |
 
 两条线共享同一套核心数据模型与项目文件格式:正式版保存 `.nodeflow` v4,Next 保存 v5。v4 及更早的项目在 Next 中打开会自动迁移到 v5;**反过来不行** —— 版本门会拒绝在旧版打开由更高版本保存的文件,用 Next 编辑过的项目回到正式版打开前需在 Next 里另存为 v4 兼容(或直接继续用 Next)。
 
@@ -82,6 +82,31 @@ bun run test
 
 > 若 electron 二进制下载失败,可设置镜像后重装:
 > `ELECTRON_MIRROR=https://npmmirror.com/mirrors/electron/ bun install`
+
+## AI / WorkBuddy Integration
+
+NodeFlow exposes an Agent Interface and an MCP(stdio)server for AI agents.
+
+NodeFlow next **automatically starts the local Agent Bridge** on `127.0.0.1:8787`(可用 `NODEFLOW_AGENT_BRIDGE=0` 关闭)。AI 通过 MCP 工具观察 / 修改画布,与 GUI 共用同一套 domain / history / revision。
+
+```text
+WorkBuddy ──(MCP stdio)──► @cosmosdeng/nodeflow-mcp ──(HTTP 127.0.0.1:8787)──► NodeFlow next
+```
+
+仓库内提供:
+
+- 独立 MCP 包 [`mcp-server/`](mcp-server/README.md)(发布名 `@cosmosdeng/nodeflow-mcp`);
+- WorkBuddy Connector[`workbuddy/nodeflow/`](workbuddy/nodeflow/)(connector-meta.json / mcp.json / SKILL.md);
+- 协议说明 [docs/mcp.md](docs/mcp.md)。
+
+最简单使用路径:
+
+1. 安装 NodeFlow next(需要含 Agent Bridge 的版本)。
+2. 在 WorkBuddy 安装 NodeFlow Connector。
+3. 启动 NodeFlow。
+4. 让 WorkBuddy 操作 NodeFlow(创建节点 / 连线 / 分配参与方与阶段 / 自动排列 / 断言 / 截图)。
+
+相关文档:[Agent 接口](docs/agent-interface.md)、[架构开发状态](docs/architecture/agent-development-status.md)。
 
 ## 使用说明
 

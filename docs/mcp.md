@@ -1,30 +1,48 @@
-# NodeFlow MCP Adapter
+# NodeFlow MCP 接入(Agent Interface / MCP Server / Agent Bridge / Connector)
 
-## 关系
+## 0. 四个概念区分
+
+| 概念 | 是什么 | 位置 / 形态 | 职责 |
+|---|---|---|---|
+| **Agent Interface** | NodeFlow 面向 AI 的稳定 domain-facing 协议(Query / Command / Assert / Screenshot / Capabilities) | `src/agent/`(renderer 内 Agent Core) | 唯一被信任的边界:稳定 DTO、一次 mutation=一条 history=一次 revision |
+| **MCP Server** | 把 MCP Tool/参数翻译成 AgentRequest 的 adapter | npm 包 `@cosmosdeng/nodeflow-mcp`(dist);源码参考 `src/mcp/` | 只做映射与结构校验,不触碰 Zustand / React / Electron IPC / DOM |
+| **Agent Bridge** | NodeFlow 暴露的 localhost HTTP 桥 | Electron 主进程 `electron/agentBridge.ts`,默认 `127.0.0.1:8787` | 本机 HTTP/JSON ↔ 白名单 IPC ↔ renderer Agent Core |
+| **WorkBuddy Connector** | 让 WorkBuddy 一键使用 NodeFlow 的发布包 | `workbuddy/nodeflow/`(connector-meta.json / mcp.json / SKILL.md) | 指向 `npx -y @cosmosdeng/nodeflow-mcp`,无需用户手动配置 |
+
+关系:
 
 ```text
 MCP is an adapter.
 Agent Interface is the stable domain-facing boundary.
+Agent Bridge is the localhost HTTP transport exposed by NodeFlow.
 ```
 
-- MCP Server(`src/mcp/`)只是把 MCP Tool/参数翻译成 AgentRequest 信封;
-- 它不直接触碰 Zustand / React / Electron IPC / DOM / GraphDocument;
-- 所有操作经 Local Bridge(默认 `http://127.0.0.1:8787`)进入 NodeFlow Agent Core → Store Action。
+- MCP Server 不直接访问 Zustand / React / DOM / Electron renderer internals / arbitrary IPC / filesystem / shell / eval;
+- 所有操作经 `http://127.0.0.1:8787` 进入 NodeFlow Agent Core → Store Action。
 
-## Transport
+## 1. Transport
 
 ```text
-MCP Client ↔(stdio)↔ MCP Server ↔(HTTP/JSON,127.0.0.1)↔ NodeFlow Agent Bridge
+MCP Client ↔(stdio)↔ @cosmosdeng/nodeflow-mcp ↔(HTTP/JSON,127.0.0.1:8787)↔ NodeFlow Agent Bridge
 ```
 
-运行(需 NodeFlow Bridge 已开启):
+运行:
 
 ```bash
-NODEFLOW_AGENT_BRIDGE=1 NODEFLOW_AGENT_TEST_CMDS=1 bun run build && ... # Electron 带 Bridge
-NODEFLOW_MCP_BRIDGE_URL=http://127.0.0.1:8787 NODEFLOW_MCP_TEST_FIXTURE=1 bun src/mcp/stdio.ts
+# 1) 启动 NodeFlow next —— Agent Bridge 会自动启动(默认 127.0.0.1:8787)
+#    如不需要,可用 NODEFLOW_AGENT_BRIDGE=0 关闭
+bun run build && bun run start
+
+# 2) 启动 MCP Server(独立 npm 包;普通用户直接由 WorkBuddy Connector 代劳)
+npx -y @cosmosdeng/nodeflow-mcp
 ```
 
-## Tools(映射到 Agent Interface)
+Bridge 默认地址为 `http://127.0.0.1:8787`,可通过 `NODEFLOW_MCP_BRIDGE_URL` 覆盖。
+
+> 说明:本仓库 `src/mcp/stdio.ts` 是 MCP 适配器的仓库内开发入口;对外发布的是独立 npm 包
+> `@cosmosdeng/nodeflow-mcp`(构建自仓库同一份 `src/mcp/*` 单一源)。
+
+## 2. Tools(映射到 Agent Interface)
 
 | MCP Tool | Agent API | 说明 |
 |---|---|---|
@@ -44,33 +62,63 @@ NODEFLOW_MCP_BRIDGE_URL=http://127.0.0.1:8787 NODEFLOW_MCP_TEST_FIXTURE=1 bun sr
 | create_annotation / update_annotation / delete_annotation / move_annotation | createAnnotation / updateAnnotation / deleteAnnotation / moveAnnotation | Phase D |
 | assert(Composite/Gateway/Artifact/Annotation 类型) | assertCompositeContains / assertNodeParent / assertGatewayType / assertEdgeArtifact / assertAnnotationExists | Phase D |
 | assert | assert | 语义+几何断言,结构化结果 |
-| screenshot | getCanvasScreenshot / getWindowScreenshot | `target: canvas|window`,返回 image |
+| screenshot | getCanvasScreenshot / getWindowScreenshot | `target: canvas\|window`,返回 image |
 | reset / seed_fixture | reset / seedFixture | **test-only** |
 
-## Resources
+## 3. Resources
 
 第一版观察统一经 Tools 提供(最小可行);后续可扩展为
 `nodeflow://state|nodes|edges|participants|stages|viewport|selection|capabilities`。
 
-## Capabilities
+## 4. Capabilities
 
 - 默认开启:graph.read / graph.write / graph.assert / graph.screenshot
 - 默认关闭:test.fixture → `reset/seed_fixture` 不注册为 Tool;
-- `NODEFLOW_MCP_TEST_FIXTURE=1` 才暴露 test-only Tools;同时 Agent Bridge 需
+- `NODEFLOW_MCP_TEST_FIXTURE=1` 才暴露 test-only Tools;同时 NodeFlow 侧需
   `NODEFLOW_AGENT_TEST_CMDS=1`,否则调用返回 `CAPABILITY_NOT_ENABLED`。
+- **WorkBuddy Connector 不设置上述变量**,因此普通用户始终无法使用 reset/seed_fixture。
 
-## Screenshots
+## 5. Screenshots
 
 MCP 直接复用 Agent Interface 的 getCanvasScreenshot/getWindowScreenshot,
 返回 MCP image content(base64 PNG)。不复制任何截图算法。
 
-## Revision
+## 6. Revision
 
 - revision 唯一权威仍是 NodeFlow Store(Graph Mutation Authority)。
 - MCP mutation → Agent command → store mutation → revision 前进;query 不前进;
 - GUI/Undo/Redo 同样推进;MCP 不自维护 revision。
 
-## Security
+## 7. Bridge 连接失败
 
-- 只连 localhost NodeFlow Bridge;不开放公网监听;
-- 无 eval / shell / filesystem / arbitrary IPC;不绕过 Agent validation/capability。
+NodeFlow 未运行时,MCP tool 返回清晰错误:
+
+```text
+NodeFlow is not running or Agent Bridge is unavailable at http://127.0.0.1:8787. Please start NodeFlow.
+```
+
+不会自动启动 Electron / 下载 NodeFlow / 开放公网端口。
+
+## 8. Security
+
+- 只连 localhost NodeFlow Bridge(127.0.0.1:8787);不开放公网监听;
+- 无 eval / shell / filesystem / arbitrary IPC;不绕过 Agent validation/capability;
+- MCP stdio stdout 只输出 MCP protocol,日志走 stderr。
+
+## 9. WorkBuddy Connector
+
+```text
+WorkBuddy
+   ↓ (安装 Connector)
+workbuddy/nodeflow/(connector-meta.json + mcp.json + SKILL.md)
+   ↓ (mcp.json)
+npx -y @cosmosdeng/nodeflow-mcp
+   ↓ (stdio)
+MCP Server(npm 包)
+   ↓ (HTTP/JSON 127.0.0.1:8787)
+NodeFlow Agent Bridge
+   ↓
+NodeFlow next
+```
+
+用户只需:安装 NodeFlow next → 安装 Connector → 启动 NodeFlow → 用 WorkBuddy 操作。

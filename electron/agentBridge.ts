@@ -5,7 +5,7 @@
  * 转发给 renderer 的 Agent Core 执行,再把响应回传。
  *
  * 安全边界:
- * - 默认关闭:仅当 NODEFLOW_AGENT_BRIDGE=1 时由 main.ts 启动;
+ * - NodeFlow next 默认自动启动(仅 127.0.0.1);可用 NODEFLOW_AGENT_BRIDGE=0 关闭;
  * - 只监听 127.0.0.1,绝不监听公网;
  * - 无 eval / 任意 JS / arbitrary IPC / filesystem / shell 暴露。
  */

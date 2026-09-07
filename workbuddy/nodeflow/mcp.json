@@ -1,0 +1,9 @@
+{
+  "mcpServers": {
+    "nodeflow": {
+      "type": "stdio",
+      "command": "npx",
+      "args": ["-y", "@cosmosdeng/nodeflow-mcp"]
+    }
+  }
+}

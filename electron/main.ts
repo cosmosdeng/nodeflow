@@ -4,8 +4,12 @@ import path from 'node:path';
 import { startAgentBridge, AGENT_DEFAULT_PORT } from './agentBridge';
 
 const isDev = Boolean(process.env.ELECTRON_START_URL) || !app.isPackaged;
-/** Agent Local Test Bridge 默认关闭:仅 NODEFLOW_AGENT_BRIDGE=1 时启动(只监听 127.0.0.1)。 */
-const agentBridgeEnabled = process.env.NODEFLOW_AGENT_BRIDGE === '1';
+/**
+ * Agent Local Test Bridge:NodeFlow next 默认自动启动(只监听 127.0.0.1),供
+ * @cosmosdeng/nodeflow-mcp / WorkBuddy 等本机 Agent 客户端连接。
+ * 可用 NODEFLOW_AGENT_BRIDGE=0 显式关闭(测试/不想要时)。
+ */
+const agentBridgeEnabled = process.env.NODEFLOW_AGENT_BRIDGE !== '0';
 /** test-only commands(reset / seedFixture)默认关闭:仅 NODEFLOW_AGENT_TEST_CMDS=1 时下发能力。 */
 const agentBridgeTestEnabled = process.env.NODEFLOW_AGENT_TEST_CMDS === '1';
 

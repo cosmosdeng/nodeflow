@@ -7,7 +7,7 @@
 ```text
 Agent(CodeBuddy / 测试脚本 / 未来 MCP)
   ↓  HTTP / JSON(仅本机)
-Local Test Bridge(Electron 主进程,127.0.0.1,默认关闭)
+Local Test Bridge(Electron 主进程,127.0.0.1,next 默认自动启动)
   ↓  白名单 IPC channel
 Renderer Agent Core(executor)
   ↓
@@ -106,7 +106,7 @@ getCanvasScreenshot / getWindowScreenshot
 ## 9. Local Bridge
 
 - 仅本机：`127.0.0.1:8787`(可用 `NODEFLOW_AGENT_BRIDGE_PORT` 覆盖)。
-- 默认关闭：只有 `NODEFLOW_AGENT_BRIDGE=1` 时启动；生产/普通用户不受影响。
+- NodeFlow next 默认自动启动(供 MCP/WorkBuddy 连接)；可用 `NODEFLOW_AGENT_BRIDGE=0` 显式关闭。只监听 127.0.0.1。
 
 ### Capabilities
 

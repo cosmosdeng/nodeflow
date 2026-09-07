@@ -16,5 +16,5 @@
     "noUnusedParameters": false,
     "noFallthroughCasesInSwitch": true
   },
-  "include": ["src", "electron"]
+  "include": ["src", "electron", "mcp-server/src"]
 }

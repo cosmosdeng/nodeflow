@@ -1,0 +1,43 @@
+{
+  "name": "@cosmosdeng/nodeflow-mcp",
+  "version": "0.4.0-next.2",
+  "description": "NodeFlow MCP stdio adapter — lets AI agents (WorkBuddy / MCP clients) operate a running NodeFlow via its local Agent Bridge (http://127.0.0.1:8787).",
+  "author": {
+    "name": "cosmosdeng",
+    "email": "dycosmos@gmail.com"
+  },
+  "license": "MIT",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "bin": {
+    "nodeflow-mcp": "dist/cli.js"
+  },
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "require": "./dist/index.js",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "engines": {
+    "node": ">=18"
+  },
+  "scripts": {
+    "build": "node scripts/build.mjs",
+    "prepack": "npm run build",
+    "test": "node scripts/build.mjs && node --test test/package.check.mjs"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.30.0",
+    "zod": "^4.5.4"
+  },
+  "devDependencies": {
+    "esbuild": "^0.25.0",
+    "typescript": "^5.7.2"
+  }
+}
