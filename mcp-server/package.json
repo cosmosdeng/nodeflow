@@ -7,6 +7,19 @@
     "email": "dycosmos@gmail.com"
   },
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/cosmosdeng/nodeflow.git"
+  },
+  "keywords": [
+    "nodeflow",
+    "mcp",
+    "model-context-protocol",
+    "flowchart",
+    "workbuddy",
+    "opencode",
+    "electron"
+  ],
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "bin": {

@@ -352,9 +352,59 @@ The repository also contains a standalone MCP server package under:
 mcp-server/
 ```
 
-包名:`@cosmosdeng/nodeflow-mcp`。
+发布名:`@cosmosdeng/nodeflow-mcp`。前提:NodeFlow **next** 正在运行,Bridge 可用:
 
-> The npm package is currently **prepared for publishing but is not yet published** to the npm registry.在发布前,请使用上面「Run the NodeFlow MCP Server」的本地路径方式配置 MCP Client,不要假设 `npx @cosmosdeng/nodeflow-mcp` 可以直接使用。
+```text
+127.0.0.1:8787
+```
+
+推荐启动方式(发布后):
+
+```bash
+npx -y @cosmosdeng/nodeflow-mcp
+```
+
+发布前的本地开发请使用上面「Run the NodeFlow MCP Server」的本地路径方式。
+
+> The standalone package is **prepared for npm distribution**.在它真正发布到 npm registry 之前,`npx @cosmosdeng/nodeflow-mcp` 还不能作为通用安装方式;请继续使用本地路径配置。
+
+### OpenCode
+
+NodeFlow MCP can be configured as a local MCP server in `opencode.json`(或 `opencode.jsonc`),按当前 OpenCode 官方 schema:
+
+```jsonc
+{
+  "$schema": "https://opencode.ai/config.json",
+  "mcp": {
+    "nodeflow": {
+      "type": "local",
+      "command": ["npx", "-y", "@cosmosdeng/nodeflow-mcp"],
+      "enabled": true
+    }
+  }
+}
+```
+
+前提:NodeFlow **next** 在本机运行,Agent Bridge 位于:
+
+```text
+http://127.0.0.1:8787
+```
+
+> 在 `@cosmosdeng/nodeflow-mcp` 发布到 npm 之前,把 `command` 临时换成本地启动,例如:
+> `["/usr/local/bin/node", "/absolute/path/to/nodeflow/mcp-server/dist/cli.js"]`(路径以 `which node` 与你的实际目录为准)。
+
+### WorkBuddy Connector
+
+WorkBuddy 推荐使用仓库内的 Connector(见 [`workbuddy/nodeflow/`](workbuddy/nodeflow/)),它按 npm 分发方式启动 MCP Server:
+
+```text
+npx -y @cosmosdeng/nodeflow-mcp
+```
+
+WorkBuddy 连接的是 **NodeFlow MCP Server**(不是 NodeFlow Desktop);因此使用前必须保证 **NodeFlow Desktop 正在运行且 Agent Bridge 已开启**(NodeFlow next 默认自动启动 Bridge 于 `127.0.0.1:8787`)。
+
+> 同样地,`@cosmosdeng/nodeflow-mcp` 未发布前,Connector 的 `mcp.json` 需临时改为本地路径方可连接。
 
 相关文档:[Agent 接口](docs/agent-interface.md)、[MCP documentation](docs/mcp.md)、[架构开发状态](docs/architecture/agent-development-status.md)。
 

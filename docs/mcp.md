@@ -34,10 +34,17 @@ MCP Client ↔(stdio)↔ @cosmosdeng/nodeflow-mcp ↔(HTTP/JSON,127.0.0.1:8787)�
 bun run build && bun run start
 
 # 2) 启动 MCP Server(独立 npm 包;普通用户直接由 WorkBuddy Connector 代劳)
+#    —— 发布到 npm registry 后可用:
 npx -y @cosmosdeng/nodeflow-mcp
+#    —— 发布前,仓库内本地运行:
+/usr/local/bin/node mcp-server/dist/cli.js     # node 路径以 `which node` 为准
 ```
 
 Bridge 默认地址为 `http://127.0.0.1:8787`,可通过 `NODEFLOW_MCP_BRIDGE_URL` 覆盖。
+
+> **发布状态**:`@cosmosdeng/nodeflow-mcp` 已为 npm 分发准备完毕(package.json / bin / dist / LICENSE /
+> README / npm pack 均已验证),但**尚未真正发布到 npm registry**。在发布前,`npx @cosmosdeng/nodeflow-mcp`
+> 尚不可作为通用安装方式;请用上面的本地路径方式。
 
 > 说明:本仓库 `src/mcp/stdio.ts` 是 MCP 适配器的仓库内开发入口;对外发布的是独立 npm 包
 > `@cosmosdeng/nodeflow-mcp`(构建自仓库同一份 `src/mcp/*` 单一源)。
@@ -122,3 +129,41 @@ NodeFlow next
 ```
 
 用户只需:安装 NodeFlow next → 安装 Connector → 启动 NodeFlow → 用 WorkBuddy 操作。
+
+> Connector 的 `mcp.json` 按 npm 分发方式写为 `npx -y @cosmosdeng/nodeflow-mcp`;
+> 在 npm package 正式发布前,如需本机连接,需临时把该命令改为本地路径方式
+> (Node 路径 + `mcp-server/dist/cli.js`)。
+
+## 10. OpenCode(本地 MCP)
+
+NodeFlow MCP can be configured as a local MCP server in OpenCode's `opencode.json`
+(或 `opencode.jsonc`),按当前 OpenCode 官方 schema(`mcp` 顶层 map,`command` 为数组):
+
+```jsonc
+{
+  "$schema": "https://opencode.ai/config.json",
+  "mcp": {
+    "nodeflow": {
+      "type": "local",
+      "command": ["npx", "-y", "@cosmosdeng/nodeflow-mcp"],
+      "enabled": true
+    }
+  }
+}
+```
+
+前提:NodeFlow **next** 正在本机运行,Agent Bridge 位于 `http://127.0.0.1:8787`。
+
+> 发布前,把 `command` 临时改为本地启动,例如:
+> `["/usr/local/bin/node", "/absolute/path/to/nodeflow/mcp-server/dist/cli.js"]`(路径按实际调整)。
+
+## 11. 环境变量边界
+
+| 变量 | 默认 | 说明 |
+|---|---|---|
+| `NODEFLOW_MCP_BRIDGE_URL` | `http://127.0.0.1:8787` | MCP Server 连接的 Bridge 地址;高级用户可按需覆盖 |
+| `NODEFLOW_MCP_TEST_FIXTURE` | 未设置(关) | 设为 `1` 才在 MCP 注册 `reset/seed_fixture`;普通用户不要开 |
+| `NODEFLOW_AGENT_BRIDGE` | 未设置(自动启动) | NodeFlow next 默认自动启动 Bridge;`0` 可关闭(Desktop 侧) |
+| `NODEFLOW_AGENT_TEST_CMDS` | 未设置(关) | 开启 test-only command 能力;普通使用**不要**设置 |
+
+正常用户无需配置任何环境变量;WorkBuddy / OpenCode 通过默认 `127.0.0.1:8787` 即可连接。

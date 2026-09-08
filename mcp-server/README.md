@@ -59,6 +59,46 @@ NODEFLOW_MCP_TEST_FIXTURE=1   # 本包:注册 test-only tools
 
 且 NodeFlow 侧开启 `NODEFLOW_AGENT_TEST_CMDS=1` 时,它们才会生效。
 
+## MCP Client 配置
+
+前提:**NodeFlow next 正在运行**,其 Agent Bridge 在 `127.0.0.1:8787`(next 默认自动启动;`NODEFLOW_AGENT_BRIDGE=0` 可关闭)。本包是 MCP Server(连接方),不负责启动 NodeFlow。
+
+### WorkBuddy
+
+推荐在 WorkBuddy 安装 NodeFlow Connector(仓库 `workbuddy/nodeflow/`),其 `mcp.json` 指向本包:
+
+```json
+{
+  "mcpServers": {
+    "nodeflow": {
+      "type": "stdio",
+      "command": "npx",
+      "args": ["-y", "@cosmosdeng/nodeflow-mcp"]
+    }
+  }
+}
+```
+
+### OpenCode
+
+在 `opencode.json`(或 `opencode.jsonc`)中按 OpenCode 官方 schema 配置为 local MCP server:
+
+```jsonc
+{
+  "$schema": "https://opencode.ai/config.json",
+  "mcp": {
+    "nodeflow": {
+      "type": "local",
+      "command": ["npx", "-y", "@cosmosdeng/nodeflow-mcp"],
+      "enabled": true
+    }
+  }
+}
+```
+
+> 通用 stdio 原则:任意 MCP Client 都可用 `npx -y @cosmosdeng/nodeflow-mcp`
+> (或本机已构建的 `node .../mcp-server/dist/cli.js`)作为 stdio 命令启动本包。
+
 ## 开发
 
 ```bash
