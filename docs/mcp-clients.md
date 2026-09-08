@@ -60,8 +60,14 @@ npx -y @cosmosdeng/nodeflow-mcp
 
 Do **not** assume the untagged form is the current prerelease.
 
-> 前提:所有客户端都需要 NodeFlow **next** 正在运行且 Agent Bridge 可用(见上文 Architecture)。
-> 下面的配置假设 NodeFlow 已启动。
+Prerequisites for every client below:
+
+1. Install / start NodeFlow **next**.
+2. Agent Bridge is **enabled by default**(NodeFlow next 自动启动,监听 `127.0.0.1:8787`;
+   如显式关闭过,恢复默认或去掉 `NODEFLOW_AGENT_BRIDGE=0` 再启动)。
+3. Configure the MCP client with `@cosmosdeng/nodeflow-mcp@next`(见下文各客户端配置)。
+
+> 正常使用不需要手动设置 `NODEFLOW_AGENT_BRIDGE=1`;该变量只作为旧版/手动 override 场景。
 
 ---
 
