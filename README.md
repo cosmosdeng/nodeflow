@@ -52,7 +52,7 @@
 | 交互 | 拖动节点到阶段域内长按归属 | 新增**语义再指派**:拖节点到带 / 交叉格悬停约 1 秒 → 候选高亮 → 确认,可单独改参与方或阶段 |
 | 自动排列 | 拓扑分层布局 + 阶段域整体块排列 | 有 Stage/Participant 带时按「参与方×阶段」矩阵语义排布并沿连线整理;无带 / 带隐藏时退化为自动排列 |
 | 持久化 | `.nodeflow` v4(含 v2/v3 旧档自动迁移、版本门校验) | `.nodeflow` v5(新增参与方 / 阶段排序状态) |
-| Agent / MCP | 不包含 | next 分支已实现:本地 Agent Bridge(仅本机 HTTP)+ MCP(stdio)适配层,支持 Observe / Command / Assert / Screenshot / Capabilities,与 GUI 共用 domain / history / revision。另有独立 npm 包 `@cosmosdeng/nodeflow-mcp` 与 WorkBuddy Connector(见下方 [AI / WorkBuddy Integration](#ai--workbuddy-integration)) |
+| Agent / MCP | 不包含 | next 分支已实现:本地 Agent Bridge(仅本机 HTTP)+ MCP(stdio)适配层,支持 Observe / Command / Assert / Screenshot / Capabilities,与 GUI 共用 domain / history / revision。另有独立 npm 包 `@cosmosdeng/nodeflow-mcp` 与 WorkBuddy Connector(见下方 [Next: MCP / AI Agent Integration](#next-mcp)) |
 
 两条线共享同一套核心数据模型与项目文件格式:正式版保存 `.nodeflow` v4,Next 保存 v5。v4 及更早的项目在 Next 中打开会自动迁移到 v5;**反过来不行** —— 版本门会拒绝在旧版打开由更高版本保存的文件,用 Next 编辑过的项目回到正式版打开前需在 Next 里另存为 v4 兼容(或直接继续用 Next)。
 
@@ -83,30 +83,280 @@ bun run test
 > 若 electron 二进制下载失败,可设置镜像后重装:
 > `ELECTRON_MIRROR=https://npmmirror.com/mirrors/electron/ bun install`
 
-## AI / WorkBuddy Integration
+<a id="next-mcp"></a>
 
-NodeFlow exposes an Agent Interface and an MCP(stdio)server for AI agents.
+## Next: MCP / AI Agent Integration
 
-NodeFlow next **automatically starts the local Agent Bridge** on `127.0.0.1:8787`(可用 `NODEFLOW_AGENT_BRIDGE=0` 关闭)。AI 通过 MCP 工具观察 / 修改画布,与 GUI 共用同一套 domain / history / revision。
+> NodeFlow **next** 已内置 Agent Bridge,并支持通过 MCP Server 与 **WorkBuddy / CodeBuddy** 等 MCP Client 连接。MCP / Agent Integration 是 **next 开发线**能力(不含 stable `main`)。
+
+### Architecture
 
 ```text
-WorkBuddy ──(MCP stdio)──► @cosmosdeng/nodeflow-mcp ──(HTTP 127.0.0.1:8787)──► NodeFlow next
+WorkBuddy / CodeBuddy
+        │
+        │ MCP / stdio
+        ▼
+NodeFlow MCP Server            ← 适配层(仓库 mcp-server/ 或独立包 @cosmosdeng/nodeflow-mcp)
+        │
+        │ HTTP / JSON(仅本机)
+        ▼
+NodeFlow Agent Bridge          ← NodeFlow next 默认自动启动
+        │
+        ▼
+NodeFlow Electron
+        │
+        ▼
+Graph State / Canvas
 ```
 
-仓库内提供:
+要点:
 
-- 独立 MCP 包 [`mcp-server/`](mcp-server/README.md)(发布名 `@cosmosdeng/nodeflow-mcp`);
-- WorkBuddy Connector[`workbuddy/nodeflow/`](workbuddy/nodeflow/)(connector-meta.json / mcp.json / SKILL.md);
-- 协议说明 [docs/mcp.md](docs/mcp.md)。
+1. MCP Server 是 NodeFlow Agent Interface 的**适配层**,不直接操作 React、Zustand、DOM 或 Electron 内部状态。
+2. Agent Bridge 是 NodeFlow 与外部 Agent 之间的**本地接口**。
+3. 默认 Bridge 地址:`http://127.0.0.1:8787`。
+4. MCP Server 默认通过 **stdio** 与 MCP Client 通信。
+5. NodeFlow **next** 默认自动启动 Agent Bridge(无需任何 env);如需关闭:`NODEFLOW_AGENT_BRIDGE=0`。
+6. Bridge 只监听 127.0.0.1,不暴露到公网。
 
-最简单使用路径:
+### Quick Start
 
-1. 安装 NodeFlow next(需要含 Agent Bridge 的版本)。
-2. 在 WorkBuddy 安装 NodeFlow Connector。
-3. 启动 NodeFlow。
-4. 让 WorkBuddy 操作 NodeFlow(创建节点 / 连线 / 分配参与方与阶段 / 自动排列 / 断言 / 截图)。
+#### 1. 获取 next
 
-相关文档:[Agent 接口](docs/agent-interface.md)、[架构开发状态](docs/architecture/agent-development-status.md)。
+```bash
+git clone https://github.com/cosmosdeng/nodeflow.git
+cd nodeflow
+git checkout next
+bun install
+```
+
+如果已经 clone:
+
+```bash
+git checkout next
+git pull origin next
+bun install
+```
+
+#### 2. 启动 NodeFlow next
+
+```bash
+bun run dev
+```
+
+NodeFlow **next** 会默认自动启动 Agent Bridge,不需要再设置 `NODEFLOW_AGENT_BRIDGE=1`。如需强制关闭:
+
+```bash
+NODEFLOW_AGENT_BRIDGE=0 bun run dev
+```
+
+#### 3. 检查 Bridge
+
+```bash
+curl http://127.0.0.1:8787/agent/v1/health
+```
+
+预期:
+
+```json
+{
+  "status": "ok",
+  "agentBridge": true
+}
+```
+
+返回正常即表示 NodeFlow Agent Bridge 已在运行。
+
+### Run the NodeFlow MCP Server
+
+仓库内开发 / 本地验证方式:
+
+```bash
+cd nodeflow
+bun install
+bun run build
+```
+
+MCP Server CLI 为:
+
+```text
+mcp-server/dist/cli.js
+```
+
+MCP Client 用系统 Node 启动它。先获取真实 Node 路径(不同机器的路径可能不同,不要假设一定是 `/usr/local/bin/node`):
+
+```bash
+which node
+```
+
+例如在 macOS 上可能是 `/usr/local/bin/node`,然后用该路径运行 MCP Server:
+
+```text
+/usr/local/bin/node /path/to/nodeflow/mcp-server/dist/cli.js
+```
+
+### WorkBuddy / MCP Client 配置示例
+
+在 MCP Client(WorkBuddy、CodeBuddy 等)中,把 nodeflow 配成一个 stdio MCP server,例如 `mcp.json`:
+
+```json
+{
+  "mcpServers": {
+    "nodeflow": {
+      "type": "stdio",
+      "command": "/usr/local/bin/node",
+      "args": [
+        "/absolute/path/to/nodeflow/mcp-server/dist/cli.js"
+      ]
+    }
+  }
+}
+```
+
+注意:
+
+- `/usr/local/bin/node` 只是示例,请用 `which node` 的结果替换;
+- `/absolute/path/to/nodeflow` 必须替换成你自己的 NodeFlow 路径;
+- Windows / Linux / macOS 路径各不相同,按实际填写。
+
+macOS 示例:
+
+```json
+{
+  "mcpServers": {
+    "nodeflow": {
+      "type": "stdio",
+      "command": "/usr/local/bin/node",
+      "args": [
+        "/Users/yourname/nodeflow/mcp-server/dist/cli.js"
+      ]
+    }
+  }
+}
+```
+
+### 用 CodeBuddy CLI 验证连接
+
+如果安装了 CodeBuddy CLI(可选):
+
+```bash
+codebuddy mcp list
+```
+
+预期看到:
+
+```text
+nodeflow ✓ Connected
+```
+
+之后即可用 WorkBuddy / CodeBuddy 的 MCP Client 调用 NodeFlow。
+
+> WorkBuddy GUI 与 CodeBuddy CLI 的具体 UI / 配置入口可能随版本变化,此处不描述具体点击路径;上面是通用的 MCP Server 配置原则与 CLI 验证方法。
+
+### 最小 MCP 验证
+
+连接成功后,MCP Client 应能发现 NodeFlow tools,例如:
+
+```text
+get_capabilities
+get_graph_state
+get_nodes / get_edges / get_participants / get_stages
+create_node / update_node / delete_node
+connect_edge / delete_edge
+assign_participant / assign_stage
+arrange / undo / redo
+assert / screenshot
+```
+
+建议的最小验证路径:
+
+1. 查询当前 NodeFlow 图状态(`get_graph_state`);
+2. 创建两个节点;
+3. 创建一条 Edge(`connect_edge`);
+4. Arrange;
+5. 再次查询确认;
+6. Assertion 验证(节点 / 边存在);
+7. Screenshot 验证。
+
+推荐的 Agent 工作模式:
+
+```text
+Observe → Act → Verify
+```
+
+需要视觉验证时:
+
+```text
+Observe → Act → Screenshot → Verify
+```
+
+完整 smoke test 示例(给 WorkBuddy / CodeBuddy 的一句话指令):
+
+```text
+1. 查看当前 NodeFlow 图
+2. 创建:开始 → 制作 → QC → 完成
+3. 创建对应 Edge
+4. Arrange
+5. 查询图状态
+6. 验证 4 个节点和 3 条 Edge
+7. 截取 Canvas Screenshot
+```
+
+这是一个 MCP smoke test,用于确认 NodeFlow、Agent Bridge、MCP Server 与 MCP Client 全链路正常。
+
+### Supported Agent Operations
+
+- Graph observation
+- Node CRUD
+- Edge CRUD
+- Participant CRUD
+- Stage CRUD
+- Participant assignment
+- Stage assignment
+- Semantic reassignment
+- Arrange
+- Undo / Redo
+- Gateway operations
+- Artifact operations
+- Annotation operations
+- Assertions
+- Canvas / window screenshots
+
+说明:**Composite** 目前主要支持 observation / assertion,Agent 尚不具备完整的 Composite CRUD。
+
+### Security
+
+The NodeFlow Agent Bridge is local-only by default:
+
+```text
+127.0.0.1:8787
+```
+
+- 不监听公网地址;
+- MCP Server 通过本地 stdio 与 MCP Client 通信;
+- 不提供任意 shell 执行;
+- 不提供任意文件系统操作;
+- 不提供 `eval`;
+- test fixture / reset / seed 能力不是普通生产能力,默认关闭;
+- 除非专门调试,**不要**开启 `NODEFLOW_AGENT_TEST_CMDS`。
+
+### Next 与 Stable 的关系
+
+- `main`(stable)与 `next` 是两条发布线;MCP / Agent Integration 属于 **next** 开发线能力,尚未出现在 stable release 中。
+- 仓库内的 `mcp-server/`(构建为 `@cosmosdeng/nodeflow-mcp`)与 `workbuddy/nodeflow/` Connector 都面向 next。
+
+### Standalone MCP Server
+
+The repository also contains a standalone MCP server package under:
+
+```text
+mcp-server/
+```
+
+包名:`@cosmosdeng/nodeflow-mcp`。
+
+> The npm package is currently **prepared for publishing but is not yet published** to the npm registry.在发布前,请使用上面「Run the NodeFlow MCP Server」的本地路径方式配置 MCP Client,不要假设 `npx @cosmosdeng/nodeflow-mcp` 可以直接使用。
+
+相关文档:[Agent 接口](docs/agent-interface.md)、[MCP documentation](docs/mcp.md)、[架构开发状态](docs/architecture/agent-development-status.md)。
 
 ## 使用说明
 
