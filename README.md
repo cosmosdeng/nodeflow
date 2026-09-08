@@ -18,7 +18,7 @@
 - **参与方 / 组织管理**:在「👤 参与方」面板管理参与方与组织(个人 / 角色 / 组织 / 部门 / 机器 / 软件 / AI 智能体),节点 / 组合节点可在属性面板分配所属参与方(显式 Assign,只改语义不改位置),并随 `.nodeflow` 文件持久化
 - **「参与方×阶段」矩阵**(Next 预览版独有):参与方**行带**与阶段**列带**可视化(可分别开关显示),节点归属后自动纳入对应行列带;带保持顺序且**弹性移动**去包含节点;空参与方保持最小高度带
 - **语义再指派**(Next 预览版独有):把节点拖到带 / 交叉格停留约 1 秒,出现候选高亮与确认框,可只改参与方或只改阶段;自动排列会按「参与方×阶段」矩阵语义排布并沿连线整理
-- **Agent / MCP 接口**(next 分支开发中,尚未发布):本地 Agent Bridge(仅本机 HTTP)+ MCP(stdio)适配层,支持 Observe / Command / Assert / Screenshot / Capabilities,与 GUI 共用同一套 domain / history / revision
+- **Agent / MCP 接口**(next 分支能力,未进入 stable):本地 Agent Bridge(仅本机 HTTP)+ MCP(stdio)适配层,支持 Observe / Command / Assert / Screenshot / Capabilities,与 GUI 共用同一套 domain / history / revision;npm 包 `@cosmosdeng/nodeflow-mcp` 已发布为 prerelease(`@next`)
 - **BPMN 网关**:逻辑判断 / 分支节点 —— **排他(×)/ 并行(+)/ 包容(○)** 三种菱形网关,可分支(一进多出) / 汇聚(多进一出);分支条件通过连线说明表达;画布右键直接创建,网关上右键切换类型;各分支连线彩色区分
 - **注释框**:画布 / 节点 / 连线 / 中间产物 / 组合 / 网关 / 阶段域均可添加注释框(收起时显示红色 pin 📌,展开可编辑标题与内容,支持多段内容);删除主体自动清理其注释
 - **自动排列**:工具栏「自动排列」一键整理全画布或组合内部节点 —— 正式版按横向拓扑分层布局(全画布时自动集成阶段域:域内节点横向排列、域框收敛、各域作为整体块排列);Next 预览版在显示 Stage/Participant 带时改为按「参与方×阶段」矩阵语义排布并沿连线整理,两个带都隐藏时退化为纯自动排列
@@ -52,7 +52,7 @@
 | 交互 | 拖动节点到阶段域内长按归属 | 新增**语义再指派**:拖节点到带 / 交叉格悬停约 1 秒 → 候选高亮 → 确认,可单独改参与方或阶段 |
 | 自动排列 | 拓扑分层布局 + 阶段域整体块排列 | 有 Stage/Participant 带时按「参与方×阶段」矩阵语义排布并沿连线整理;无带 / 带隐藏时退化为自动排列 |
 | 持久化 | `.nodeflow` v4(含 v2/v3 旧档自动迁移、版本门校验) | `.nodeflow` v5(新增参与方 / 阶段排序状态) |
-| Agent / MCP | 不包含 | next 分支已实现:本地 Agent Bridge(仅本机 HTTP)+ MCP(stdio)适配层,支持 Observe / Command / Assert / Screenshot / Capabilities,与 GUI 共用 domain / history / revision。另有独立 npm 包 `@cosmosdeng/nodeflow-mcp` 与 WorkBuddy Connector(见下方 [Next: MCP / AI Agent Integration](#next-mcp)) |
+| Agent / MCP | 不包含 | next 分支已实现:本地 Agent Bridge(仅本机 HTTP)+ MCP(stdio)适配层,支持 Observe / Command / Assert / Screenshot / Capabilities,与 GUI 共用 domain / history / revision。另有已发布 npm 包 `@cosmosdeng/nodeflow-mcp`(prerelease `@next`)与 WorkBuddy Connector(见下方 [MCP / AI Agent Integration](#next-mcp)) |
 
 两条线共享同一套核心数据模型与项目文件格式:正式版保存 `.nodeflow` v4,Next 保存 v5。v4 及更早的项目在 Next 中打开会自动迁移到 v5;**反过来不行** —— 版本门会拒绝在旧版打开由更高版本保存的文件,用 Next 编辑过的项目回到正式版打开前需在 Next 里另存为 v4 兼容(或直接继续用 Next)。
 
@@ -85,11 +85,25 @@ bun run test
 
 <a id="next-mcp"></a>
 
-## Next: MCP / AI Agent Integration
+## MCP / AI Agent Integration
 
-> NodeFlow **next** 已内置 Agent Bridge,并支持通过 MCP Server 与 **WorkBuddy / CodeBuddy** 等 MCP Client 连接。MCP / Agent Integration 是 **next 开发线**能力(不含 stable `main`)。
+NodeFlow exposes a stable Agent Interface and an MCP adapter, allowing AI agents to inspect and operate NodeFlow through its local Agent Bridge.
 
-### Architecture
+See the complete setup guide for:
+
+- WorkBuddy
+- CodeBuddy
+- OpenAI Codex
+- Cursor
+- Claude Code
+- OpenCode
+- other MCP-compatible agents
+
+→ [MCP Client Setup Guide](docs/mcp-clients.md)
+
+---
+
+### Architecture(NodeFlow next)
 
 ```text
 WorkBuddy / CodeBuddy
@@ -346,27 +360,34 @@ The NodeFlow Agent Bridge is local-only by default:
 
 ### Standalone MCP Server
 
-The repository also contains a standalone MCP server package under:
+The repository also contains the standalone MCP server package source under:
 
 ```text
 mcp-server/
 ```
 
-发布名:`@cosmosdeng/nodeflow-mcp`。前提:NodeFlow **next** 正在运行,Bridge 可用:
+发布名:`@cosmosdeng/nodeflow-mcp`(当前为 prerelease,使用 `@next` dist-tag)。前提:NodeFlow **next** 正在运行,Bridge 可用:
 
 ```text
 127.0.0.1:8787
 ```
 
-推荐启动方式(发布后):
+通用启动方式(当前 prerelease):
+
+```bash
+npx -y @cosmosdeng/nodeflow-mcp@next
+```
+
+稳定版发布后再使用不带 tag 的形式:
 
 ```bash
 npx -y @cosmosdeng/nodeflow-mcp
 ```
 
-发布前的本地开发请使用上面「Run the NodeFlow MCP Server」的本地路径方式。
+本仓库内开发时也可用本地构建路径(见上文「Run the NodeFlow MCP Server」)。
 
-> The standalone package is **prepared for npm distribution**.在它真正发布到 npm registry 之前,`npx @cosmosdeng/nodeflow-mcp` 还不能作为通用安装方式;请继续使用本地路径配置。
+> 各 AI Agent(WorkBuddy / CodeBuddy / OpenAI Codex / Cursor / Claude Code / OpenCode)的完整配置见
+> [MCP Client Setup Guide](docs/mcp-clients.md)。
 
 ### OpenCode
 
@@ -378,7 +399,7 @@ NodeFlow MCP can be configured as a local MCP server in `opencode.json`(或 `ope
   "mcp": {
     "nodeflow": {
       "type": "local",
-      "command": ["npx", "-y", "@cosmosdeng/nodeflow-mcp"],
+      "command": ["npx", "-y", "@cosmosdeng/nodeflow-mcp@next"],
       "enabled": true
     }
   }
@@ -391,22 +412,17 @@ NodeFlow MCP can be configured as a local MCP server in `opencode.json`(或 `ope
 http://127.0.0.1:8787
 ```
 
-> 在 `@cosmosdeng/nodeflow-mcp` 发布到 npm 之前,把 `command` 临时换成本地启动,例如:
-> `["/usr/local/bin/node", "/absolute/path/to/nodeflow/mcp-server/dist/cli.js"]`(路径以 `which node` 与你的实际目录为准)。
-
 ### WorkBuddy Connector
 
 WorkBuddy 推荐使用仓库内的 Connector(见 [`workbuddy/nodeflow/`](workbuddy/nodeflow/)),它按 npm 分发方式启动 MCP Server:
 
 ```text
-npx -y @cosmosdeng/nodeflow-mcp
+npx -y @cosmosdeng/nodeflow-mcp@next
 ```
 
 WorkBuddy 连接的是 **NodeFlow MCP Server**(不是 NodeFlow Desktop);因此使用前必须保证 **NodeFlow Desktop 正在运行且 Agent Bridge 已开启**(NodeFlow next 默认自动启动 Bridge 于 `127.0.0.1:8787`)。
 
-> 同样地,`@cosmosdeng/nodeflow-mcp` 未发布前,Connector 的 `mcp.json` 需临时改为本地路径方可连接。
-
-相关文档:[Agent 接口](docs/agent-interface.md)、[MCP documentation](docs/mcp.md)、[架构开发状态](docs/architecture/agent-development-status.md)。
+相关文档:[Agent 接口](docs/agent-interface.md)、[MCP documentation](docs/mcp.md)、[MCP Client Setup Guide](docs/mcp-clients.md)、[架构开发状态](docs/architecture/agent-development-status.md)。
 
 ## 使用说明
 
