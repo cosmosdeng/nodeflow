@@ -52,11 +52,20 @@
 | 交互 | 拖动节点到阶段域内长按归属 | 新增**语义再指派**:拖节点到带 / 交叉格悬停约 1 秒 → 候选高亮 → 确认,可单独改参与方或阶段 |
 | 自动排列 | 拓扑分层布局 + 阶段域整体块排列 | 有 Stage/Participant 带时按「参与方×阶段」矩阵语义排布并沿连线整理;无带 / 带隐藏时退化为自动排列 |
 | 持久化 | `.nodeflow` v4(含 v2/v3 旧档自动迁移、版本门校验) | `.nodeflow` v5(新增参与方 / 阶段排序状态) |
-| Agent / MCP | 不包含 | next 分支已实现:本地 Agent Bridge(仅本机 HTTP)+ MCP(stdio)适配层,支持 Observe / Command / Assert / Screenshot / Capabilities,与 GUI 共用 domain / history / revision;尚未随版本发布 |
+| Agent / MCP | 不包含 | next 分支已实现:本地 Agent Bridge(仅本机 HTTP)+ MCP(stdio)适配层,支持 Observe / Command / Assert / Screenshot / Capabilities,与 GUI 共用 domain / history / revision;见下方 [MCP / AI Agent Integration](#mcp--ai-agent-integration) |
 
 两条线共享同一套核心数据模型与项目文件格式:正式版保存 `.nodeflow` v4,Next 保存 v5。v4 及更早的项目在 Next 中打开会自动迁移到 v5;**反过来不行** —— 版本门会拒绝在旧版打开由更高版本保存的文件,用 Next 编辑过的项目回到正式版打开前需在 Next 里另存为 v4 兼容(或直接继续用 Next)。
 
 > 想用正式版,直接在 [Releases](https://github.com/cosmosdeng/nodeflow/releases) 下载 v0.3.2 安装包即可;想体验 Next 预览,选择 Pre-release 中的 `v0.4.0-next.x`。
+
+## MCP / AI Agent Integration
+
+NodeFlow's MCP / AI Agent integration is currently available on the **`next`** branch.
+
+See the [MCP / AI Agent setup guide](https://github.com/cosmosdeng/nodeflow/blob/next/docs/mcp-clients.md)
+for WorkBuddy, CodeBuddy, OpenAI Codex, Cursor, Claude Code, OpenCode, and other MCP-compatible agents.
+
+> Current prerelease:`@cosmosdeng/nodeflow-mcp@next`
 
 ## 快速开始
 
