@@ -2113,7 +2113,7 @@ export const useGraphStore = create<FlowStore>()(
         participantOrder: s.participantOrder,
         stages: s.stages,
         stageOrder: s.stageOrder,
-      });
+      }, { edges: s.edges });
       if (positions.size === 0) {
         // 当前无可排顶层节点(如全部节点都是组合 child 或 hidden):不消费 pending,等待后续节点
         return;
@@ -2208,7 +2208,7 @@ export const useGraphStore = create<FlowStore>()(
         stages: s.stages,
         stageOrder: s.stageOrder,
       };
-      const positions = computeMatrixLayout(input);
+      const positions = computeMatrixLayout(input, { edges: s.edges });
       if (positions.size === 0) return; // 无可排节点:不消费 pending、不产生历史
 
       // 本轮 Arrange 落实了哪些轴的顺序变更;未落实的变更保留 pending

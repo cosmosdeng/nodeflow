@@ -223,11 +223,11 @@ describe('runSmartArrange(语义轴存在 → unified matrix core,与 band visib
     expect(anyMoved).toBe(true);
     const p = (id: string) => st.nodes.find((n) => n.id === id)!.position;
     // Phase 5B:语义轴存在(即便带隐藏)→ 统一矩阵核心
-    // A、B 同 (p1, s1) cell → x 相同;Stage s2(C) 在右
-    expect(p('A').x).toBe(p('B').x);
-    expect(p('A').x).toBeLessThan(p('C').x);
-    // Y=Participant order:同 cell 内堆叠(B 原在上),p2(C) 行在 p1 行下方
-    expect(p('B').y).toBeLessThan(p('A').y);
+    // A、B 同 (p1, s1) cell,但有依赖 A→B → 列内按拓扑层:源 A 在左、目标 B 在右
+    expect(p('A').x).toBeLessThan(p('B').x);
+    expect(p('B').x).toBeLessThan(p('C').x); // Stage s2(C) 在右
+    // Y=Participant order:同一行带内拉平;p2(C) 行在 p1 行下方
+    expect(p('B').y).toBe(p('A').y);
     expect(p('C').y).toBeGreaterThan(p('A').y);
   });
 });

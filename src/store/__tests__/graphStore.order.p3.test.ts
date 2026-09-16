@@ -101,18 +101,16 @@ describe('P3 runArrange 集成', () => {
     expect(s.arrangePending).toBe(false);
     expect(s.past.length).toBe(pastLen + 1); // 单原子历史
     const pos = (id: string) => s.nodes.find((n) => n.id === id)!.position;
-    // Y 行:p1 < p2 < unassigned
+    // Y 行:p1 < p2;同一 Participant 行带内 Y 拉平(不再逐格下沉)
     expect(pos('n1').y).toBe(Y_ROW0);
     expect(pos('n2').y).toBe(Y_ROW1);
-    expect(pos('n3').y).toBeGreaterThan(pos('n2').y); // 同 cell 堆叠
-    expect(pos('nx').y).toBeGreaterThan(pos('n3').y); // unassigned 行在最后
-    // X 列:s1 < s2 < unassigned(同 cell 的 n2/n3 x 相等)
+    expect(pos('n3').y).toBe(Y_ROW1); // 同 cell 但不同拓扑层 → 不再纵向堆叠
+    expect(pos('nx').y).toBeGreaterThan(pos('n2').y); // 游离节点保持原位(在矩阵下方)
+    // X 列:s1 < s2;列内按拓扑层(edge n1→n2,故下游 n2 在 n3 右侧)
     expect(pos('n1').x).toBe(X_COL0);
-    expect(pos('n2').x).toBe(pos('n3').x);
-    expect(pos('n2').x).toBeGreaterThan(pos('n1').x);
+    expect(pos('n3').x).toBeGreaterThan(pos('n1').x);
+    expect(pos('n2').x).toBeGreaterThan(pos('n3').x);
     expect(pos('nx').x).toBeGreaterThan(pos('n2').x);
-    // 非重叠:s1(s2 cell) 堆叠
-    expect(pos('n3').y - pos('n2').y).toBeGreaterThanOrEqual(150);
   });
 
   it('invariants:runArrange 不改 semantic / stage 几何 / edge / entity', () => {
