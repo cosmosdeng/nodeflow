@@ -250,3 +250,59 @@ Build:      bun run build exit 0
 - `src/lib/arrange.ts`（`computeMatrixGridGeometry` 列内层槽位 + 行带拉平；`computeMatrixLayout` X 写入）
 - `src/lib/__tests__/matrixBandLayout.test.ts`
 - 本文件 §2 / §6 / §14（#3、#5）
+
+## 21. Revision 2026-09 (P4) — edges 接线 + Free 节点贴流程
+
+> 本条修正 §20 的一个**接线缺口**，并新增 P4 的 free 锚定行为。
+
+### 21.1 §20 的接线缺口（重要）
+
+§20 的「列内 X = 拓扑层」依赖调用方传入 `edges`；但 `graphStore` 的 `runArrange` / `runSmartArrange`
+当时**未传** `edges`，导致列内层信息恒为空（每列只有一层）—— 即 §20 的几何在应用中**实际未生效**。本修订补齐接线：
+
+```text
+graphStore.runArrange      → computeMatrixLayout(input, { edges: s.edges })
+graphStore.runSmartArrange → computeMatrixLayout(input, { edges: s.edges })
+```
+
+无 `edges` 时行为仍退回「同列按 Y 堆叠」，纯函数缺省契约不变。
+
+### 21.2 P4 — Free 节点连线锚定
+
+`freePlacement.ts` 新增 **Level 0 anchor**（详见 design doc §8）：
+
+- 仅连下游 → 贴下游左侧（上游位，纵向居中）；
+- 仅连上游 → 贴上游右侧（下游位，纵向居中）；
+- 上下游都有 → 两者水平间隙内居中；间隙放不下 → 退化为贴上游右侧；
+- 锚定位不合法（与已落位内容重叠）→ **不采用**，继续走 original → local → component → peripheral；
+- 无连边信息 → 无锚定候选，行为与 P4 之前完全一致；
+- 处理顺序：先「有已落位邻居」的 free，再其余（使 `free → free → assigned` 链可逐段贴合）。
+
+`PlacementLevel` 新增 `'anchor'`；`freePlacement.ts` 头注释与 design doc §8 同步更新。
+
+### 21.3 受影响测试（按新语义更新）
+
+`src/lib/__tests__/freePlacement.test.ts`：
+- 「component:local 失败…」→ 拆为「anchor：有已落位上游 → 贴上游右侧」+「anchor 位被占 → 退回 component」。
+- 「Production 与 Spike 一致性」→ 限定为**无连边输入**（spike 是 Phase 4B 基线，不含锚定）；
+  带连边输入的差异单独断言（production = anchor / spike = 回退）。
+
+`src/store/__tests__/graphStore.order.p3.test.ts`、`graphStore.participant.test.ts`：
+- 接线 `edges` 后列内 X 分层生效，原有「同 cell 纵向堆叠 / 同列同 x」断言改为
+  「行带 Y 拉平 + 列内按拓扑层 X 递进」。
+
+### 21.4 验证
+
+```text
+Vitest:     42 files / 405 tests passed
+TypeScript: tsconfig.json exit 0; tsconfig.electron.json exit 0
+Build:      bun run build exit 0
+```
+
+### 21.5 相关文件
+
+- `src/store/graphStore.ts`（传入 `edges`）
+- `src/lib/freePlacement.ts`（Level 0 anchor）
+- `src/lib/__tests__/freePlacement.test.ts`
+- `src/store/__tests__/graphStore.order.p3.test.ts`、`graphStore.participant.test.ts`
+- `docs/architecture/stage-participant-arrange-design.md` §8

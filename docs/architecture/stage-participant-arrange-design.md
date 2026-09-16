@@ -108,11 +108,16 @@ free       = participantId 无效 && stage 无效
 
 `free = { participantId: null, stageId: null }`，不属于任何 matrix cell。
 
-**禁止**再使用“只要碰到矩阵区域就直接弹到固定角落”策略。正式优先级：
+**禁止**再使用“只要碰到矩阵区域就直接弹到固定角落”策略。正式优先级（含 **P4 / 2026-09** 的连线锚定）：
 
-- **Level 1 — local displacement**：±16 / ±32 / ±48 / ±64（或等价小幅搜索）内，以**最小位移**离开带区域 / 几何冲突；方向偏好可由 free 相对已排节点的角色决定（作为上游偏向 up/left、作为下游偏向 down/right，仅作破平）。
-- **Level 2 — preserve topology**：free 属于连通子图 `A→B→C` 时，不单独弹走单个节点；优先**整体移动相关连通子图**并保持内部相对几何。
-- **Level 3 — peripheral placement**：局部无法解决时，将整个相关 free component 移到矩阵外围；仍尽量保持 `source.x <= target.x`，不因避让造成明显流程方向反转。
+- **Level 0 — edge-aware anchor（P4, 2026-09）**：free 节点若有**已落位**的上游/下游邻居，先尝试贴到其流向上侧 ——
+  仅连下游 → 贴下游左侧（上游位）；仅连上游 → 贴上游右侧（下游位）；上下游都有 → 落在两者水平间隙内居中
+  （间隙放不下则退化为贴上游右侧）。锚定位与既有内容重叠时**不采用**，继续走下列序列；无连边信息时**不存在**锚定候选。
+  处理顺序：先处理“有已落位邻居”的 free，再处理其余，使 `free → free → assigned` 链能逐段贴合。
+- **Level 1 — original**：锚定不适用或被否决时，原位无碰撞则保持原位。
+- **Level 2 — local displacement**：±16 / ±32 / ±48 / ±64（或等价小幅搜索）内，以**最小位移**离开带区域 / 几何冲突；方向偏好固定为 `down > right > up > left`。
+- **Level 3 — component peripheral**：local 无法解决时，在**相关连通分量已落位成员 bbox 外围**选最近合法位。
+- **Level 4 — peripheral placement**：孤立 free 局部无法解决时，移到全部已落位内容 bbox 外围最近的合法位；仍尽量保持 `source.x <= target.x`，不因避让造成明显流程方向反转。
 
 ## 9. Topology Constraints（精确定义）
 

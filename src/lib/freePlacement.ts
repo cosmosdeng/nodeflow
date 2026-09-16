@@ -4,8 +4,12 @@
  * 原则:
  *   - Free 是最后一个适应既有布局的对象;只移动 Free Node,不移动 assigned / rowOnly / stageOnly;
  *   - 只有 Node rectangles 是 obstacle(Band 是 visual envelope,不是 obstacle);
- *   - Level 0 original → Level 1 local → Level 2 component peripheral → Level 3 global peripheral;
- *   - edge 仅用于 undirected connected component,不作方向/排名优化;
+ *   - Level 0 anchor(连线感知,P4 2026-09)→ Level 1 original → Level 2 local →
+ *     Level 3 component peripheral → Level 4 global peripheral;
+ *   - edge 参与「方向感知锚定」:仅连下游 → 贴到下游左侧;仅连上游 → 贴到上游右侧;
+ *     上下游都有 → 贴到两者之间的间隙。锚定位不合法(重叠)时退回原有 original/local/… 序列,
+ *     因此「贴流程」永远不会以牺牲不重叠为代价;
+ *   - 无连边信息时不存在锚定候选,行为与 P4 之前完全一致;
  *   - deterministic:输入序 + 固定方向序;无随机 / 迭代优化 / magic 角落;
  *   - 不写 semantic(participantId / Stage.nodeIds / order)与 lane/row 持久化字段。
  */
@@ -17,7 +21,7 @@ export interface Rect {
   h: number;
 }
 
-export type PlacementLevel = 'original' | 'local' | 'component' | 'peripheral';
+export type PlacementLevel = 'anchor' | 'original' | 'local' | 'component' | 'peripheral';
 
 export interface FreeNodePlacementInput {
   /** 已最终布局的非 free 矩形(assigned / rowOnly / stageOnly 落位后) */
@@ -123,6 +127,62 @@ const sortedCandidates = (c: { dx: number; dy: number; axis: string }[]) =>
         DIRS.findIndex((d) => d.axis === a.axis) - DIRS.findIndex((d) => d.axis === b.axis),
     );
 
+/**
+ * 连线感知的锚定候选(P4):
+ *   - 仅连下游 → 贴到下游 bbox 左侧(上游位),纵向与下游居中;
+ *   - 仅连上游 → 贴到上游 bbox 右侧(下游位),纵向与上游居中;
+ *   - 上下游都有 → 落在两者水平间隙内居中;间隙放不下则退化为「贴上游右侧」。
+ * 邻居只取「已落位」集合(occupied + 已 settle 的 free);无邻居返回 null(不做锚定)。
+ * 纯函数,只读输入。
+ */
+function anchorRect(
+  id: string,
+  self: Rect,
+  settledById: ReadonlyMap<string, Rect>,
+  edges: readonly { source: string; target: string }[],
+  gap: number,
+): Rect | null {
+  const preds: Rect[] = [];
+  const succs: Rect[] = [];
+  for (const e of edges) {
+    if (e.target === id) {
+      const r = settledById.get(e.source);
+      if (r) preds.push(r);
+    }
+    if (e.source === id) {
+      const r = settledById.get(e.target);
+      if (r) succs.push(r);
+    }
+  }
+  if (preds.length === 0 && succs.length === 0) return null;
+
+  const centerYOf = (rs: Rect[]) => {
+    const t = Math.min(...rs.map((r) => r.y));
+    const b = Math.max(...rs.map((r) => r.y + r.h));
+    return (t + b) / 2;
+  };
+  const predBox = preds.length > 0 ? bboxOf(preds) : null;
+  const succBox = succs.length > 0 ? bboxOf(succs) : null;
+
+  if (predBox && succBox) {
+    const left = predBox.x + predBox.w + gap;
+    const right = succBox.x - gap - self.w;
+    const y = (centerYOf(preds) + centerYOf(succs)) / 2 - self.h / 2;
+    // 间隙放得下 → 居中于间隙;放不下 → 贴上游右侧(不越过下游)
+    if (right >= left) return { x: (left + right) / 2, y, w: self.w, h: self.h };
+    return { x: left, y: centerYOf(preds) - self.h / 2, w: self.w, h: self.h };
+  }
+  if (succBox) {
+    return { x: succBox.x - gap - self.w, y: centerYOf(succs) - self.h / 2, w: self.w, h: self.h };
+  }
+  return {
+    x: predBox!.x + predBox!.w + gap,
+    y: centerYOf(preds) - self.h / 2,
+    w: self.w,
+    h: self.h,
+  };
+}
+
 export function computeFreeNodePlacements(input: FreeNodePlacementInput): FreeNodePlacementResult {
   const gap = input.gap ?? DEFAULT_GAP;
   const maxSteps = input.maxSteps ?? DEFAULT_MAX_STEPS;
@@ -139,13 +199,32 @@ export function computeFreeNodePlacements(input: FreeNodePlacementInput): FreeNo
     edges,
   );
 
-  for (const f of input.free) {
+  // 处理顺序:先「有已落位邻居」的 free(可一次锚定),再处理其余(可能依赖前者先落位)。
+  // 这样 free → free → assigned 这类链接也能逐段贴到流程上;完全无连边时两者都退回输入序。
+  const hasSettledNeighbor = (id: string) =>
+    edges.some(
+      (e) =>
+        (e.target === id && settledById.has(e.source)) ||
+        (e.source === id && settledById.has(e.target)),
+    );
+  const ordered = [
+    ...input.free.filter((f) => hasSettledNeighbor(f.id)),
+    ...input.free.filter((f) => !hasSettledNeighbor(f.id)),
+  ];
+
+  for (const f of ordered) {
     const from = { x: f.rect.x, y: f.rect.y };
     const rect = { ...f.rect };
     let level: PlacementLevel = 'original';
 
-    // Level 0:原位优先
-    if (clearAt(rect, settled)) {
+    // Level 0:anchor(连线感知)—— 贴到已落位上游/下游的「流向上侧」
+    const anchor = anchorRect(f.id, rect, settledById, edges, gap);
+    if (anchor && clearAt(anchor, settled)) {
+      rect.x = anchor.x;
+      rect.y = anchor.y;
+      level = 'anchor';
+    } else if (clearAt(rect, settled)) {
+      // Level 1:原位优先
       level = 'original';
     } else {
       // Level 1:local(方向 × {1..maxSteps}·gap,最小位移 + 固定方向序)

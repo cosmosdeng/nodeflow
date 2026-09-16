@@ -98,9 +98,25 @@ describe('Case 1/2/3:原位、local 最小位移、矩阵级 free 不穿越', ()
 });
 
 describe('Case 4/5:component / global peripheral(production module)', () => {
-  it('component:local 失败且有分量成员 → 分量外围最近合法位', () => {
+  it('anchor:有已落位上游 → 贴到上游右侧、纵向居中(P4 连线感知)', () => {
     const input: FreeNodePlacementInput = {
       occupied: [{ id: 'P', rect: { x: 0, y: 0, w: 2000, h: 2000 } }],
+      free: [{ id: 'F', rect: { x: 100, y: 100, w: 100, h: 80 } }],
+      edges: [{ source: 'P', target: 'F' }],
+      gap: 16,
+      maxSteps: 4,
+    };
+    const r = computeFreeNodePlacements(input);
+    expect(r.diagnostics[0].level).toBe('anchor');
+    expect(r.positions.get('F')).toEqual({ x: 2016, y: 960 }); // P 右缘 + gap,P 纵向居中
+  });
+
+  it('component:anchor 位被占用 → 退回分量外围最近合法位', () => {
+    const input: FreeNodePlacementInput = {
+      occupied: [
+        { id: 'P', rect: { x: 0, y: 0, w: 2000, h: 2000 } },
+        { id: 'Blk', rect: { x: 2016, y: 960, w: 100, h: 80 } }, // 占住锚定位
+      ],
       free: [{ id: 'F', rect: { x: 100, y: 100, w: 100, h: 80 } }],
       edges: [{ source: 'P', target: 'F' }],
       gap: 16,
@@ -245,19 +261,14 @@ describe('Case 11/12:determinism 与 semantic immutability(矩阵级)', () => {
   });
 });
 
-describe('Production 与 Spike 一致性(behavior reference)', () => {
-  const cases: FreeNodePlacementInput[] = [
+describe('Production 与 Spike 一致性(Phase 4B behavior reference)', () => {
+  // spike = Phase 4B 行为基线(不含连线锚定)。P4 之后 production 新增 Level 0 anchor,
+  // 因此二者只在「无连边输入」上保持一致;带连边输入的差异在下一条用例单独断言。
+  const noEdgeCases: FreeNodePlacementInput[] = [
     {
       occupied: [{ id: 'O', rect: { x: 0, y: 0, w: 240, h: 150 } }],
       free: [{ id: 'F', rect: { x: 0, y: 0, w: 240, h: 150 } }],
       gap: 50,
-      maxSteps: 4,
-    },
-    {
-      occupied: [{ id: 'P', rect: { x: 0, y: 0, w: 2000, h: 2000 } }],
-      free: [{ id: 'F', rect: { x: 100, y: 100, w: 100, h: 80 } }],
-      edges: [{ source: 'P', target: 'F' }],
-      gap: 16,
       maxSteps: 4,
     },
     {
@@ -274,12 +285,27 @@ describe('Production 与 Spike 一致性(behavior reference)', () => {
       maxSteps: 4,
     },
   ];
-  it('相同纯输入:production 与 spike 位置完全一致', () => {
-    for (const input of cases) {
+  const edgeCase: FreeNodePlacementInput = {
+    occupied: [{ id: 'P', rect: { x: 0, y: 0, w: 2000, h: 2000 } }],
+    free: [{ id: 'F', rect: { x: 100, y: 100, w: 100, h: 80 } }],
+    edges: [{ source: 'P', target: 'F' }],
+    gap: 16,
+    maxSteps: 4,
+  };
+
+  it('无连边输入:production 与 spike 位置完全一致(Phase 4B 基线仍成立)', () => {
+    for (const input of noEdgeCases) {
       const prod = computeFreeNodePlacements(input);
       const spike = runFreePlacement(input);
       expect([...prod.positions.entries()].sort()).toEqual([...spike.positions.entries()].sort());
     }
+  });
+
+  it('带连边输入:production 走 anchor(P4),spike 保持 Phase 4B 回退行为', () => {
+    const prod = computeFreeNodePlacements(edgeCase);
+    const spike = runFreePlacement(edgeCase);
+    expect(prod.diagnostics[0].level).toBe('anchor');
+    expect([...prod.positions.entries()].sort()).not.toEqual([...spike.positions.entries()].sort());
   });
 });
 
