@@ -19,8 +19,9 @@ contextBridge.exposeInMainWorld('nodeflow', {
   },
 
   /**
-   * Agent Local Test Bridge(仅当主进程开启 NODEFLOW_AGENT_BRIDGE=1 时使用):
-   * 订阅主进程 HTTP Bridge 转发进来的 AgentRequest,返回取消订阅函数。
+   * Agent Local Test Bridge(NodeFlow next 默认自动启动,监听 127.0.0.1;可用
+   * NODEFLOW_AGENT_BRIDGE=0 关闭):订阅主进程 HTTP Bridge 转发进来的
+   * AgentRequest,返回取消订阅函数。
    */
   onAgentBridgeRequest: (cb: (req: unknown) => void) => {
     const listener = (_e: unknown, req: unknown) => cb(req);
