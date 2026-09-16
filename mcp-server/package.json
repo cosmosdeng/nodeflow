@@ -9,7 +9,7 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "https://github.com/cosmosdeng/nodeflow.git"
+    "url": "git+https://github.com/cosmosdeng/nodeflow.git"
   },
   "keywords": [
     "nodeflow",
