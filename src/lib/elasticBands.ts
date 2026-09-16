@@ -12,6 +12,7 @@
  *   - 不做迭代求解;单次贪心 forward,数学上对「仅下界链」已是最小 L1 位移。
  *   - deterministic / O(n)。
  */
+import { classificationFromAxes } from './matrixClassification';
 
 /** 一维 Band 需求(可复用于 Participant 的 Y 轴或 Stage 的 X 轴) */
 export interface AxisBandSpec {
@@ -212,17 +213,20 @@ export function computeElasticMatrixGeometry(
   // - 仅 stage 有效(Stage-only)         → 只进 Stage,不进任何 Participant
   // - 两者皆无(free)                    → 不进任何 band
   // 不能因「没有 pid」就把 Stage-only 节点当 free 丢弃,否则阶段列包络为空、竖带永不出现。
+  // 四类组合语义来自共享 authority(matrixClassification);这里的 pid/stage 布尔仅做
+  // 对上游已解析轴引用的二次防御,判定结果与 MatrixVisualLayer 的轴解析一致。
   const pidRects = new Map<string, NodeRect[]>();
   const stageRects = new Map<string, NodeRect[]>();
   for (const n of input.nodeRects) {
     const hasPid = n.pid !== undefined && input.participants.some((p) => p.id === n.pid);
     const hasStage = n.stage !== undefined && input.stages.some((s) => s.id === n.stage);
-    if (hasPid) {
+    const cls = classificationFromAxes(hasPid, hasStage);
+    if (cls === 'assigned' || cls === 'rowOnly') {
       const arr = pidRects.get(n.pid!) ?? [];
       arr.push(n.rect);
       pidRects.set(n.pid!, arr);
     }
-    if (hasStage) {
+    if (cls === 'assigned' || cls === 'stageOnly') {
       const sarr = stageRects.get(n.stage!) ?? [];
       sarr.push(n.rect);
       stageRects.set(n.stage!, sarr);

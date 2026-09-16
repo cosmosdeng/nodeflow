@@ -191,8 +191,8 @@ describe('F1-03 节点所属阶段(assignNodeStage)', () => {
   });
 });
 
-describe('runSmartArrange(两带关闭 → 纯拓扑横排 fallback)', () => {
-  it('两个带显示都关闭时,自动排列应把散落节点按层从左到右排布', () => {
+describe('runSmartArrange(语义轴存在 → unified matrix core,与 band visibility 无关)', () => {
+  it('participants+stages 存在但两带隐藏时,仍走矩阵核心(X=Stage order、Y=Participant order)', () => {
     const mkP = (id: string, name = id): Participant => ({ id, name, type: 'person' });
     useGraphStore.setState({
       participants: [mkP('p1'), mkP('p2')],
@@ -215,15 +215,19 @@ describe('runSmartArrange(两带关闭 → 纯拓扑横排 fallback)', () => {
     );
     useGraphStore.getState().runSmartArrange();
     const st = useGraphStore.getState();
-    // 确实发生了位置变化(fallback 生效),而不是 no-op
+    // 确实发生了位置变化,而不是 no-op
     const anyMoved = st.nodes.some((n) => {
       const p = before.get(n.id)!;
       return p.x !== n.position.x || p.y !== n.position.y;
     });
     expect(anyMoved).toBe(true);
-    // 按层从左到右:A(层0) 应在最左,B 次之,C 在右(连接 A→B→C)
-    const xOf = (id: string) => st.nodes.find((n) => n.id === id)!.position.x;
-    expect(xOf('A')).toBeLessThan(xOf('B'));
-    expect(xOf('B')).toBeLessThan(xOf('C'));
+    const p = (id: string) => st.nodes.find((n) => n.id === id)!.position;
+    // Phase 5B:语义轴存在(即便带隐藏)→ 统一矩阵核心
+    // A、B 同 (p1, s1) cell → x 相同;Stage s2(C) 在右
+    expect(p('A').x).toBe(p('B').x);
+    expect(p('A').x).toBeLessThan(p('C').x);
+    // Y=Participant order:同 cell 内堆叠(B 原在上),p2(C) 行在 p1 行下方
+    expect(p('B').y).toBeLessThan(p('A').y);
+    expect(p('C').y).toBeGreaterThan(p('A').y);
   });
 });

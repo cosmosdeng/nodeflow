@@ -69,14 +69,7 @@ import { setEdgeArtifact, updateEdgeArtifact } from '../lib/artifact';
 import { createFlowEdge } from '../lib/edge';
 import { findStageEmptySpot, pushNodesAwayFromBox, pushOutOfRect, rectOverlaps, type Rect } from '../lib/geometry';
 import { detachOrganizationFromParticipants, detachParticipantFromNodes } from '../lib/participant';
-import {
-  arrangeSwimlanes,
-  computeFlowRank,
-  computeMatrixLayout,
-  computeParticipantBandLayout,
-  computeStageBandLayout,
-  computeTopologyBandLayout,
-} from '../lib/arrange';
+import { arrangeSwimlanes, computeMatrixLayout } from '../lib/arrange';
 import {
   buildProjectDocumentV5,
   detectDocumentFormat,
@@ -2160,10 +2153,12 @@ export const useGraphStore = create<FlowStore>()(
         return;
       }
       const s = get();
-      const vRow = s.showParticipantBands && s.participants.length > 0;
-      const vCol = s.showStageBands && s.stages.length > 0;
-      // 两种带都未显示 → 纯拓扑自动排列(层级横排,左→右保持上下游;不消费 Arrange Pending)
-      if (!vRow && !vCol) {
+      // 语义轴与视觉可见性分离:band visibility 是视觉偏好,不决定 geometry model。
+      // 只要任一语义轴(Participant / Stage)存在 → 进入 unified matrix core。
+      const hasParticipantAxis = s.participants.length > 0;
+      const hasStageAxis = s.stages.length > 0;
+      // 无语义轴(participants 与 stages 均不存在)→ 保留 legacy 纯拓扑横排(唯一允许的 legacy 路径)
+      if (!hasParticipantAxis && !hasStageAxis) {
         const t = get();
         const compChild = new Set<string>();
         for (const n of t.nodes) {
@@ -2204,18 +2199,8 @@ export const useGraphStore = create<FlowStore>()(
         return;
       }
 
-      // Arrange scope = 可见顶层节点(排除任意组合 child);用于流排序 rank
-      const compositeChildIds = new Set<string>();
-      for (const n of s.nodes) {
-        for (const cid of n.data?.composite?.childIds ?? []) compositeChildIds.add(cid);
-      }
-      const topNodes = s.nodes.filter((n) => !n.hidden && !compositeChildIds.has(n.id));
-      const topSet = new Set(topNodes.map((n) => n.id));
-      const rankOf = computeFlowRank(
-        topNodes,
-        s.edges.filter((e) => topSet.has(e.source) && topSet.has(e.target)),
-      );
-
+      // 语义轴存在 → 与 runArrange 共用同一 unified matrix geometry core(computeMatrixLayout):
+      //   X = Stage Order(col);Y = Participant Order(row);stageOnly → C+D Anchor;free → freePlacement。
       const input = {
         nodes: s.nodes,
         participants: s.participants,
@@ -2223,24 +2208,19 @@ export const useGraphStore = create<FlowStore>()(
         stages: s.stages,
         stageOrder: s.stageOrder,
       };
-      let positions: Map<string, { x: number; y: number }>;
-      if (vRow && vCol)
-        // 双带:层主序 + 硬行带(旧 autoLayout 的横向可读性;Stage 带在渲染层左右移动包含)
-        positions = computeTopologyBandLayout(input, { rankOf, edges: s.edges });
-      else if (vRow) positions = computeParticipantBandLayout(input, { rankOf, edges: s.edges });
-      else positions = computeStageBandLayout(input, { rankOf, edges: s.edges });
+      const positions = computeMatrixLayout(input);
       if (positions.size === 0) return; // 无可排节点:不消费 pending、不产生历史
 
       // 本轮 Arrange 落实了哪些轴的顺序变更;未落实的变更保留 pending
       const kind = s.arrangePendingKind ?? 'both'; // 旧数据无 kind≈两个轴都变更过
       let remain: 'participant' | 'stage' | 'both' | undefined;
       if (s.arrangePending) {
-        if (kind === 'participant' && !vRow) remain = 'participant';
-        else if (kind === 'stage' && !vCol) remain = 'stage';
+        if (kind === 'participant' && !hasParticipantAxis) remain = 'participant';
+        else if (kind === 'stage' && !hasStageAxis) remain = 'stage';
         else if (kind === 'both') {
-          if (!vRow && vCol) remain = 'participant';
-          else if (vRow && !vCol) remain = 'stage';
-          // 两个轴都可见 → 全部落实,remain=undefined
+          if (!hasParticipantAxis && hasStageAxis) remain = 'participant';
+          else if (hasParticipantAxis && !hasStageAxis) remain = 'stage';
+          // 两个语义轴都参与布局 → 全部落实,remain=undefined
         }
       }
 

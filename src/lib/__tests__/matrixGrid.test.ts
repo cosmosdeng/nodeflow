@@ -115,7 +115,7 @@ describe('shared matrix grid structure', () => {
     expect(s.rows.find((r) => r.participantId === 'pA')?.isEmpty).toBe(false);
   });
 
-  it('节点分类:assigned(pid+stage)/ rowOnly(有 pid 无 stage)/ free(无有效 pid);不入 cells 无虚拟实体', () => {
+  it('节点分类:assigned(pid+stage)/ rowOnly(有 pid 无 stage)/ stageOnly(有 stage 无 pid)/ free(两轴皆无)', () => {
     const g = geometry({
       participants: [participant('p1')],
       participantOrder: ['p1'],
@@ -123,14 +123,15 @@ describe('shared matrix grid structure', () => {
       stageOrder: ['s1'],
       nodes: [
         node('nA', 'p1', 0, 0),
-        node('nNull', undefined, 0, 0), // 无 pid,即便在 s1
-        node('nGhost', 'gone', 0, 0), // 悬空 pid
-        node('nNoStage', 'p1', 0, 0), // 有 pid,无 stage
+        node('nNull', undefined, 0, 0), // 无 pid、在 s1 → stageOnly(Phase 2:不再折叠 free)
+        node('nGhost', 'gone', 0, 0), // 悬空 pid 且无 stage → 真 free
+        node('nNoStage', 'p1', 0, 0), // 有 pid,无 stage → rowOnly
       ],
     });
     expect(g.assignedNodes.map((n) => n.id)).toEqual(['nA']);
     expect(g.rowOnlyNodes.map((n) => n.id)).toEqual(['nNoStage']);
-    expect(g.freeNodes.map((n) => n.id).sort()).toEqual(['nGhost', 'nNull']);
+    expect(g.stageOnlyNodes.map((n) => n.id).sort()).toEqual(['nNull']);
+    expect(g.freeNodes.map((n) => n.id)).toEqual(['nGhost']);
     expect(g.cells.size).toBe(1);
     // 无任何「unassigned」实体
     expect(g.structure.rows.some((r) => r.participantId === 'unassigned')).toBe(false);
@@ -173,7 +174,7 @@ describe('shared matrix grid geometry(2026-09:无尾行/尾列)', () => {
     expect(g.avoidanceZone).toBeDefined();
     for (let i = 1; i < g.colXs.length; i++) expect(g.colXs[i]).toBeGreaterThan(g.colXs[i - 1]);
     expect(g.rowYs.get(1)!).toBeGreaterThan(g.rowYs.get(0)!);
-    // 游离节点在远处 → 不避让(zone 外)
+    // 游离节点在远处且与任何已放置 Node 无碰撞 → Phase 4B:保持原位(结果物化为原坐标)
     const pos = computeMatrixLayout({
       nodes: [node('a1', 'pA', 0, 0), node('b1', 'pB', 0, 0), node('u1', undefined, 1000, 1000)],
       participants: [participant('pA', 'A'), participant('pB', 'B')],
@@ -181,7 +182,7 @@ describe('shared matrix grid geometry(2026-09:无尾行/尾列)', () => {
       stages: [stage('s1', ['a1']), stage('s2', ['b1'])],
       stageOrder: ['s1', 's2'],
     });
-    expect(pos.has('u1')).toBe(false);
+    expect(pos.get('u1')).toEqual({ x: 1000, y: 1000 });
   });
 
   it('participant 行顺序来自当前 participantOrder:交换后 rows 与节点行位置互换', () => {
@@ -199,10 +200,10 @@ describe('shared matrix grid geometry(2026-09:无尾行/尾列)', () => {
     expect(p2.get('nb')!.y).toBeLessThan(p2.get('na')!.y);
   });
 
-  it('游离节点与矩阵带重叠时就近避让到区域外(仍在原附近)', () => {
+  it('游离节点与已布局 Node 重叠时:local 失败 → global peripheral(避让 Node 矩形,不用 band 当 obstacle)', () => {
     const participants = [participant('pA', 'A')];
     const stages = [stage('s1', ['a1'])];
-    // 游离节点初始在矩阵区内 (a1 将排在 col0/row0 附近,矩阵区 ≈ [80, 392] × [80, 230])
+    // 游离节点与 a1 的落位矩形(≈x=104,y=80,w=240,h=150)重叠
     const free = node('free', undefined, 200, 120);
     const pos = computeMatrixLayout({
       nodes: [node('a1', 'pA', 0, 0), free],
@@ -213,19 +214,11 @@ describe('shared matrix grid geometry(2026-09:无尾行/尾列)', () => {
     });
     const moved = pos.get('free');
     expect(moved).toBeDefined();
-    // 避让后在矩阵区域之外
-    const zone = { l: 80, t: 80, r: 80 + 240 + 48, b: 80 + 150 };
-    const inside =
-      moved!.x < zone.r &&
-      moved!.x + 240 > zone.l &&
-      moved!.y < zone.b &&
-      moved!.y + 150 > zone.t;
-    expect(inside).toBe(false);
-    // 与所有 participant 行带(y)及所有 stage 列带(x)都无重叠(四角带外)
-    const noRowOverlap = moved!.y >= zone.b + 16 || moved!.y + 150 <= zone.t - 16;
-    const noColOverlap = moved!.x >= zone.r + 16 || moved!.x + 240 <= zone.l - 16;
-    expect(noRowOverlap).toBe(true);
-    expect(noColOverlap).toBe(true);
+    // Phase 4B:仅以 Node 矩形为 obstacle → global peripheral 选 a1 下方最近位(矩形外,可仍在列带 x 内)
+    expect(moved).toEqual({ x: 200, y: 230 + 16 });
+    // 与 a1 矩形不重叠
+    const a1 = pos.get('a1')!;
+    expect(moved!.y).toBeGreaterThanOrEqual(a1.y + 150);
   });
 
   it('deterministic:相同输入两次输出一致;不改输入', () => {

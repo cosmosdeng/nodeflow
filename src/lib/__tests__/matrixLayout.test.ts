@@ -130,21 +130,25 @@ describe('P3+ computeMatrixLayout(入矩阵节点)', () => {
     expect(pos.get('nB')!.y).toBe(ROW1_Y);
   });
 
-  it('游离(无有效 participant 或悬空 pid)节点:不进入矩阵,保持原位(无尾行)', () => {
+  it('四类语义:真 free 保持原位;stageOnly(有 stage 无 pid)进入其 Stage 列(Phase 2 有意行为变化)', () => {
     const pos = layout({
       participants: [participant('p1')],
       participantOrder: ['p1'],
-      stages: [stage('s1', ['n1', 'nuNull', 'nuGhost'])],
+      stages: [stage('s1', ['n1', 'nuNull'])],
       stageOrder: ['s1'],
       nodes: [
-        node('n1', 'p1', 0, 0),
-        node('nuNull', undefined, 500, 500), // 无 pid(即便有 stage membership)
-        node('nuGhost', 'gone', 900, 900), // pid 悬空
+        node('n1', 'p1', 0, 0), // assigned
+        node('nuNull', undefined, 500, 500), // stageOnly:有 stage membership、无 pid
+        node('nuGhost', 'gone', 900, 900), // 真 free:pid 悬空 且 无 stage membership
       ],
     });
     expect(pos.get('n1')!.x).toBe(X0); // 入矩阵节点正常排布
-    expect(pos.has('nuNull')).toBe(false);
-    expect(pos.has('nuGhost')).toBe(false);
+    // stageOnly 不再折叠为 free:路由进 s1 列(临时 Y = 该列 assigned 内容底 + 间距之后)
+    expect(pos.has('nuNull')).toBe(true);
+    expect(pos.get('nuNull')!.x).toBe(X0);
+    expect(pos.get('nuNull')!.y).toBe(ROW0_Y + 150 + 40);
+    // 真 free(两轴皆无):不在任何带、与已布局 Node 无碰撞 → 保持原位(结果物化为原坐标)
+    expect(pos.get('nuGhost')).toEqual({ x: 900, y: 900 });
   });
 
   it('行内节点(有 participant、无 stage):排入其 participant 行的带内延伸区(列带右缘外)', () => {

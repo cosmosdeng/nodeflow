@@ -445,7 +445,7 @@ export default function Toolbar({
         title={
           arrangePending
             ? '顺序已改变(Pending):点击按当前语义排列节点并完成自动整理(单次撤销可还原)'
-            : '有 Stage/Participant 带时按「参与方×阶段」排列并沿连线整理节点;无带或带已隐藏时等同自动排列'
+            : '存在参与方或阶段语义时按「参与方×阶段」矩阵排列(带的显示与否不影响,拓扑仅作次级整理);两者语义都不存在时等同纯拓扑自动排列'
         }
         onClick={runSmartArrange}
       >
@@ -454,14 +454,14 @@ export default function Toolbar({
       <button
         className={`tb-btn tb-band ${showStageBands ? 'active' : ''}`}
         onClick={toggleStageBands}
-        title="Stage 列带显示开关:隐藏后当前视图不渲染该带,排列/避让也忽略 Stage(两个带都隐藏则退化为纯自动排列)"
+        title="Stage 列带显示开关:仅影响视觉显示;只要存在 Stage 语义,自动排列仍按 Stage 列布局(与带是否隐藏无关)"
       >
         ▮ 阶段带
       </button>
       <button
         className={`tb-btn tb-band ${showParticipantBands ? 'active' : ''}`}
         onClick={toggleParticipantBands}
-        title="Participant 行带显示开关:隐藏后当前视图不渲染该带,排列/避让也忽略 Participant(两个带都隐藏则退化为纯自动排列)"
+        title="Participant 行带显示开关:仅影响视觉显示;只要存在 Participant 语义,自动排列仍按 Participant 行布局(与带是否隐藏无关)"
       >
         ▬ 参与方带
       </button>
