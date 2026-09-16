@@ -48,7 +48,9 @@ free      = participant 无效 && stage 无效   ← rowOnly   !== free
 node.position = 唯一 Node geometry authority
 ```
 
-- Band 是从 Node geometry **派生**的 envelope；Band 不拥有 Node；Band 不参与 Node placement。
+- Band 是从 Node geometry **派生**的 envelope；Band 不拥有 Node；Band 不被 Node 移动。
+- **禁入带（2026-09 / P4B）**：free 节点落位时，行带 Y 区间 / 列带 X 区间作为「禁入区」参与判定（见 §22）；
+  这仍然只是「Node 不许压带」，Band 依旧不拥有 Node，且 **assigned / rowOnly / stageOnly 的落位完全不受 Band 影响**。
 - **不存在** `laneId` / `laneBindingId` / 其它持久化绑定字段。
 - MatrixVisualLayer / elasticBands **只读**，不反向写 `node.position`。
 
@@ -71,9 +73,10 @@ Intra-column topology layer (列内 X 槽位:上游在左、下游在右)
     >
 Stage-only Anchor
     >
-Free Placement
+Free Placement:
+    band-escape (禁入带, 2026-09/P4B) > anchor (贴上下游, P4) > original > local / component / peripheral
     >
-Elastic Band envelope
+Elastic Band envelope (渲染)
 ```
 
 - 拓扑**不能**破坏语义轴硬顺序（Stage 列区域顺序 / Participant 行顺序）；冲突时保留语义顺序，并把拓扑冲突写入 diagnostics（EXPECTED CONFLICT）。
@@ -148,7 +151,7 @@ Diff check: git diff --check exit 0
 | 7 | stageOnly 进对应 Stage 列 + Stage-only Anchor | PASS | `arrange.ts` stageOnly 分支 → `computeStageOnlyColumnAnchors` |
 | 8 | free 使用 Free Placement | PASS | `arrange.ts` free 分支 → `computeFreeNodePlacements`; freePlacement.ts |
 | 9 | Elastic Band 是 Node geometry envelope | PASS | `elasticBands.ts` 头注释 "Band 不移动 Node" |
-| 10 | Band 不参与 Node placement | PASS | `computeMatrixLayout` 无 Band obstacle; freePlacement.ts 注释 "Band 不是 obstacle" |
+| 10 | Band 不参与 assigned/rowOnly/stageOnly 落位；仅作为 free 的禁入带 | PASS (2026-09/P4B 修订) | `computeMatrixLayout` 的行/列/Anchor 均不使用 Band；free 分支传 `rowBands`/`colBands` → freePlacement Level 0.5; docs §22 |
 | 11 | `runArrange` 使用 `computeMatrixLayout` | PASS | graphStore.ts:2110 |
 | 12 | 有语义轴时 `runSmartArrange` 使用 `computeMatrixLayout` | PASS | graphStore.ts:2211 |
 | 13 | 无语义轴时 `runSmartArrange` 使用 legacy `computeLayout` | PASS | graphStore.ts:2161–2174 |
@@ -305,4 +308,67 @@ Build:      bun run build exit 0
 - `src/lib/freePlacement.ts`（Level 0 anchor）
 - `src/lib/__tests__/freePlacement.test.ts`
 - `src/store/__tests__/graphStore.order.p3.test.ts`、`graphStore.participant.test.ts`
+- `docs/architecture/stage-participant-arrange-design.md` §8
+
+## 22. Revision 2026-09 (P4B) — Free 节点禁入带（行带 ∪ 列带）
+
+> 产品决策：free 节点**不得压在带上**，且**带约束优先于锚定**（宁可离上下游远一点，也绝不压带）。
+
+### 22.1 变更内容
+
+`freePlacement.ts` 新增可选输入 `rowBands`（行带 Y 区间）/ `colBands`（列带 X 区间）与 **Level 0.5 band-escape**：
+
+- 两轴**独立**判定：节点 Y 区间不得与任何行带相交；节点 X 区间不得与任何列带相交；
+- 只有**真正冲突的那个轴**才产生逃逸候选（另一轴不动）；候选 = 每个禁入区间两侧 + 整体置于所有区间之前/之后；
+- 候选按「总位移最小」排序，取第一个既不压带、又不与已落位 Node 重叠者；全不合法则退回既有序列；
+- **顺序**：anchor(P4) → band-escape → original → local（优先选同时满足带约束者）→ component → peripheral；
+- `PlacementLevel` 新增 `'band'`；
+- 未传带信息时**不存在**逃逸候选，行为与 P4 完全一致（纯函数缺省契约不变）。
+
+`arrange.ts` 在 free 分支由几何派生并传入：
+
+```text
+rowBands = rowYs / rowBottoms → [{ top, bottom }]
+colBands = colXs / colRights  → [{ left, right }]
+```
+
+### 22.2 受影响测试（按新语义更新，非删除）
+
+- `src/lib/__tests__/freePlacement.test.ts`：碰撞用例改为断言「移出带并避开 Node」，确定性解 `(-160,-70)`。
+- `src/lib/__tests__/matrixGrid.test.ts`：原「不用 band 当 obstacle」用例改为「带约束优先 → 移出带」，确定性解 `(368,230)`。
+
+### 22.3 已验证的端到端形态
+
+同一份图（行带 Y `[80,270] [350,540]`；列带 X `[80,648] [768,1336]`）：
+
+```text
+需求收集(free)   (-150, -110)   压行带=0 压列带=0   ← 移到行带之上、列带之左
+脚本编写         ( 104,   80)   压行带=1 压列带=1   ← assigned 落位不受带影响
+```
+
+### 22.4 验证
+
+```text
+Vitest:     42 files / 406 tests passed
+TypeScript: tsconfig.json exit 0
+Build:      bun run build exit 0
+```
+
+新增不变量测试：`freePlacement.test.ts > P4B 绝对保证` —— 遍历全部 fixture，断言每个 free 节点
+与其行带 / 列带**零重叠**（覆盖全部兜底路径）。
+
+### 22.5 已知取舍
+
+- 行带横贯全宽、列带纵贯全高，「两种带都不压」会显著压缩 free 节点的可用位置：
+  节点尺寸大于带间隙时只能落在矩阵**外侧**（上/下 × 左/右）。这是产品明确选择的约束。
+- 带约束是**绝对的**：写回位置前有最终带检查，仍压带则强制解带（必要时退到「带外四角」中最近位）；
+  因此 free 节点在任何情况下都不与带重叠，代价是极端情况下它会远离其他内容。
+- **边上的中间产物 chip（`edge.data.artifact`）不是 Node**，由 `FlowEdgeComponent` 按连线标签位渲染，
+  不参与 Arrange，因此仍可能压在带上（只要连线穿过带）。这是渲染层行为，不在本冻结范围内。
+
+### 22.6 相关文件
+
+- `src/lib/freePlacement.ts`（禁入带输入 + `axisCandidates` / `escapeFromBands`）
+- `src/lib/arrange.ts`（派生并传入 rowBands / colBands）
+- `src/lib/__tests__/freePlacement.test.ts`、`src/lib/__tests__/matrixGrid.test.ts`
 - `docs/architecture/stage-participant-arrange-design.md` §8

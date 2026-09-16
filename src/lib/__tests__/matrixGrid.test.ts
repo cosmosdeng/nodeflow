@@ -200,7 +200,7 @@ describe('shared matrix grid geometry(2026-09:无尾行/尾列)', () => {
     expect(p2.get('nb')!.y).toBeLessThan(p2.get('na')!.y);
   });
 
-  it('游离节点与已布局 Node 重叠时:local 失败 → global peripheral(避让 Node 矩形,不用 band 当 obstacle)', () => {
+  it('游离节点压带时:带约束优先 → 移出带,同时避开 Node 矩形', () => {
     const participants = [participant('pA', 'A')];
     const stages = [stage('s1', ['a1'])];
     // 游离节点与 a1 的落位矩形(≈x=104,y=80,w=240,h=150)重叠
@@ -214,11 +214,17 @@ describe('shared matrix grid geometry(2026-09:无尾行/尾列)', () => {
     });
     const moved = pos.get('free');
     expect(moved).toBeDefined();
-    // Phase 4B:仅以 Node 矩形为 obstacle → global peripheral 选 a1 下方最近位(矩形外,可仍在列带 x 内)
-    expect(moved).toEqual({ x: 200, y: 230 + 16 });
+    // a1 落位 (104,80,240,150) → 行带 Y=[80,230]、列带 X=[80,368]。
+    // 原/锚定位同时压两种带 → 沿轴最小位移移出:列带右侧(x=368)+ 行带下方(y=230)。
+    expect(moved).toEqual({ x: 368, y: 230 });
+    // 不压行带 / 列带
+    expect(moved!.y >= 230 || moved!.y + 150 <= 80).toBe(true);
+    expect(moved!.x >= 368 || moved!.x + 240 <= 80).toBe(true);
     // 与 a1 矩形不重叠
     const a1 = pos.get('a1')!;
-    expect(moved!.y).toBeGreaterThanOrEqual(a1.y + 150);
+    const ov =
+      moved!.x < a1.x + 240 && moved!.x + 240 > a1.x && moved!.y < a1.y + 150 && moved!.y + 150 > a1.y;
+    expect(ov).toBe(false);
   });
 
   it('deterministic:相同输入两次输出一致;不改输入', () => {

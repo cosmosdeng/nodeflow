@@ -3,13 +3,16 @@
  *
  * 原则:
  *   - Free 是最后一个适应既有布局的对象;只移动 Free Node,不移动 assigned / rowOnly / stageOnly;
- *   - 只有 Node rectangles 是 obstacle(Band 是 visual envelope,不是 obstacle);
- *   - Level 0 anchor(连线感知,P4 2026-09)→ Level 1 original → Level 2 local →
- *     Level 3 component peripheral → Level 4 global peripheral;
+ *   - obstacle = 已落位 Node 矩形 + 调用方给出的「禁入带」区间(Band 仍不拥有 Node、不被 Node 移动);
+ *   - Level 0 anchor(连线感知,P4 2026-09)→ Level 0.5 band-escape → Level 1 original →
+ *     Level 2 local → Level 3 component peripheral → Level 4 global peripheral;
  *   - edge 参与「方向感知锚定」:仅连下游 → 贴到下游左侧;仅连上游 → 贴到上游右侧;
  *     上下游都有 → 贴到两者之间的间隙。锚定位不合法(重叠)时退回原有 original/local/… 序列,
  *     因此「贴流程」永远不会以牺牲不重叠为代价;
- *   - 无连边信息时不存在锚定候选,行为与 P4 之前完全一致;
+ *   - **禁入带(2026-09/P4B)**:调用方可传入 rowBands / colBands(行带 Y 区间、列带 X 区间);
+ *     free 节点矩形不得与任何带相交,**且优先于锚定**——锚定位压带时先沿轴最小位移移出带,
+ *     宁可离上下游远一点也不压带。两轴独立判定:只有真正发生冲突的那个轴才产生逃逸候选;
+ *   - 无连边信息且无带信息时不存在锚定/逃逸候选,行为与 P4 之前完全一致;
  *   - deterministic:输入序 + 固定方向序;无随机 / 迭代优化 / magic 角落;
  *   - 不写 semantic(participantId / Stage.nodeIds / order)与 lane/row 持久化字段。
  */
@@ -21,7 +24,13 @@ export interface Rect {
   h: number;
 }
 
-export type PlacementLevel = 'anchor' | 'original' | 'local' | 'component' | 'peripheral';
+export type PlacementLevel =
+  | 'anchor'
+  | 'band'
+  | 'original'
+  | 'local'
+  | 'component'
+  | 'peripheral';
 
 export interface FreeNodePlacementInput {
   /** 已最终布局的非 free 矩形(assigned / rowOnly / stageOnly 落位后) */
@@ -34,6 +43,10 @@ export interface FreeNodePlacementInput {
   gap?: number;
   /** 单方向最大步数,默认 4 */
   maxSteps?: number;
+  /** 行带 Y 区间(参与方带):free 节点矩形不得与之相交。省略 = 无行带约束 */
+  rowBands?: readonly { top: number; bottom: number }[];
+  /** 列带 X 区间(阶段带):free 节点矩形不得与之相交。省略 = 无列带约束 */
+  colBands?: readonly { left: number; right: number }[];
 }
 
 export interface FreeNodePlacementDiagnostic {
@@ -183,6 +196,96 @@ function anchorRect(
   };
 }
 
+/**
+ * 单轴候选(带约束):给定起点 v 与长度 len,返回该轴上所有「不压任何禁入区间」的候选起点。
+ * - 起点本身已合规 → 只返回起点(该轴不产生移动);
+ * - 起点压带 → 返回各禁入区间左右两侧的候选 + 整体放到全部区间之前/之后,按与原点的位移升序。
+ * 纯函数,确定性。
+ */
+function axisCandidates(
+  v: number,
+  len: number,
+  intervals: readonly (readonly [number, number])[],
+): number[] {
+  if (intervals.length === 0) return [v];
+  if (intervals.every(([a, b]) => v + len <= a || v >= b)) return [v];
+
+  const raw = new Set<number>();
+  let minA = Infinity;
+  let maxB = -Infinity;
+  for (const [a, b] of intervals) {
+    raw.add(a - len);
+    raw.add(b);
+    if (a < minA) minA = a;
+    if (b > maxB) maxB = b;
+  }
+  raw.add(minA - len);
+  raw.add(maxB);
+  return [...raw]
+    .filter((c) => intervals.every(([a, b]) => c + len <= a || c >= b))
+    .sort((p, q) => Math.abs(p - v) - Math.abs(q - v) || p - q);
+}
+
+/**
+ * 带逃逸:把 preferred 移到「不压行带 / 不压列带且不与已落位内容重叠」的位置。
+ * - preferred 本身合规 → 原样返回(位移 0);
+ * - 否则按 (X 候选 × Y 候选) 枚举,取总位移最小且合法的组合;全不合法返回 null。
+ * 两轴独立:只有真正压带的那个轴才会产生逃逸候选。纯函数,确定性。
+ */
+function escapeFromBands(
+  preferred: { x: number; y: number },
+  w: number,
+  h: number,
+  colIntervals: readonly (readonly [number, number])[],
+  rowIntervals: readonly (readonly [number, number])[],
+  settled: readonly Rect[],
+): { x: number; y: number } | null {
+  const xs = axisCandidates(preferred.x, w, colIntervals);
+  const ys = axisCandidates(preferred.y, h, rowIntervals);
+  const combos: { x: number; y: number; d: number }[] = [];
+  for (const x of xs) {
+    for (const y of ys) {
+      combos.push({ x, y, d: Math.abs(x - preferred.x) + Math.abs(y - preferred.y) });
+    }
+  }
+  combos.sort((a, b) => a.d - b.d || a.x - b.x || a.y - b.y);
+  for (const c of combos) {
+    if (clearAt({ x: c.x, y: c.y, w, h }, settled)) return { x: c.x, y: c.y };
+  }
+  return null;
+}
+
+/**
+ * 带外兜底:当所有解带候选都被已落位 Node 占住时,取「带外四角」中最近的一个。
+ * 结果**保证不压带**(宁可远离内容,也不压带 —— 产品决策:带约束优先)。
+ */
+function nearestOutsideBands(
+  w: number,
+  h: number,
+  colIntervals: readonly (readonly [number, number])[],
+  rowIntervals: readonly (readonly [number, number])[],
+  settled: readonly Rect[],
+  from: { x: number; y: number },
+): { x: number; y: number } {
+  const xs =
+    colIntervals.length > 0
+      ? [Math.min(...colIntervals.map(([a]) => a)) - w, Math.max(...colIntervals.map(([, b]) => b))]
+      : [from.x];
+  const ys =
+    rowIntervals.length > 0
+      ? [Math.min(...rowIntervals.map(([a]) => a)) - h, Math.max(...rowIntervals.map(([, b]) => b))]
+      : [from.y];
+  const cands: { x: number; y: number; d: number }[] = [];
+  for (const x of xs) {
+    for (const y of ys) {
+      cands.push({ x, y, d: Math.abs(x - from.x) + Math.abs(y - from.y) });
+    }
+  }
+  cands.sort((a, b) => a.d - b.d || a.x - b.x || a.y - b.y);
+  const clear = cands.find((c) => clearAt({ x: c.x, y: c.y, w, h }, settled));
+  return clear ?? { x: cands[0].x, y: cands[0].y };
+}
+
 export function computeFreeNodePlacements(input: FreeNodePlacementInput): FreeNodePlacementResult {
   const gap = input.gap ?? DEFAULT_GAP;
   const maxSteps = input.maxSteps ?? DEFAULT_MAX_STEPS;
@@ -198,6 +301,13 @@ export function computeFreeNodePlacements(input: FreeNodePlacementInput): FreeNo
     [...input.occupied.map((o) => o.id), ...input.free.map((f) => f.id)],
     edges,
   );
+
+  // 禁入带(轴独立):行带 Y 区间 / 列带 X 区间。两者都为空 = 无带约束(行为同 P4 之前)
+  const rowIntervals = (input.rowBands ?? []).map((b) => [b.top, b.bottom] as const);
+  const colIntervals = (input.colBands ?? []).map((b) => [b.left, b.right] as const);
+  const clearsBands = (r: Rect) =>
+    colIntervals.every(([a, b]) => r.x + r.w <= a || r.x >= b) &&
+    rowIntervals.every(([a, b]) => r.y + r.h <= a || r.y >= b);
 
   // 处理顺序:先「有已落位邻居」的 free(可一次锚定),再处理其余(可能依赖前者先落位)。
   // 这样 free → free → assigned 这类链接也能逐段贴到流程上;完全无连边时两者都退回输入序。
@@ -217,17 +327,20 @@ export function computeFreeNodePlacements(input: FreeNodePlacementInput): FreeNo
     const rect = { ...f.rect };
     let level: PlacementLevel = 'original';
 
-    // Level 0:anchor(连线感知)—— 贴到已落位上游/下游的「流向上侧」
+    // Level 0:anchor(连线感知)→ 再解带。带约束优先于锚定(X/Y 两轴独立)。
     const anchor = anchorRect(f.id, rect, settledById, edges, gap);
-    if (anchor && clearAt(anchor, settled)) {
-      rect.x = anchor.x;
-      rect.y = anchor.y;
-      level = 'anchor';
+    const preferred = anchor ? { x: anchor.x, y: anchor.y } : { x: rect.x, y: rect.y };
+    const escaped = escapeFromBands(preferred, rect.w, rect.h, colIntervals, rowIntervals, settled);
+    if (escaped) {
+      const moved = escaped.x !== preferred.x || escaped.y !== preferred.y;
+      rect.x = escaped.x;
+      rect.y = escaped.y;
+      level = moved ? 'band' : anchor ? 'anchor' : 'original';
     } else if (clearAt(rect, settled)) {
-      // Level 1:原位优先
+      // 带回退:锚定与解带都不成立时,原位优先(P4 之前行为)
       level = 'original';
     } else {
-      // Level 1:local(方向 × {1..maxSteps}·gap,最小位移 + 固定方向序)
+      // Level 2:local(方向 × {1..maxSteps}·gap,最小位移 + 固定方向序);优先同时满足带约束者
       const localCands = [] as { dx: number; dy: number; axis: string }[];
       for (const d of DIRS) {
         for (let s = 1; s <= maxSteps; s++) {
@@ -235,9 +348,15 @@ export function computeFreeNodePlacements(input: FreeNodePlacementInput): FreeNo
           localCands.push({ dx: d.dx * step, dy: d.dy * step, axis: d.axis });
         }
       }
-      const hit = sortedCandidates(localCands).find((c) =>
-        clearAt({ ...rect, x: rect.x + c.dx, y: rect.y + c.dy }, settled),
-      );
+      const sortedLocal = sortedCandidates(localCands);
+      const hit =
+        sortedLocal.find((c) => {
+          const r = { x: rect.x + c.dx, y: rect.y + c.dy, w: rect.w, h: rect.h };
+          return clearAt(r, settled) && clearsBands(r);
+        }) ??
+        sortedLocal.find((c) =>
+          clearAt({ ...rect, x: rect.x + c.dx, y: rect.y + c.dy }, settled),
+        );
       if (hit) {
         rect.x += hit.dx;
         rect.y += hit.dy;
@@ -272,6 +391,17 @@ export function computeFreeNodePlacements(input: FreeNodePlacementInput): FreeNo
           level = 'peripheral';
         }
       }
+    }
+
+    // 绝对保证:任何路径(含 original / local / component / peripheral 兜底)产出的位置
+    // 都不得压带;兜底路径漏检时在此强制解带。
+    if (!clearsBands(rect)) {
+      const forced =
+        escapeFromBands(rect, rect.w, rect.h, colIntervals, rowIntervals, settled) ??
+        nearestOutsideBands(rect.w, rect.h, colIntervals, rowIntervals, settled, rect);
+      rect.x = forced.x;
+      rect.y = forced.y;
+      level = 'band';
     }
 
     positions.set(f.id, { x: rect.x, y: rect.y });

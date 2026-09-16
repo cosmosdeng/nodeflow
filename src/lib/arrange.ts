@@ -560,7 +560,7 @@ export function computeMatrixLayout(
   const rankOf = opts?.rankOf;
   const result = new Map<string, { x: number; y: number }>();
   const geo = computeMatrixGridGeometry(input, { rankOf, edges: opts?.edges });
-  const { structure, cells, colXs, colRights, rowYs, rowOnlyNodes, stageOnlyNodes, freeNodes } = geo;
+  const { structure, cells, colXs, colRights, rowYs, rowBottoms, rowOnlyNodes, stageOnlyNodes, freeNodes } = geo;
   const { rows, rowIndexOf, cols, topNodes } = structure;
   const topSet = new Set(topNodes.map((n) => n.id));
   const topEdges = (opts?.edges ?? []).filter((e) => topSet.has(e.source) && topSet.has(e.target));
@@ -680,12 +680,20 @@ export function computeMatrixLayout(
         h: getNodeSize(n).h,
       },
     }));
+    // 禁入带:行带(参与方)Y 区间 + 列带(阶段)X 区间。free 节点不得压带,且带优先于锚定。
+    const rowBands = [...rowYs.entries()].map(([ri, top]) => ({
+      top,
+      bottom: rowBottoms.get(ri) ?? top,
+    }));
+    const colBands = colXs.map((left, i) => ({ left, right: colRights[i] ?? left }));
     const placement = computeFreeNodePlacements({
       occupied,
       free: freeItems,
       edges: topEdges,
       gap: FREE_NODE_CLEAR,
       maxSteps: 4,
+      rowBands,
+      colBands,
     });
     for (const [id, p] of placement.positions) {
       result.set(id, { x: p.x, y: p.y });

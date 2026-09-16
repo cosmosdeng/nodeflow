@@ -81,7 +81,11 @@ describe('Case 1/2/3:原位、local 最小位移、矩阵级 free 不穿越', ()
     const f = pos.get('F')!;
     expect(f).not.toEqual({ x: 104, y: 80 });
     expect(overlap({ x: f.x, y: f.y, w: 240, h: 150 }, { x: a.x, y: a.y, w: 240, h: 150 })).toBe(false);
-    expect(f.y).toBeGreaterThanOrEqual(a.y + 150); // 在 A 矩形之外(下方)
+    // 带约束优先:A 落位 (104,80,240,150) → 行带 Y=[80,230]、列带 X=[80,368]。
+    // 原/锚定位同时压两种带 → 沿轴最小位移移出(上/左),不再「压着带只避节点」。
+    expect(f.y + 150 <= 80 || f.y >= 230).toBe(true); // 不压行带
+    expect(f.x + 240 <= 80 || f.x >= 368).toBe(true); // 不压列带
+    expect(f).toEqual({ x: -160, y: -70 });
   });
 
   it('最小位移(module 直接):选择最近合法候选', () => {
@@ -399,5 +403,38 @@ describe('real_like:新策略 vs 旧四角策略指标', () => {
         overlap: overlapCount,
       }),
     );
+  });
+});
+
+describe('P4B 绝对保证:free 节点绝不压带', () => {
+  it('全部 fixture:free 节点与其行带 / 列带零重叠(含所有兜底路径)', () => {
+    for (const fx of fixtures) {
+      const input = fx.input();
+      const geo = computeMatrixGridGeometry(input, { edges: input.edges });
+      const pos = computeMatrixLayout(input, { edges: input.edges });
+      const childIds = new Set<string>();
+      for (const n of input.nodes) for (const c of n.data?.composite?.childIds ?? []) childIds.add(c);
+      for (const n of input.nodes) {
+        if (childIds.has(n.id) || n.hidden) continue;
+        const p = pos.get(n.id);
+        if (!p) continue;
+        const hasPid =
+          !!n.data?.participantId && input.participants.some((x) => x.id === n.data!.participantId);
+        const hasStage = input.stages.some((st) => st.nodeIds.includes(n.id));
+        if (hasPid || hasStage) continue; // 只校验 free
+        const w = n.width ?? 240;
+        const h = n.height ?? 150;
+        for (const [ri, top] of geo.rowYs) {
+          const bottom = geo.rowBottoms.get(ri) ?? top;
+          const hit = p.y < bottom && p.y + h > top;
+          expect(hit, `${fx.name}:${n.id} 压行带 [${top},${bottom}]`).toBe(false);
+        }
+        geo.colXs.forEach((left, i) => {
+          const right = geo.colRights[i];
+          const hit = p.x < right && p.x + w > left;
+          expect(hit, `${fx.name}:${n.id} 压列带 [${left},${right}]`).toBe(false);
+        });
+      }
+    }
   });
 });
