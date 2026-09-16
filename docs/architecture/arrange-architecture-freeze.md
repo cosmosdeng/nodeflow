@@ -21,13 +21,14 @@
 ## 2. Frozen Product Model
 
 ```text
-X axis = Stage / When
+X axis = Stage 列区域(有序) / When ;列内 X = 全局拓扑层(上游在左、下游在右)
 Y axis = Participant / Who
 Node   = What
 ```
 
 - Participant 与 Stage 是**正交语义轴**；Node 可同时拥有两者。
 - 无语义轴（participants 与 stages 均不存在）时，`runSmartArrange` 仍使用传统 topology layout（`computeLayout`）。
+- **X 语义（2026-09 修订）**：Stage 决定**列区域及其顺序**（`stageOrder` 硬顺序不变）；列内 X 由**全局拓扑层**决定 —— 同一 Stage 列内上游靠左、下游靠右，允许同列横向错开，使「从左到右 = 上游→下游」成立。Y 在同一 Participant 行带内拉平（不再按层逐格下沉）。详见 §20。
 - 规格权威：`stage-participant-arrange-design.md` §4–§13。
 
 ## 3. Node Classification
@@ -64,9 +65,9 @@ node.position = 唯一 Node geometry authority
 ## 6. Constraint Priority
 
 ```text
-Semantic assignment / semantic order
+Semantic assignment / semantic order (Stage 列区域顺序 / Participant 行顺序)
     >
-Matrix geometry
+Intra-column topology layer (列内 X 槽位:上游在左、下游在右)
     >
 Stage-only Anchor
     >
@@ -75,7 +76,8 @@ Free Placement
 Elastic Band envelope
 ```
 
-- topology 是**次级约束**，不能破坏语义轴硬顺序（Participant/Stage order）。
+- 拓扑**不能**破坏语义轴硬顺序（Stage 列区域顺序 / Participant 行顺序）；冲突时保留语义顺序，并把拓扑冲突写入 diagnostics（EXPECTED CONFLICT）。
+- 列内层槽位依赖连边信息：调用方未提供 `edges` 时无层信息可用，退回「同列按 Y 堆叠」（`rankOf` / `position.y → x → id` 稳定序）。
 
 ## 7. Semantic Reassignment
 
@@ -139,9 +141,9 @@ Diff check: git diff --check exit 0
 | - | - | - | - |
 | 1 | `node.position` 是唯一 Node geometry authority | PASS | MatrixVisualLayer 无 setNodes/position 写回; arrange.ts 只写 `result` Map; document.ts v5 保存 nodes.position |
 | 2 | Participant 是 Y 轴语义 | PASS | `arrange.ts` MATRIX rows; docs §5; Toolbar title |
-| 3 | Stage 是 X 轴语义 | PASS | `arrange.ts` cols; docs §5 |
+| 3 | Stage 决定 X 列区域与列区域顺序；列内 X = 全局拓扑层 | PASS (2026-09 修订) | `arrange.ts` `colLayerIndex`/`colOffsetOf`/`MATRIX_LAYER_GAP`; docs §20 |
 | 4 | `participantOrder`/`stageOrder` 是语义硬顺序 | PASS | `arrange.ts` computeMatrixGridStructure; document.ts resolve*Order; docs §10 |
-| 5 | topology 是次级约束 | PASS | `arrange.ts` 注释 + rank/level 仅排序; docs §9 |
+| 5 | topology 决定列内 X 层槽位，但不破坏语义轴硬顺序 | PASS (2026-09 修订) | `arrange.ts` `computeLevels` → 列内槽位 + conflict diagnostics; docs §20 |
 | 6 | 节点统一分为 assigned/rowOnly/stageOnly/free | PASS | `matrixClassification.ts` classificationFromAxes |
 | 7 | stageOnly 进对应 Stage 列 + Stage-only Anchor | PASS | `arrange.ts` stageOnly 分支 → `computeStageOnlyColumnAnchors` |
 | 8 | free 使用 Free Placement | PASS | `arrange.ts` free 分支 → `computeFreeNodePlacements`; freePlacement.ts |
@@ -201,3 +203,50 @@ No production code changes.
 ```text
 READY FOR ARCHITECTURE FREEZE
 ```
+
+## 20. Revision 2026-09 — X = 拓扑层（产品需求驱动的变更）
+
+> 依据冻结条款「除非出现明确的新产品需求」——本变更为**明确的产品观感需求**
+> （自动排列应「从左到右 = 上游→下游」），经原型对比人工确认后实施。语义数据模型未变。
+
+### 20.1 变更内容
+
+| 项 | 变更前 | 变更后 |
+| - | - | - |
+| 列内 X | 一律 `colXs[c] + CELL_PAD_X`（贴列左缘，同列同 x） | `colXs[c] + CELL_PAD_X + layerIndex(全局拓扑层) × (列最大节点宽 + 60)` |
+| 列宽 | 该列最宽节点 | max(列内层槽位总宽, 该列 stageOnly 最宽) |
+| 行内 Y | 按全局层「逐格下沉」（`assignFlowLevels`） | 同一行带内拉平；仅同 (row, col, 层) 组内纵向堆叠 |
+| Stage 角色 | X 轴精确定值 | 列区域 + 列区域顺序（`stageOrder` 仍为硬顺序） |
+
+- 新增常量 `MATRIX_LAYER_GAP = 60`（同列相邻拓扑层水平间距）。
+- `MatrixGridGeometry.cells` 项新增 `colOffset`（列内层槽位偏移）。
+- 删除已被取代的 `assignFlowLevels`（旧的行内层下沉分配）。
+- 调用方未提供 `edges` 时无层信息 → 退回「同列按 Y 堆叠」，与变更前行为一致。
+
+### 20.2 语义不变量保持
+
+- `participantOrder` / `stageOrder` **不变**，几何仍严格按其顺序（列区域顺序 / 行顺序）。
+- Stage 顺序与拓扑方向冲突时：**Stage 优先**，冲突只记录、不做隐式语义改写。
+- 四类分类、stageOnly Anchor、Free Placement、Elastic Band envelope、Undo / 持久化 均未改动。
+
+### 20.3 受影响测试（按新语义更新，非删除）
+
+`src/lib/__tests__/matrixBandLayout.test.ts`：
+- 「同参与方跨 Stage 流等级对齐」→ 「列内拓扑层 X 分层 + 行带 Y 拉平」（断言下游在右、同带 Y 一致）。
+- T3（同 Participant 跨 Stage 单链）→ 断言 Y 一致且 X 递增（原断言 270 / 460 的逐格下沉）。
+- T4（同 cell 直接依赖）→ 断言 X(source) < X(target) 且 Y 一致（原断言 Y 下沉）。
+- T5（Merge）→ 断言源与汇合点同带、汇合点在右（原断言汇合点下沉到 270）。
+
+### 20.4 验证
+
+```text
+Vitest:     42 files / 403 tests passed
+TypeScript: tsconfig.json exit 0
+Build:      bun run build exit 0
+```
+
+### 20.5 相关文件
+
+- `src/lib/arrange.ts`（`computeMatrixGridGeometry` 列内层槽位 + 行带拉平；`computeMatrixLayout` X 写入）
+- `src/lib/__tests__/matrixBandLayout.test.ts`
+- 本文件 §2 / §6 / §14（#3、#5）

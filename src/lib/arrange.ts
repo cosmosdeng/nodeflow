@@ -130,7 +130,12 @@ export function organizationNameOf(participant: Participant, organizations: read
 }
 
 // ---- Unified Matrix Arrange (P3):Semantic → Geometry ----
-// Participant → Y(row)、Stage → X(column)。node.position 为唯一几何权威,纯函数不改输入。
+// Participant → Y(row)、Stage → 有序列区域(X)。node.position 为唯一几何权威,纯函数不改输入。
+//
+// 【X 语义 2026-09 修订】Stage 决定「列区域 + 列区域顺序」;列内 X 由「全局拓扑层」决定:
+// 同一 Stage 列内上游靠左、下游靠右,同列节点允许横向错开,使「从左到右 = 上游到下游」成立。
+// 列区域顺序恒等于 stageOrder(Stage 优先);拓扑方向与 Stage 顺序冲突时只记录诊断,
+// 不移动节点去消解冲突(不做隐式语义改写)。
 //
 // 【产品语义 2026-09 修正】不生成「未分配」尾行/尾列,也不渲染未分配带/文案:
 // - 参与矩阵排布(assigned)的节点 = 可见顶层节点 且 participantId 有效 且 存在于某 stage.nodeIds;
@@ -140,7 +145,7 @@ export function organizationNameOf(participant: Participant, organizations: read
 /** 矩阵布局起点(world-space) */
 const MATRIX_START_X = 80;
 const MATRIX_START_Y = 80;
-/** 列间距 */
+/** 列区域间距(相邻 Stage 列之间) */
 const MATRIX_COL_GAP = 120;
 /** 行间距 */
 const MATRIX_ROW_GAP = 80;
@@ -148,6 +153,8 @@ const MATRIX_ROW_GAP = 80;
 const MATRIX_CELL_PAD_X = 24;
 /** 同 cell 内节点纵向堆叠间距 */
 const MATRIX_STACK_GAP = 40;
+/** 同一 Stage 列内「相邻拓扑层」的水平间距(X = 拓扑层) */
+const MATRIX_LAYER_GAP = 60;
 /** 空 Participant 行视觉带高(3 × label 高约 20) */
 const MATRIX_EMPTY_ROW_H = 60;
 /** 游离节点避让到矩阵区域外时的留白(world) */
@@ -254,8 +261,12 @@ export interface MatrixGridGeometry {
   stageOnlyNodes: FlowNode[];
   /** 完全游离节点(两轴均无效):不归属任何带,沿用现有避让处理 */
   freeNodes: FlowNode[];
-  /** cellKey(`${rowIndex}_${colIndex}`) → 已排序节点(含 stackY);排序 position.y → x → id */
-  cells: Map<string, { n: FlowNode; stackY: number }[]>;
+  /**
+   * cellKey(`${rowIndex}_${colIndex}`) → 已排序节点。
+   *   stackY = 同 (row, col, 拓扑层) 组内的纵向堆叠偏移(不同层不堆叠,已被 X 分层错开);
+   *   colOffset = 该节点在其 Stage 列内的水平槽位偏移(X = 拓扑层,层小者在左)。
+   */
+  cells: Map<string, { n: FlowNode; stackY: number; colOffset: number }[]>;
   /** 每列(仅实际 Stage 列)的 world X */
   colXs: number[];
   /** 每列内容右缘(world)= colXs[i] + 列最大节点宽 + 2×cell pad */
@@ -355,103 +366,9 @@ const rankThenPosCompare = (
 export interface MatrixGridLayoutOptions {
   /** 仅单 cell 排序用的流序(拓扑)值(无 edges 时使用) */
   rankOf?: ReadonlyMap<string, number>;
-  /** 参与方行内连边:存在时启用「跨 Stage 流等级对齐」 */
+  /** Arrange scope 内的连边:用于计算全局拓扑层,决定「列内 X 槽位」与组内堆叠序 */
   edges?: readonly FlowEdge[];
 }
-
-/**
- * 同一参与方行内的纵向「流层」分配:
- * - 每行任务含所属 col;对行内连边 u→v:同 col 时 level(v) ≥ level(u)+1,异 col 时 level(v) ≥ level(u);
- * - 同 cell(同 col)内 level 互不相同(冲突顺延),保证下游节点永远不会高于其行内上游;
- * - globalLevels(可选):跨 Participant/跨 Stage 计算的全局拓扑层,作为「就绪节点」选择时的
- *   主要排序参考(global topology 参与行内相对顺序);缺省回退 (col, 列表序)。
- * - 环兜底:确定性取 (global, col, 列表序) 最小者先行。
- * 返回 nodeId → 行内纵向层(非绝对 Y)。纯函数 / deterministic。
- */
-const assignFlowLevels = (
-  items: { id: string; col: number }[],
-  edgePairs: ReadonlyArray<readonly [string, string]>,
-  globalLevels?: ReadonlyMap<string, number>,
-): Map<string, number> => {
-  const colOf = new Map(items.map((it) => [it.id, it.col]));
-  const orderOf = new Map(items.map((it, i) => [it.id, i]));
-  const gOf = (id: string) => globalLevels?.get(id) ?? Number.MAX_SAFE_INTEGER;
-  // 每行内 preferred vertical slot = 该行内节点全局层经压缩后的序号(0..k):
-  // global topology 直接成为 Node 在 row 内的 Y placement 参考,而不是只影响队列顺序。
-  let prefRank = new Map<string, number>();
-  if (globalLevels && items.length > 0) {
-    const gs = items
-      .map((it) => globalLevels.get(it.id))
-      .filter((v): v is number => v !== undefined);
-    const uniq = [...new Set(gs)].sort((a, b) => a - b);
-    for (const it of items) {
-      const g = globalLevels.get(it.id);
-      const idx = g === undefined ? -1 : uniq.indexOf(g);
-      if (idx >= 0) prefRank.set(it.id, idx);
-    }
-  }
-  const out = new Map<string, string[]>();
-  const predsOf = new Map<string, string[]>();
-  const indeg = new Map<string, number>();
-  for (const it of items) {
-    out.set(it.id, []);
-    predsOf.set(it.id, []);
-    indeg.set(it.id, 0);
-  }
-  for (const [s, t] of edgePairs) {
-    if (!colOf.has(s) || !colOf.has(t) || s === t) continue;
-    out.get(s)!.push(t);
-    predsOf.get(t)!.push(s);
-    indeg.set(t, (indeg.get(t) ?? 0) + 1);
-  }
-  const levels = new Map<string, number>();
-  const usedLevelsByCol = new Map<number, Set<number>>();
-  const usedOf = (col: number) => {
-    let set = usedLevelsByCol.get(col);
-    if (!set) {
-      set = new Set();
-      usedLevelsByCol.set(col, set);
-    }
-    return set;
-  };
-  const pickCmp = (a: string, b: string) => {
-    const ga = gOf(a);
-    const gb = gOf(b);
-    if (globalLevels && ga !== gb) return ga - gb;
-    return (colOf.get(a)! - colOf.get(b)!) || (orderOf.get(a)! - orderOf.get(b)!);
-  };
-  const remaining = new Set(items.map((it) => it.id));
-  while (remaining.size > 0) {
-    let cands = [...remaining].filter((id) => (indeg.get(id) ?? 0) === 0);
-    if (cands.length === 0) {
-      // 行内成环:确定性兜底
-      cands = [...remaining];
-    }
-    cands.sort(pickCmp);
-    const v = cands[0];
-    remaining.delete(v);
-    let base = 0;
-    for (const p of predsOf.get(v)!) {
-      const lp = levels.get(p);
-      if (lp === undefined) continue;
-      const need = lp + (colOf.get(p) === colOf.get(v) ? 1 : 0);
-      if (need > base) base = need;
-    }
-    // 行内同列依赖(同 cell):硬约束 source 必须在 target 上方;
-    // 行内异列:由 local 约束保证 target 不高于 source(preferred 常更大时自然下沉)。
-    const pref = prefRank.get(v);
-    const minLevel = pref !== undefined && pref > base ? pref : base;
-    const used = usedOf(colOf.get(v)!);
-    let level = minLevel;
-    while (used.has(level)) level += 1;
-    used.add(level);
-    levels.set(v, level);
-    for (const t of out.get(v)!) {
-      indeg.set(t, (indeg.get(t) ?? 0) - 1);
-    }
-  }
-  return levels;
-};
 
 export function computeMatrixGridGeometry(
   input: MatrixGridInput,
@@ -477,11 +394,11 @@ export function computeMatrixGridGeometry(
 
   // 归类到 cell(row,col)
   const cellKey = (r: number, c: number) => `${r}_${c}`;
-  const cells = new Map<string, { n: FlowNode; stackY: number }[]>();
+  const cells = new Map<string, { n: FlowNode; stackY: number; colOffset: number }[]>();
   const pushCell = (r: number, c: number, n: FlowNode) => {
     const k = cellKey(r, c);
     const arr = cells.get(k) ?? [];
-    arr.push({ n, stackY: 0 });
+    arr.push({ n, stackY: 0, colOffset: 0 });
     cells.set(k, arr);
   };
   for (const n of assignedNodes) {
@@ -499,23 +416,65 @@ export function computeMatrixGridGeometry(
     pushCell(row, col, n);
   }
 
-  // 列宽(实际 Stage 列 assigned cell + stageOnly 内容)+ 列 X(与排序无关)
+  // ---- 列内拓扑层槽位(X = 拓扑层;Stage 决定列区域与列区域顺序) ----
   const colCount = cols.length;
-  const colWidths = new Array<number>(colCount).fill(0);
-  const bumpColW = (c: number, w: number) => {
-    if (w > colWidths[c]) colWidths[c] = w;
-  };
+  const assignedIdSet = new Set(assignedNodes.map((n) => n.id));
+  const assignedEdges = (opts?.edges ?? []).filter(
+    (e) => assignedIdSet.has(e.source) && assignedIdSet.has(e.target),
+  );
+  const globalLevels =
+    assignedNodes.length > 0
+      ? computeLevels(assignedNodes as FlowNode[], assignedEdges)
+      : new Map<string, number>();
+  const levelOf = (id: string) => globalLevels.get(id) ?? 0;
+
+  const colMaxAssignedW = new Array<number>(colCount).fill(0);
+  const colMaxStageOnlyW = new Array<number>(colCount).fill(0);
+  const levelsByCol = new Map<number, Set<number>>();
+  const nodeColOf = new Map<string, number>();
   for (const [k, arr] of cells) {
     const c = Number(k.slice(k.indexOf('_') + 1));
-    for (const it of arr) bumpColW(c, getNodeSize(it.n).w);
+    for (const it of arr) {
+      const w = getNodeSize(it.n).w;
+      if (w > colMaxAssignedW[c]) colMaxAssignedW[c] = w;
+      nodeColOf.set(it.n.id, c);
+      const set = levelsByCol.get(c) ?? new Set<number>();
+      set.add(levelOf(it.n.id));
+      levelsByCol.set(c, set);
+    }
   }
   for (const n of stageOnlyNodes) {
     for (let i = 0; i < cols.length; i++) {
       if (stageById.get(cols[i])!.nodeIds.includes(n.id)) {
-        bumpColW(i, getNodeSize(n).w);
+        const w = getNodeSize(n).w;
+        if (w > colMaxStageOnlyW[i]) colMaxStageOnlyW[i] = w;
         break;
       }
     }
+  }
+  // 每列:去重后的拓扑层升序 → 由左到右的槽位序号
+  const colLayerIndex = new Map<number, Map<number, number>>();
+  const colLayerCount = new Array<number>(colCount).fill(0);
+  for (let c = 0; c < colCount; c++) {
+    const levels = [...(levelsByCol.get(c) ?? new Set<number>())].sort((a, b) => a - b);
+    colLayerIndex.set(c, new Map(levels.map((lv, i) => [lv, i])));
+    colLayerCount[c] = levels.length;
+  }
+  const colOffsetOf = (id: string): number => {
+    const c = nodeColOf.get(id);
+    if (c === undefined) return 0;
+    const idx = colLayerIndex.get(c)?.get(levelOf(id));
+    if (idx === undefined) return 0;
+    return idx * (colMaxAssignedW[c] + MATRIX_LAYER_GAP);
+  };
+
+  // 列内容宽 = max(列内层槽位总宽, 该列 stageOnly 最宽);列 X 仍按 stageOrder 顺序累加
+  const colWidths = new Array<number>(colCount).fill(0);
+  for (let c = 0; c < colCount; c++) {
+    const n = colLayerCount[c];
+    const extent =
+      n > 0 ? (n - 1) * (colMaxAssignedW[c] + MATRIX_LAYER_GAP) + colMaxAssignedW[c] : 0;
+    colWidths[c] = Math.max(extent, colMaxStageOnlyW[c]);
   }
   const colXs = new Array<number>(colCount).fill(0);
   let cx = MATRIX_START_X;
@@ -525,88 +484,22 @@ export function computeMatrixGridGeometry(
   }
   const colRights = colXs.map((x, i) => x + colWidths[i] + MATRIX_CELL_PAD_X * 2);
 
+  // 行内:仅同 (row, col, 拓扑层) 组内纵向堆叠;不同层已被 X 分层错开 → 同一行带内 Y 拉平。
+  // 「上游在左、下游在右」由 X 承载,不再靠 Y 逐层下沉。
   const rowHeights = new Map<number, number>();
-  const flowEdges = opts?.edges ?? [];
-  const flowEnabled =
-    rows.length > 0 && cols.length > 0 && flowEdges.length > 0 && assignedNodes.length > 0;
-
-  if (flowEnabled) {
-    // 跨 Stage 流等级对齐:同一参与方行内节点共用一个纵轴(下游不高于上游,同格不重叠)。
-    const idToNode = new Map<string, FlowNode>();
-    const byRowCol = new Map<string, { row: number; col: number }>();
-    const byRow = new Map<number, { id: string; col: number }[]>();
-    for (const [k, arr] of cells) {
-      const r = Number(k.slice(0, k.indexOf('_')));
-      const c = Number(k.slice(k.indexOf('_') + 1));
-      for (const it of arr) {
-        idToNode.set(it.n.id, it.n);
-        byRowCol.set(it.n.id, { row: r, col: c });
-        const list = byRow.get(r) ?? [];
-        list.push({ id: it.n.id, col: c });
-        byRow.set(r, list);
-      }
-    }
-    const levels = new Map<string, number>();
-    const rowStep = new Map<number, number>();
-    // 全局拓扑层(跨 Participant / 跨 Stage 都计入):作为行内 Y 的“主要参考序”,
-    // 保证 A(P1)→B(P2)→C(P3) 这类 handoff 不会因行内仅用局部序而各自从 0 漂移。
-    const assignedSet = new Set(assignedNodes.map((n) => n.id));
-    const scopeEdges = flowEdges.filter((e) => assignedSet.has(e.source) && assignedSet.has(e.target));
-    const gLevels = computeLevels(assignedNodes as FlowNode[], scopeEdges);
-    for (const [r, list] of byRow) {
-      const edgePairs: Array<readonly [string, string]> = [];
-      for (const e of flowEdges) {
-        const s = byRowCol.get(e.source);
-        const t = byRowCol.get(e.target);
-        if (s && t && s.row === r && t.row === r) edgePairs.push([e.source, e.target]);
-      }
-      const lv = assignFlowLevels(list, edgePairs, gLevels);
-      for (const [id, level] of lv) levels.set(id, level);
-      let maxH = 0;
-      for (const it of list) {
-        const h = getNodeSize(idToNode.get(it.id)!).h;
-        if (h > maxH) maxH = h;
-      }
-      rowStep.set(r, maxH + MATRIX_STACK_GAP);
-    }
-    for (const [k, arr] of cells) {
-      const r = Number(k.slice(0, k.indexOf('_')));
-      const step = rowStep.get(r)!;
-      for (const it of arr) {
-        it.stackY = (levels.get(it.n.id) ?? 0) * step;
-      }
-      arr.sort(
-        (a, b) =>
-          a.stackY - b.stackY ||
-          (a.n.id < b.n.id ? -1 : a.n.id > b.n.id ? 1 : 0),
-      );
-    }
-    for (const [r, list] of byRow) {
-      const step = rowStep.get(r)!;
-      let maxBottom = 0;
-      for (const it of list) {
-        const level = levels.get(it.id) ?? 0;
-        const bottom = level * step + getNodeSize(idToNode.get(it.id)!).h;
-        if (bottom > maxBottom) maxBottom = bottom;
-      }
-      rowHeights.set(r, maxBottom);
-    }
-  } else {
-    // 无连线信息:保持单 cell 内排序 + 堆叠(rank 可选;每行高度 = 最大 cell 堆叠)
-    for (const arr of cells.values()) {
-      arr.sort((a, b) => rankThenPosCompare(a.n, b.n, rankOf));
-      let y = 0;
-      for (const it of arr) {
-        it.stackY = y;
-        y += getNodeSize(it.n).h + MATRIX_STACK_GAP;
-      }
-    }
-    for (const [k, arr] of cells) {
-      const r = Number(k.slice(0, k.indexOf('_')));
-      const last = arr[arr.length - 1];
-      const h = last ? last.stackY + getNodeSize(last.n).h : 0;
-      const cur = rowHeights.get(r) ?? 0;
-      if (h > cur) rowHeights.set(r, h);
+  const stackCursor = new Map<string, number>();
+  for (const [k, arr] of cells) {
+    const r = Number(k.slice(0, k.indexOf('_')));
+    const c = Number(k.slice(k.indexOf('_') + 1));
+    const ordered = [...arr].sort((a, b) => rankThenPosCompare(a.n, b.n, rankOf));
+    for (const it of ordered) {
+      const h = getNodeSize(it.n).h;
+      const gk = `${r}_${c}_${levelOf(it.n.id)}`;
+      const cur = stackCursor.get(gk) ?? 0;
+      it.stackY = cur;
+      it.colOffset = colOffsetOf(it.n.id);
+      stackCursor.set(gk, cur + h + MATRIX_STACK_GAP);
+      if (cur + h > (rowHeights.get(r) ?? 0)) rowHeights.set(r, cur + h);
     }
   }
 
@@ -679,11 +572,12 @@ export function computeMatrixLayout(
     const c = Number(k.slice(k.indexOf('_') + 1));
     const baseY = rowYs.get(r);
     if (baseY === undefined) continue;
-    const baseX = colXs[c] + MATRIX_CELL_PAD_X;
     const rects = colAssigned.get(c) ?? [];
     for (const it of arr) {
       const y = baseY + it.stackY;
-      result.set(it.n.id, { x: baseX, y });
+      // X = 列区域左缘 + cell pad + 该节点在本列内的拓扑层槽位偏移
+      const x = colXs[c] + MATRIX_CELL_PAD_X + it.colOffset;
+      result.set(it.n.id, { x, y });
       rects.push({ id: it.n.id, top: y, h: getNodeSize(it.n).h });
     }
     colAssigned.set(c, rects);

@@ -92,8 +92,8 @@ describe('computeMatrixLayout + rankOf(格内按流排序堆叠)', () => {
   });
 });
 
-describe('computeMatrixLayout + edges(同参与方跨 Stage 流等级对齐)', () => {
-  it('同一参与方:下游 Stage 节点不高于其行内上游(消除连线回头)', () => {
+describe('computeMatrixLayout + edges(列内拓扑层 X 分层 + 行带 Y 拉平)', () => {
+  it('同一参与方:下游 Stage 节点严格位于其上游右侧;同一行带 Y 一致', () => {
     const mk = (id: string, sids: string[]) => stage(id, sids);
     const base = {
       participants: [participant('p1')],
@@ -113,15 +113,16 @@ describe('computeMatrixLayout + edges(同参与方跨 Stage 流等级对齐)', (
         data: { label: '', artifact: null },
       }) as unknown as FlowEdge;
     const edges = [mkEdge('e1', 'A', 'B'), mkEdge('e2', 'B', 'C')];
-    // 无连线信息(旧行为):C 回到本列顶部 → 高于上游 B(回头)
+    // 无连线信息(层信息缺失):同列节点只能按 Y 堆叠 → C 回到本列顶部
     const plain = computeMatrixLayout(base);
     expect(plain.get('C')!.y).toBe(80);
     expect(plain.get('C')!.y).toBeLessThan(plain.get('B')!.y);
-    // 提供 edges:全局层作为行内 preferred slot,链下游只下不回头
+    // 提供 edges:列内按全局拓扑层横向分层,下游严格在右;Y 拉平到同一行带
     const aligned = computeMatrixLayout(base, { edges });
-    expect(aligned.get('B')!.y).toBeGreaterThan(aligned.get('A')!.y); // 同格:源上目标下
-    expect(aligned.get('C')!.y).toBeGreaterThan(aligned.get('B')!.y); // 跨格:下游不低于上游(逐层下沉)
-    expect(aligned.get('C')!.x).toBeGreaterThan(aligned.get('B')!.x);
+    expect(aligned.get('A')!.x).toBeLessThan(aligned.get('B')!.x); // 同列:源在左、目标在右
+    expect(aligned.get('B')!.x).toBeLessThan(aligned.get('C')!.x); // 跨列:下游列在右
+    expect(aligned.get('A')!.y).toBe(aligned.get('B')!.y); // 行带拉平
+    expect(aligned.get('C')!.y).toBe(aligned.get('B')!.y);
   });
 });
 
@@ -158,7 +159,7 @@ describe('Arrange Quality vNext(全局拓扑 + 固定行列 + 汇合不深陷)',
     expect(pos.get('C')!.x).toBeGreaterThan(pos.get('B')!.x);
   });
 
-  it('T3 同 Participant 跨 Stage:单链各一节点时尽量保持同 Y(水平),不逐格下坠', () => {
+  it('T3 同 Participant 跨 Stage:单链各一节点 → 同一行带 Y 一致,X 从左到右', () => {
     const pos = computeMatrixLayout(
       {
         participants: [participant('p1')],
@@ -170,11 +171,13 @@ describe('Arrange Quality vNext(全局拓扑 + 固定行列 + 汇合不深陷)',
       { edges: [mkEdge('e1', 'A', 'B'), mkEdge('e2', 'B', 'C')] },
     );
     expect(pos.get('A')!.y).toBe(80);
-    expect(pos.get('B')!.y).toBe(270); // 全局层 anchor:逐层下沉但幅度受控
-    expect(pos.get('C')!.y).toBe(460);
+    expect(pos.get('B')!.y).toBe(80); // 行带拉平:不再逐格下坠
+    expect(pos.get('C')!.y).toBe(80);
+    expect(pos.get('A')!.x).toBeLessThan(pos.get('B')!.x);
+    expect(pos.get('B')!.x).toBeLessThan(pos.get('C')!.x);
   });
 
-  it('T4 同 cell 直接依赖:Y(source) < Y(target)', () => {
+  it('T4 同 cell 直接依赖:同列分层 → X(source) < X(target),Y 一致', () => {
     const pos = computeMatrixLayout(
       {
         participants: [participant('p1')],
@@ -185,10 +188,11 @@ describe('Arrange Quality vNext(全局拓扑 + 固定行列 + 汇合不深陷)',
       },
       { edges: [mkEdge('e1', 'A', 'B')] },
     );
-    expect(pos.get('A')!.y).toBeLessThan(pos.get('B')!.y);
+    expect(pos.get('A')!.x).toBeLessThan(pos.get('B')!.x);
+    expect(pos.get('A')!.y).toBe(pos.get('B')!.y);
   });
 
-  it('T5 Merge(A/B 不同 Stage → C):汇合节点不无必要深陷(与其浅源同层)', () => {
+  it('T5 Merge(A/B 不同 Stage → C):源与汇合点同处一行带,汇合点在右侧、不深陷', () => {
     const pos = computeMatrixLayout(
       {
         participants: [participant('p1')],
@@ -199,12 +203,12 @@ describe('Arrange Quality vNext(全局拓扑 + 固定行列 + 汇合不深陷)',
       },
       { edges: [mkEdge('e1', 'A', 'C'), mkEdge('e2', 'B', 'C')] },
     );
-    // A、B 异列源同层(80);C 汇合:不低于二者、仅取其下一 preferred 层,不无必要深陷
+    // 行带拉平:A/B/C 共用该行的 Y;汇合点严格位于其源的右侧
     expect(pos.get('A')!.y).toBe(80);
     expect(pos.get('B')!.y).toBe(80);
-    expect(pos.get('C')!.y).toBeGreaterThan(pos.get('A')!.y);
-    expect(pos.get('C')!.y).toBeGreaterThan(pos.get('B')!.y);
-    expect(pos.get('C')!.y).toBe(270);
+    expect(pos.get('C')!.y).toBe(80);
+    expect(pos.get('C')!.x).toBeGreaterThan(pos.get('A')!.x);
+    expect(pos.get('C')!.x).toBeGreaterThan(pos.get('B')!.x);
   });
 
   it('T6 Split(A → B/C):不发生 topology inversion(目标不高于源)', () => {
