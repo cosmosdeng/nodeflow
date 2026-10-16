@@ -20,15 +20,13 @@ import FlowEdgeComponent from './FlowEdgeComponent';
 import ContextMenu, { type ContextMenuState } from './ContextMenu';
 import ConfirmDialog, { type ConfirmDialogState } from './ConfirmDialog';
 import AnnotationBox from './AnnotationBox';
-import StageComponent from './StageComponent';
 import MatrixVisualLayer from './MatrixVisualLayer';
 import { findMatrixLabelHit } from './matrixLabelHit';
 import { useGraphStore } from '../store/graphStore';
 import { changeGatewayType, createGatewayNode, GATEWAY_KINDS, GATEWAY_META } from '../lib/gateway';
-import { computeSwimlaneBounds } from '../lib/arrange';
 import { computeMatrixTargetZones } from '../lib/matrixTargets';
 import { hoverCandidate, type ReassignmentAxis } from '../lib/semanticReassignment';
-import { PARTICIPANT_TYPE_LABELS, type FlowNode, type FlowEdge, type EdgeStyle, type Stage, type GatewayType, type Participant } from '../types';
+import { type FlowNode, type FlowEdge, type EdgeStyle, type Stage, type GatewayType } from '../types';
 
 const nodeTypes: NodeTypes = { flow: FlowNodeComponent };
 const edgeTypes: EdgeTypes = { flow: FlowEdgeComponent };
@@ -110,10 +108,6 @@ export default function FlowCanvas() {
   // 删除确认对话框
   const [confirmDialog, setConfirmDialog] = useState<ConfirmDialogState | null>(null);
   const closeConfirmDialog = useCallback(() => setConfirmDialog(null), []);
-  // [B4] Legacy 视觉隔离:旧 Stage 框(StageComponent/stage-layer)与旧 Swimlane 渲染退出 render path。
-  // 数据、API、兼容性完全保留;MatrixVisualLayer 是唯一 Stage/Participant 视觉来源。
-  const LEGACY_STAGE_VISUAL = false;
-  const LEGACY_SWIMLANE_VISUAL = false;
 
   // 画布容器 ref,用于原生双击检测
   const flowAreaRef = useRef<HTMLDivElement>(null);
@@ -212,15 +206,6 @@ export default function FlowCanvas() {
         .map((e) => ({ ...e, hidden: false })),
     };
   }, [activeTabId, nodes, edges, allLocked]);
-
-  // 泳道 derived bounds(仅当 swimlaneEnabled 时计算,不持久化、不改变任何 graph)
-  const swimlaneBounds = useMemo(
-    () =>
-      swimlaneEnabled
-        ? computeSwimlaneBounds(displayNodes, participants, swimlaneOrder, viewport)
-        : [],
-    [swimlaneEnabled, displayNodes, participants, swimlaneOrder, viewport],
-  );
 
   const handleNodeClick: NodeMouseHandler = useCallback(
     (_, node) => {
@@ -832,95 +817,7 @@ export default function FlowCanvas() {
     ],
   );
 
-  /** 阶段域上右键:弹出域菜单 */
-  const handleStageContextMenu = useCallback(
-    (e: React.MouseEvent, stage: Stage) => {
-      e.preventDefault();
-      e.stopPropagation();
-      selectStage(stage.id);
-      setContextMenu({
-        x: e.clientX,
-        y: e.clientY,
-        items: [
-          {
-            label: stage.nodeIds.length
-              ? `脱离全部节点 (${stage.nodeIds.length})`
-              : '脱离全部节点',
-            disabled: allLocked || stage.nodeIds.length === 0,
-            hint: '把该阶段域内的全部节点移出归属',
-            onClick: () => setStageNodes(stage.id, []),
-          },
-          {
-            label: '删除阶段域',
-            danger: true,
-            disabled: allLocked,
-            onClick: () => deleteStage(stage.id),
-          },
-        ],
-      });
-    },
-    [allLocked, selectStage, setStageNodes, deleteStage],
-  );
-
-  /** 拖拽阶段域:移动域矩形,内部节点保持相对关系整体移动;结束记录一次历史 */
-  const handleStageDragStart = useCallback(
-    (e: React.PointerEvent, stage: Stage) => {
-      if (allLocked) return;
-      // 用增量位移:每次 pointermove 只算相对上一点的位移,避免绝对位移反复累加
-      let lastX = e.clientX;
-      let lastY = e.clientY;
-      let moved = false;
-      const onMove = (me: PointerEvent) => {
-        const dx = (me.clientX - lastX) / viewport.zoom;
-        const dy = (me.clientY - lastY) / viewport.zoom;
-        lastX = me.clientX;
-        lastY = me.clientY;
-        moveStageNodes(stage.id, dx, dy, true, false);
-        moved = true;
-      };
-      const onUp = () => {
-        window.removeEventListener('pointermove', onMove);
-        window.removeEventListener('pointerup', onUp);
-        window.removeEventListener('pointercancel', onUp);
-        if (moved) useGraphStore.getState().markHistory();
-      };
-      window.addEventListener('pointermove', onMove);
-      window.addEventListener('pointerup', onUp);
-      window.addEventListener('pointercancel', onUp);
-    },
-    [allLocked, viewport.zoom, moveStageNodes],
-  );
-
-  /** 拖拽阶段域右下角手柄:调整域大小,结束记录一次历史 */
-  const handleStageResizeStart = useCallback(
-    (e: React.PointerEvent, stage: Stage) => {
-      if (allLocked) return;
-      let lastX = e.clientX;
-      let lastY = e.clientY;
-      let moved = false;
-      const onMove = (me: PointerEvent) => {
-        const dw = (me.clientX - lastX) / viewport.zoom;
-        const dh = (me.clientY - lastY) / viewport.zoom;
-        lastX = me.clientX;
-        lastY = me.clientY;
-        // 用当前宽高累加增量,避免反复累加
-        const cur = useGraphStore.getState().stages.find((x) => x.id === stage.id);
-        resizeStage(stage.id, (cur?.width ?? stage.width) + dw, (cur?.height ?? stage.height) + dh, false);
-        moved = true;
-      };
-      const onUp = () => {
-        window.removeEventListener('pointermove', onMove);
-        window.removeEventListener('pointerup', onUp);
-        window.removeEventListener('pointercancel', onUp);
-        if (moved) useGraphStore.getState().markHistory();
-      };
-      window.addEventListener('pointermove', onMove);
-      window.addEventListener('pointerup', onUp);
-      window.addEventListener('pointercancel', onUp);
-    },
-    [allLocked, viewport.zoom, resizeStage],
-  );
-
+  /** 节点拖拽中:连线提升/降级等画布状态(略) */
   /** 判断事件目标是否在节点/连线上,分别弹出节点菜单或连线菜单,否则弹画布菜单 */
   const openContextMenuAt = useCallback(
     (clientX: number, clientY: number, target: EventTarget | null) => {
@@ -1331,50 +1228,6 @@ export default function FlowCanvas() {
             );
           })}
         </div>
-
-        {/* [B4] Legacy 阶段域框视觉已隔离(数据/机制保留,不再渲染)。MatrixVisualLayer 承担 Stage 视觉。 */}
-        {LEGACY_STAGE_VISUAL && (
-          <div className="stage-layer">
-            {stages.map((st) => (
-              <StageComponent
-                key={st.id}
-                stage={st}
-                viewport={viewport}
-                locked={allLocked}
-                flash={stageFlashId === st.id}
-                onRename={(name) => updateStage(st.id, { name })}
-                onSelect={() => selectStage(st.id)}
-                onContextMenu={(e) => handleStageContextMenu(e, st)}
-                onDragStart={(e) => handleStageDragStart(e, st)}
-                onResizeStart={(e) => handleStageResizeStart(e, st)}
-              />
-            ))}
-          </div>
-        )}
-
-        {/* [B4] Legacy 泳道渲染已隔离(数据/函数保留,不再渲染)。MatrixVisualLayer 承担 Swimlane 视觉。 */}
-        {LEGACY_SWIMLANE_VISUAL && swimlaneEnabled && (
-          <div className="swimlane-layer">
-            {swimlaneBounds.map((lane) => {
-              const part = participants.find((p) => p.id === lane.participantId);
-              const typeLabel = part ? PARTICIPANT_TYPE_LABELS[part.type] ?? part.type : '';
-              return (
-                <div
-                  key={lane.participantId}
-                  className="swimlane"
-                  style={{
-                    left: lane.x * viewport.zoom + viewport.x,
-                    top: lane.y * viewport.zoom + viewport.y,
-                    width: lane.width * viewport.zoom,
-                    height: lane.height * viewport.zoom,
-                  }}
-                >
-                  <span className="swimlane-label">{part?.name ?? '未分配'}{typeLabel ? ` · ${typeLabel}` : ''}</span>
-                </div>
-              );
-            })}
-          </div>
-        )}
 
         {/* Phase B B2:Matrix body bands(derived visual layer,pointer-events:none) */}
         <MatrixVisualLayer />

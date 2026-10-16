@@ -11,6 +11,7 @@ import {
 } from '../types';
 import { useGraphStore } from '../store/graphStore';
 import { computeCompositeActor, computeCompositePorts } from '../lib/composite';
+import { confirmDialogAsync } from '../lib/dialog';
 import ActorIcon from './ActorIcon';
 
 /* ---------------- 基础控件 ---------------- */
@@ -486,10 +487,17 @@ function NodeProperties({ nodeId }: { nodeId: string }) {
             style={{ flex: isComposite ? 1 : undefined, justifyContent: 'center' }}
             disabled={disabled}
             onClick={() => {
-              if (confirm(isComposite ? '确定删除该组合节点?其子节点会恢复并保留,连线还原。' : '确定删除该节点?其所有连线也会被删除。')) {
-                deleteNode(nodeId);
-                setSelected(null);
-              }
+              void confirmDialogAsync(
+                isComposite
+                  ? '确定删除该组合节点?其子节点会恢复并保留,连线还原。'
+                  : '确定删除该节点?其所有连线也会被删除。',
+                { title: '删除节点', confirmLabel: '删除', danger: true },
+              ).then((ok) => {
+                if (ok) {
+                  deleteNode(nodeId);
+                  setSelected(null);
+                }
+              });
             }}
           >
             🗑 删除
@@ -580,10 +588,16 @@ function ArtifactProperties({ edgeId }: { edgeId: string }) {
             style={{ flex: 1, justifyContent: 'center' }}
             disabled={allLocked}
             onClick={() => {
-              if (confirm('移除该中间产物?')) {
-                setArtifact(edgeId, null);
-                setSelected({ kind: 'edge', id: edgeId });
-              }
+              void confirmDialogAsync('移除该中间产物?', {
+                title: '移除产物',
+                confirmLabel: '移除',
+                danger: true,
+              }).then((ok) => {
+                if (ok) {
+                  setArtifact(edgeId, null);
+                  setSelected({ kind: 'edge', id: edgeId });
+                }
+              });
             }}
           >
             🗑 移除产物
@@ -694,10 +708,16 @@ function EdgeProperties({ edgeId }: { edgeId: string }) {
           style={{ width: '100%', justifyContent: 'center' }}
           disabled={allLocked}
           onClick={() => {
-            if (confirm('确定删除这条连线?')) {
-              deleteEdge(edgeId);
-              setSelected(null);
-            }
+            void confirmDialogAsync('确定删除这条连线?', {
+              title: '删除连线',
+              confirmLabel: '删除',
+              danger: true,
+            }).then((ok) => {
+              if (ok) {
+                deleteEdge(edgeId);
+                setSelected(null);
+              }
+            });
           }}
         >
           🗑 删除连线

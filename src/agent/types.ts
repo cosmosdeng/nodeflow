@@ -62,6 +62,12 @@ export interface AgentRequest {
   protocolVersion: string;
   requestId: string;
   type: AgentRequestType;
+  /**
+   * 乐观并发:客户端读取到的 revision。
+   * 提供时若与当前 agentRevision 不一致则拒绝执行(REVISION_CONFLICT),
+   * 避免人机并发 last-writer-wins 静默覆盖。查询可不带。
+   */
+  expectedRevision?: number;
   payload?: unknown;
 }
 
@@ -72,6 +78,7 @@ export type AgentErrorCode =
   | 'COMMAND_FAILED'
   | 'ASSERT_NOT_PASSED'
   | 'CAPABILITY_NOT_ENABLED'
+  | 'REVISION_CONFLICT'
   | 'INTERNAL';
 
 export interface AgentError {

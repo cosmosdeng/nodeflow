@@ -153,6 +153,8 @@ describe('NodeFlow MCP Adapter — normal capabilities', () => {
       arguments: { type: 'assertNodeExists', nodeId: 'not-exist' },
     });
     const assertRes = badAssert as unknown as ResultLike;
+    // 失败断言与其它失败一致:isError + 结构化 passed/actual/expected
+    expect(assertRes.isError ?? false).toBe(true);
     const data = textData(assertRes) as { passed?: boolean };
     expect(data.passed).toBe(false);
   });

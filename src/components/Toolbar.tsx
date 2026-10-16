@@ -16,10 +16,7 @@ import {
 } from '../lib/exportImage';
 import { buildSvg, downloadSvg } from '../lib/exportSvg';
 import { confirmAndCloseDocument } from '../lib/closeProject';
-
-// [experiment: hide-swimlane-ui] 泳道两个产品入口(开关/整理)隐藏,全部实现保留。
-// 置回 true 即恢复显示。
-const SWIMLANE_UI_VISIBLE = false;
+import { alertDialogAsync, confirmDialogAsync } from '../lib/dialog';
 
 interface Props {
   showOutline: boolean;
@@ -91,9 +88,6 @@ export default function Toolbar({
   const loadProject = useGraphStore((s) => s.loadProject);
   const closeDocument = useGraphStore((s) => s.closeDocument);
   const saveDocument = useGraphStore((s) => s.saveDocument);
-  const swimlaneEnabled = useGraphStore((s) => s.swimlaneEnabled);
-  const toggleSwimlane = useGraphStore((s) => s.toggleSwimlane);
-  const arrangeAllSwimlanes = useGraphStore((s) => s.arrangeAllSwimlanes);
   const arrangePending = useGraphStore((s) => s.arrangePending);
   const runSmartArrange = useGraphStore((s) => s.runSmartArrange);
   const showStageBands = useGraphStore((s) => s.showStageBands);
@@ -152,7 +146,7 @@ export default function Toolbar({
         // 文件缺少视口信息时,自动适配到可见范围
         setTimeout(() => fitView({ padding: 0.2, duration: 400 }), 80);
       } catch {
-        alert('无法解析该文件,请确认是 NodeFlow 导出的 JSON。');
+        void alertDialogAsync('无法解析该文件,请确认是 NodeFlow 导出的 JSON。');
       }
     };
     reader.readAsText(file);
@@ -178,7 +172,7 @@ export default function Toolbar({
       if (ok) {
         setTimeout(() => fitView({ padding: 0.2, duration: 400 }), 80);
       } else {
-        alert(useGraphStore.getState().loadError ?? '无法解析项目文件,请确认是 NodeFlow 保存的项目文件。');
+        void alertDialogAsync(useGraphStore.getState().loadError ?? '无法解析项目文件,请确认是 NodeFlow 保存的项目文件。');
       }
     };
     reader.readAsText(file);
@@ -223,7 +217,7 @@ export default function Toolbar({
       }
     } catch (e) {
       console.error(e);
-      alert(`导出 ${format.toUpperCase()} 失败:${e instanceof Error ? e.message : String(e)}`);
+      void alertDialogAsync(`导出 ${format.toUpperCase()} 失败:${e instanceof Error ? e.message : String(e)}`);
     }
   };
 
@@ -247,10 +241,15 @@ export default function Toolbar({
             <button
               disabled={allLocked}
               onClick={() => {
-                if (confirm('新建一个空项目?当前项目保持不变,可通过标签切换。')) {
-                  createDocument();
-                  setFileOpen(false);
-                }
+                void confirmDialogAsync('新建一个空项目?当前项目保持不变,可通过标签切换。', {
+                  title: '新建项目',
+                  confirmLabel: '新建',
+                }).then((ok) => {
+                  if (ok) {
+                    createDocument();
+                    setFileOpen(false);
+                  }
+                });
               }}
             >
               🆕 新建项目
@@ -353,8 +352,14 @@ export default function Toolbar({
             <button
               disabled={allLocked}
               onClick={() => {
-                if (confirm('清空画布上的所有节点与连线?')) clearGraph();
-                setFileOpen(false);
+                void confirmDialogAsync('清空画布上的所有节点与连线?', {
+                  title: '清空画布',
+                  confirmLabel: '清空',
+                  danger: true,
+                }).then((ok) => {
+                  if (ok) clearGraph();
+                  setFileOpen(false);
+                });
               }}
             >
               🧹 清空画布
@@ -495,20 +500,6 @@ export default function Toolbar({
       <button className={`tb-btn ${showParticipants ? 'active' : ''}`} onClick={onToggleParticipants}>
         👤 参与方
       </button>
-      {SWIMLANE_UI_VISIBLE && (
-        <>
-          <button
-            className={`tb-btn ${swimlaneEnabled ? 'active' : ''}`}
-            onClick={toggleSwimlane}
-            title="泳道显示开关(不改变节点位置/参与方)"
-          >
-            🏊 泳道
-          </button>
-          <button className="tb-btn" onClick={arrangeAllSwimlanes} title="把节点按参与方整理到泳道(只改位置,不改参与方)">
-            ⇣ 整理泳道
-          </button>
-        </>
-      )}
 
       <span className="sep" />
 

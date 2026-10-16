@@ -143,6 +143,11 @@ export default function EditableText({
     <div
       ref={ref}
       className={[className, 'nf-editable'].filter(Boolean).join(' ')}
+      role="textbox"
+      aria-label={title || placeholder || '文本'}
+      aria-multiline={multiline ? true : undefined}
+      aria-readonly={disabled || !editing ? true : undefined}
+      tabIndex={disabled ? -1 : 0}
       contentEditable={editing && !disabled}
       suppressContentEditableWarning
       data-placeholder={placeholder}

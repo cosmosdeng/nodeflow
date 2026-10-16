@@ -19,6 +19,7 @@ import { runCommand } from './commands';
 import { runAssertion } from './assertions';
 import { isAgentTestCommandsEnabled, TEST_ONLY_COMMANDS } from './capabilities';
 import { captureCanvasScreenshot, captureWindowScreenshot } from './screenshots';
+import { useGraphStore } from '../store/graphStore';
 
 type QueryKey =
   | 'getDocument'
@@ -42,6 +43,14 @@ const QUERIES: Record<QueryKey, () => unknown> = {
   getGraphState: () => getGraphStateDto(),
   getAnnotations: () => getAnnotationsDto(),
 };
+
+/** 查询/断言/截图不推进 revision,不参与乐观并发检查 */
+const NON_MUTATING = new Set<string>([
+  ...Object.keys(QUERIES),
+  'assert',
+  'getCanvasScreenshot',
+  'getWindowScreenshot',
+]);
 
 function ok(requestId: string, data: unknown): AgentResponse {
   return { protocolVersion: AGENT_PROTOCOL_VERSION, requestId, success: true, data };
@@ -69,6 +78,24 @@ export async function executeAgentRequest(req: AgentRequest): Promise<AgentRespo
     });
   }
 
+  // 乐观并发:mutation 带 expectedRevision 时,revision 不匹配则拒绝
+  if (req.expectedRevision !== undefined && !NON_MUTATING.has(req.type)) {
+    if (typeof req.expectedRevision !== 'number' || !Number.isFinite(req.expectedRevision)) {
+      return fail(req.requestId, 'INVALID_REQUEST', 'expectedRevision 必须是有限数字', {
+        expectedRevision: req.expectedRevision,
+      });
+    }
+    const current = useGraphStore.getState().agentRevision;
+    if (current !== req.expectedRevision) {
+      return fail(
+        req.requestId,
+        'REVISION_CONFLICT',
+        `revision 冲突:期望 ${req.expectedRevision},当前 ${current};请重新读取状态后再提交`,
+        { expectedRevision: req.expectedRevision, actualRevision: current },
+      );
+    }
+  }
+
   try {
     if ((req.type as string) in QUERIES) {
       return ok(req.requestId, QUERIES[req.type as QueryKey]());
@@ -94,9 +121,9 @@ export async function executeAgentRequest(req: AgentRequest): Promise<AgentRespo
       e instanceof Error && (e as { code?: AgentErrorCode }).code === 'INVALID_PAYLOAD'
         ? 'INVALID_PAYLOAD'
         : 'COMMAND_FAILED';
+    // 不回显完整 payload,只回显 type
     return fail(req.requestId, code, e instanceof Error ? e.message : String(e), {
       type: req.type,
-      payload: req.payload,
     });
   }
 }

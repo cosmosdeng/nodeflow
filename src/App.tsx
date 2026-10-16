@@ -6,9 +6,11 @@ import PropertiesPanel from './components/PropertiesPanel';
 import HistoryPanel from './components/HistoryPanel';
 import ParticipantsPanel from './components/ParticipantsPanel';
 import CompositePopupView from './components/CompositePopupView';
+import DialogHost from './components/DialogHost';
 import { openCompositePopup } from './lib/compositePopup';
 import { useGraphStore } from './store/graphStore';
 import { confirmAndCloseDocument } from './lib/closeProject';
+import { alertDialogAsync } from './lib/dialog';
 
 function MainApp() {
   const [showOutline, setShowOutline] = useState(false);
@@ -57,7 +59,7 @@ function MainApp() {
           useGraphStore.getState().fitGraph?.();
         }, 120);
       } else {
-        alert(useGraphStore.getState().loadError ?? '无法打开该项目文件,请确认是 NodeFlow 保存的项目。');
+        void alertDialogAsync(useGraphStore.getState().loadError ?? '无法打开该项目文件,请确认是 NodeFlow 保存的项目。');
       }
     });
     return off;
@@ -90,13 +92,13 @@ function MainApp() {
         // 复制选中节点/组合到剪贴板(跨画布/跨项目共享)
         e.preventDefault();
         const n = copySelection();
-        if (n === 0) alert('未选中任何节点,无法复制。请先点击选中一个或多个节点。');
+        if (n === 0) void alertDialogAsync('未选中任何节点,无法复制。请先点击选中一个或多个节点。');
       } else if (key === 'v') {
         // 粘贴到当前画布
         e.preventDefault();
         const n = pasteClipboard();
         if (n === 0 && !useGraphStore.getState().clipboard) {
-          alert('剪贴板为空,请先选中节点后按 ⌘/Ctrl+C 复制。');
+          void alertDialogAsync('剪贴板为空,请先选中节点后按 ⌘/Ctrl+C 复制。');
         }
       }
     };
@@ -219,6 +221,8 @@ function MainApp() {
             : '双击画布空白添加节点 · 拖拽节点移动 · 从端口拖出连线 · Delete 删除'}
         </span>
       </div>
+
+      <DialogHost />
     </div>
   );
 }
