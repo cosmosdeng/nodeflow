@@ -4,6 +4,40 @@
 
 ---
 
+## 2026-10-17（二）god store 拆分
+
+### 已完成
+
+**拆分 `graphStore.ts`（3437 行 → 170 行 composer）**：
+
+| 模块 | 行数 | 职责 |
+|---|---|---|
+| `store/types.ts` | 332 | FlowStore / Selection / AutoEditTarget |
+| `store/persistence.ts` | 439 | 示例图、偏好、多文档 localStorage |
+| `store/compositeHelpers.ts` | 434 | 塌缩/展开/隐藏刷新/端口重映射 |
+| `store/historyHelpers.ts` | 107 | makeSnapshot / restoreSnapshotFields |
+| `store/agentRevision.ts` | 80 | revision 指纹 |
+| `store/runtimeFlags.ts` | 17 | 跨 action 运行时标志 |
+| `store/slices/deps.ts` | 8 | SliceDeps 类型 |
+| `store/slices/history.ts` | 73 | undo/redo/jumpTo |
+| `store/slices/composite.ts` | 133 | 组合节点/标签 |
+| `store/slices/edges.ts` | 270 | 端口/连线/产物 |
+| `store/slices/nodes.ts` | 357 | 节点 CRUD/剪贴板/注释 |
+| `store/slices/flow.ts` | 367 | RF changes/选中/主题/布局 |
+| `store/slices/structure.ts` | 481 | Stage/参与方/排列/泳道 |
+| `store/slices/documents.ts` | 539 | 多文档/存取/序列化 |
+| `store/graphStore.ts` | **170** | composer + syncActiveDoc + 订阅 |
+
+**对外 API 不变**：`useGraphStore` / `Selection` / `AutoEditTarget` 导出保持兼容。
+
+### 验证
+
+- **单元测试**：447 用例 / 47 文件全绿
+- **类型检查**：`tsc` 干净
+- **构建**：`bun run build` 通过
+
+---
+
 ## 2026-10-17
 
 ### 背景

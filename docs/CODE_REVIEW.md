@@ -36,7 +36,7 @@
 
 | 风险 | 位置 | 状态 |
 |---|---|---|
-| **god store** | `graphStore.ts` ~3400 行 / ~183 action | 🔴 **遗留**（建议单独 PR） |
+| **god store** | `graphStore.ts` 3437 行 | ✅ 已拆分（2026-10-17）：composer 170 行 + types/persistence/helpers + 7 个 action 切片 |
 | **文档镜像 + 全量回写** | `syncActiveDoc` 每次 `set` 整份 documents 重写 | 🟡 遗留 |
 | **快照字段四处复制** | `markHistory`/`undo`/`redo`/`jumpTo` | ✅ 已抽 `makeSnapshot`/`restoreSnapshotFields` |
 | **类型逃生舱** | `types.ts` 上的 `[key: string]: unknown` | 🟡 遗留 |
@@ -164,12 +164,13 @@
 
 ### 🔴 下一步（按优先级）
 
-1. **拆 `graphStore.ts`**：按 history / composite / documents / stages / participants / agent 切片（单独 PR + 先补 store 测试）
+1. ~~**拆 `graphStore.ts`**~~ ✅ 已完成（2026-10-17）
 2. **键盘连线 / 移动替代**（完整 a11y）
 3. **`friendly.ts` 错误码纳入 `AgentErrorCode` 枚举**
 4. **`edgePath` 多障碍绕行**；`layout` 环处理
 5. **ESLint/Prettier**；`.mcp.json` 清理
 6. **npm `latest` dist-tag** 指向 stable；`docs/UI_UX_DESIGN.md` 与实现同步
+7. **`syncActiveDoc` 细粒度同步**（当前整份 documents 回写）
 
 ---
 
