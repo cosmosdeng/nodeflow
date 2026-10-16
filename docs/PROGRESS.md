@@ -8,7 +8,7 @@
 
 ### 已完成
 
-**拆分 `graphStore.ts`（3437 行 → 170 行 composer）**：
+**拆分 `graphStore.ts`（3437 行 → 170 行 composer）**（提交 `623717d`）：
 
 | 模块 | 行数 | 职责 |
 |---|---|---|
@@ -35,6 +35,29 @@
 - **单元测试**：447 用例 / 47 文件全绿
 - **类型检查**：`tsc` 干净
 - **构建**：`bun run build` 通过
+- **发布**：已推送 `origin/next`（`623717d`）
+
+### 今日会话收尾
+
+- 完整链路：代码评估 → P0/P1/P2 修复 → god store 拆分 → 文档 → GitHub
+- **next 分支今日累计 5 个提交**已全部同步：
+  - `b267fb4` fix(history,security)
+  - `421f7ac` fix(test,perf)
+  - `465ee38` feat(agent,ui)
+  - `e66c837` docs: PROGRESS
+  - `b9d2a37` docs: CODE_REVIEW
+  - `623717d` refactor(store): god store 拆分
+- 代理端口：本机 NinjaDesktop 当前 **7897**（历史记录为 7890）；push 用
+  `git -c http.proxy=http://127.0.0.1:7897 -c https.proxy=http://127.0.0.1:7897 push`
+
+### 遗留（接 `CODE_REVIEW.md` 路线图）
+
+1. 键盘连线 / 移动替代（完整 a11y）
+2. `friendly.ts` 错误码纳入 `AgentErrorCode` 枚举
+3. `edgePath` 多障碍绕行；`layout` 环处理
+4. ESLint/Prettier；`.mcp.json` 清理
+5. npm `latest` dist-tag 指向 stable
+6. `syncActiveDoc` 细粒度同步（当前整份 documents 回写）
 
 ---
 
