@@ -107,6 +107,9 @@ getCanvasScreenshot / getWindowScreenshot
 
 - 仅本机：`127.0.0.1:8787`(可用 `NODEFLOW_AGENT_BRIDGE_PORT` 覆盖)。
 - NodeFlow next 默认自动启动(供 MCP/WorkBuddy 连接)；可用 `NODEFLOW_AGENT_BRIDGE=0` 显式关闭。只监听 127.0.0.1。
+- **强制共享密钥**：启动时生成/读取 token，写入 `~/.nodeflow/agent-bridge.json`（0600）。客户端须带
+  `Authorization: Bearer <token>` 或 `X-NodeFlow-Token: <token>`，并带 `X-NodeFlow-Agent: 1`。
+  也可用环境变量 `NODEFLOW_AGENT_TOKEN` 显式指定（两侧一致）。`/agent/v1/health` 除外。
 
 ### Capabilities
 
@@ -132,8 +135,14 @@ GET  /agent/v1/screenshot/canvas|window
 ## 10. Security
 
 - 仅监听 127.0.0.1，绝不监听公网。
+- **共享密钥**：无 token 的非 health 请求一律 401；token 存 `~/.nodeflow/agent-bridge.json`（0600）。
+- **Host 校验**：Host 必须是 `127.0.0.1:port` / `localhost:port` / `[::1]:port`，阻断 DNS rebinding。
+- **Origin 校验**：带浏览器 http(s) Origin 的请求一律 403，阻断 CSRF。
+- **自定义头** `X-NodeFlow-Agent: 1`：阻断简单跨站表单/文本请求。
 - 无 eval / arbitrary JS / arbitrary IPC / filesystem / shell。
-- IPC 固定白名单 channel：`agent:bridge:request` / `agent:bridge:response` / `agent:capture-window`。
+- IPC 固定白名单 channel：`agent:bridge:request` / `agent:bridge:response` / `agent:capture-window`；
+  response 仅接受主窗口 `webContents` 回传。
+- `shell.openExternal` 仅允许 `http:` / `https:`。
 - 所有 HTTP 输入都经 runtime validation → typed DTO；malformed 请求返回结构化错误。
 
 ## 11. Future MCP adapter

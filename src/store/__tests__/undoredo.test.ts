@@ -34,9 +34,18 @@ beforeEach(() => {
     edges: [],
     stages: [],
     annotations: [],
+    participants: [],
+    organizations: [],
+    participantOrder: [],
+    participantOrderMode: 'auto',
+    stageOrder: [],
+    arrangePending: false,
+    compositeTabs: [],
+    activeTabId: 'main',
     past: [],
     future: [],
     selected: null,
+    allLocked: false,
     viewport: { x: 0, y: 0, zoom: 1 },
   });
 });
@@ -158,5 +167,128 @@ describe('P4-05 Undo / Redo', () => {
     useGraphStore.getState().undo();
     useGraphStore.getState().undo();
     expect(useGraphStore.getState().nodes).toHaveLength(0); // 回到起点
+  });
+});
+
+describe('jumpTo 历史快照字段完整性', () => {
+  const p1 = { id: 'p1', name: 'Artist', type: 'person' as const, organizationId: 'o1' };
+  const o1 = { id: 'o1', name: 'Studio' };
+  const s1 = { id: 's1', name: '域', x: 0, y: 0, width: 100, height: 100, nodeIds: [] as string[] };
+
+  function stateA() {
+    return {
+      nodes: [],
+      edges: [],
+      participants: [p1],
+      organizations: [o1],
+      participantOrder: ['p1'],
+      participantOrderMode: 'user' as const,
+      stages: [s1],
+      stageOrder: ['s1'],
+      arrangePending: true,
+    };
+  }
+
+  function stateB() {
+    return {
+      nodes: [],
+      edges: [],
+      participants: [],
+      organizations: [],
+      participantOrder: [],
+      participantOrderMode: 'auto' as const,
+      stages: [],
+      stageOrder: [],
+      arrangePending: false,
+    };
+  }
+
+  it('jumpTo 恢复 participants / organizations / participantOrder / mode', () => {
+    useGraphStore.setState({ ...stateA(), past: [], future: [] });
+    useGraphStore.getState().markHistory(); // past[0] = A
+    useGraphStore.setState(stateB());
+
+    useGraphStore.getState().jumpTo(0);
+    const st = useGraphStore.getState();
+    expect(st.participants.map((p) => p.id)).toEqual(['p1']);
+    expect(st.organizations.map((o) => o.id)).toEqual(['o1']);
+    expect(st.participantOrder).toEqual(['p1']);
+    expect(st.participantOrderMode).toBe('user');
+  });
+
+  it('jumpTo 恢复 stageOrder / arrangePending', () => {
+    useGraphStore.setState({ ...stateA(), past: [], future: [] });
+    useGraphStore.getState().markHistory();
+    useGraphStore.setState(stateB());
+
+    useGraphStore.getState().jumpTo(0);
+    const st = useGraphStore.getState();
+    expect(st.stageOrder).toEqual(['s1']);
+    expect(st.arrangePending).toBe(true);
+  });
+
+  it('jumpTo 的未来快照同样保存 participants/order', () => {
+    useGraphStore.setState({ ...stateA(), past: [], future: [] });
+    useGraphStore.getState().markHistory(); // past[0] = A
+    useGraphStore.setState(stateB()); // 当前 = B
+
+    useGraphStore.getState().jumpTo(0); // 回到 A，B 进 future
+    expect(useGraphStore.getState().participants.map((p) => p.id)).toEqual(['p1']);
+
+    useGraphStore.getState().redo(); // 回到 B
+    const st = useGraphStore.getState();
+    expect(st.participants).toHaveLength(0);
+    expect(st.participantOrder).toEqual([]);
+    expect(st.participantOrderMode).toBe('auto');
+    expect(st.arrangePending).toBe(false);
+  });
+
+  it('jumpTo 与 undo 对同一快照恢复结果一致', () => {
+    // 场景 1: jumpTo
+    useGraphStore.setState({ ...stateA(), past: [], future: [] });
+    useGraphStore.getState().markHistory();
+    useGraphStore.setState(stateB());
+    useGraphStore.getState().jumpTo(0);
+    const viaJump = useGraphStore.getState();
+    const jumpFields = {
+      participants: viaJump.participants.map((p) => p.name),
+      participantOrder: viaJump.participantOrder,
+      participantOrderMode: viaJump.participantOrderMode,
+      stageOrder: viaJump.stageOrder,
+      arrangePending: viaJump.arrangePending,
+    };
+
+    // 场景 2: undo 到同一结构
+    useGraphStore.setState({ ...stateA(), past: [], future: [] });
+    useGraphStore.getState().markHistory();
+    useGraphStore.setState(stateB());
+    useGraphStore.getState().undo();
+    const viaUndo = useGraphStore.getState();
+    expect(viaUndo.participants.map((p) => p.name)).toEqual(jumpFields.participants);
+    expect(viaUndo.participantOrder).toEqual(jumpFields.participantOrder);
+    expect(viaUndo.participantOrderMode).toBe(jumpFields.participantOrderMode);
+    expect(viaUndo.stageOrder).toEqual(jumpFields.stageOrder);
+    expect(viaUndo.arrangePending).toBe(jumpFields.arrangePending);
+  });
+
+  it('旧快照缺字段时回退为默认空值，不抛错', () => {
+    useGraphStore.setState({
+      ...stateB(),
+      past: [
+        {
+          nodes: [],
+          edges: [],
+          viewport: { x: 0, y: 0, zoom: 1 },
+          // 模拟旧快照：无 participants 等可选字段
+          at: 1,
+        },
+      ],
+      future: [],
+    });
+    useGraphStore.getState().jumpTo(0);
+    const st = useGraphStore.getState();
+    expect(st.participants).toEqual([]);
+    expect(st.participantOrderMode).toBe('auto');
+    expect(st.arrangePending).toBe(false);
   });
 });

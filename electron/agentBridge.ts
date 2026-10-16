@@ -5,12 +5,25 @@
  * 转发给 renderer 的 Agent Core 执行,再把响应回传。
  *
  * 安全边界:
- * - NodeFlow next 默认自动启动(仅 127.0.0.1);可用 NODEFLOW_AGENT_BRIDGE=0 关闭;
- * - 只监听 127.0.0.1,绝不监听公网;
+ * - 仅监听 127.0.0.1,绝不监听公网;
+ * - 强制共享密钥(Authorization: Bearer / X-NodeFlow-Token),无密钥拒绝一切非 health 请求;
+ * - 校验 Host 必须为 127.0.0.1/localhost:<port>,阻断 DNS rebinding;
+ * - 拒绝浏览器 Origin(无 Origin 或非浏览器客户端才放行),阻断 CSRF;
+ * - 要求 X-NodeFlow-Agent: 1 自定义头,阻断简单跨站表单/文本请求;
  * - 无 eval / 任意 JS / arbitrary IPC / filesystem / shell 暴露。
  */
+import crypto from 'node:crypto';
+import fs from 'node:fs';
 import http from 'node:http';
+import os from 'node:os';
+import path from 'node:path';
 import { BrowserWindow, ipcMain } from 'electron';
+import {
+  extractBearerToken,
+  isAllowedHost,
+  isForbiddenOrigin,
+  timingSafeEqual,
+} from './bridgeAuth';
 
 export interface AgentEnvelope {
   protocolVersion: string;
@@ -29,9 +42,22 @@ export interface AgentBridgeResponse {
 
 export const AGENT_PROTOCOL_VERSION = '1';
 export const AGENT_DEFAULT_PORT = 8787;
+export const AGENT_TOKEN_FILE = path.join(os.homedir(), '.nodeflow', 'agent-bridge.json');
 
 const PENDING = new Map<string, (resp: AgentBridgeResponse) => void>();
 const TIMEOUT_MS = 30_000;
+
+export interface AgentBridgeOptions {
+  port?: number;
+  /** 显式提供 token;不提供则从 env / token 文件读取,再没有则生成并落盘 */
+  token?: string;
+}
+
+export interface AgentBridgeHandle {
+  server: http.Server;
+  port: number;
+  token: string;
+}
 
 function respondJson(res: http.ServerResponse, status: number, body: unknown): void {
   const text = JSON.stringify(body);
@@ -66,6 +92,10 @@ function forward(req: AgentEnvelope, cb: (resp: AgentBridgeResponse) => void): v
   }
   if (win.webContents.isLoading()) {
     cb(makeResponse(req.requestId, false, undefined, { code: 'INTERNAL', message: '渲染器尚未就绪,请稍后重试' }));
+    return;
+  }
+  if (PENDING.has(req.requestId)) {
+    cb(makeResponse(req.requestId, false, undefined, { code: 'INVALID_REQUEST', message: `requestId 冲突: ${req.requestId}` }));
     return;
   }
   PENDING.set(req.requestId, cb);
@@ -108,7 +138,7 @@ function parseBody(req: http.IncomingMessage): Promise<unknown> {
       }
       try {
         resolve(JSON.parse(raw));
-      } catch (e) {
+      } catch {
         reject(new Error('请求体不是合法 JSON'));
       }
     });
@@ -118,6 +148,39 @@ function parseBody(req: http.IncomingMessage): Promise<unknown> {
 
 function runInRenderer(req: AgentEnvelope, res: http.ServerResponse): void {
   forward(req, (resp) => respondJson(res, resp.success ? 200 : 200, resp));
+}
+
+function extractToken(req: http.IncomingMessage): string | null {
+  const custom = req.headers['x-nodeflow-token'];
+  return extractBearerToken(
+    typeof req.headers.authorization === 'string' ? req.headers.authorization : undefined,
+    typeof custom === 'string' ? custom : undefined,
+  );
+}
+
+function writeTokenFile(token: string, port: number): void {
+  const dir = path.dirname(AGENT_TOKEN_FILE);
+  fs.mkdirSync(dir, { recursive: true, mode: 0o700 });
+  fs.writeFileSync(
+    AGENT_TOKEN_FILE,
+    JSON.stringify({ token, port, pid: process.pid, at: Date.now() }, null, 2),
+    { mode: 0o600 },
+  );
+}
+
+/** 解析共享密钥:env 优先,其次 token 文件,最后生成新 token */
+export function resolveAgentToken(explicit?: string): string {
+  if (explicit && explicit.trim()) return explicit.trim();
+  const fromEnv = process.env.NODEFLOW_AGENT_TOKEN;
+  if (fromEnv && fromEnv.trim()) return fromEnv.trim();
+  try {
+    const raw = fs.readFileSync(AGENT_TOKEN_FILE, 'utf-8');
+    const parsed = JSON.parse(raw) as { token?: string };
+    if (parsed.token && typeof parsed.token === 'string') return parsed.token;
+  } catch {
+    /* 文件不存在/损坏则生成新 token */
+  }
+  return crypto.randomBytes(24).toString('hex');
 }
 
 export function registerBridgeIpcHandlers(): void {
@@ -138,8 +201,11 @@ export function registerBridgeIpcHandlers(): void {
       throw new Error(`窗口截图失败: ${e instanceof Error ? e.message : String(e)}`);
     }
   });
-  ipcMain.on('agent:bridge:response', (_e, resp: AgentBridgeResponse) => {
+  ipcMain.on('agent:bridge:response', (event, resp: AgentBridgeResponse) => {
     if (!resp || typeof resp.requestId !== 'string') return;
+    // 仅接受本窗口发回的响应
+    const win = readyWindow();
+    if (!win || event.sender.id !== win.webContents.id) return;
     const p = PENDING.get(resp.requestId);
     if (!p) return;
     PENDING.delete(resp.requestId);
@@ -147,26 +213,56 @@ export function registerBridgeIpcHandlers(): void {
   });
 }
 
-export function startAgentBridge(port = AGENT_DEFAULT_PORT): http.Server {
+export function startAgentBridge(options: AgentBridgeOptions = {}): AgentBridgeHandle {
+  const port = options.port ?? AGENT_DEFAULT_PORT;
+  const token = resolveAgentToken(options.token);
+  writeTokenFile(token, port);
   registerBridgeIpcHandlers();
 
   const server = http.createServer((req, res) => {
-    let url: URL;
-    try {
-      url = new URL(req.url ?? '/', `http://${req.headers.host ?? '127.0.0.1'}`);
-    } catch {
-      respondJson(res, 400, makeResponse('', false, undefined, { code: 'INVALID_REQUEST', message: 'URL 非法' }));
+    const reject = (status: number, code: string, message: string) => {
+      respondJson(res, status, makeResponse('', false, undefined, { code, message }));
+    };
+
+    if (!isAllowedHost(req.headers.host, port)) {
+      reject(403, 'FORBIDDEN', 'Host 校验失败(仅允许 127.0.0.1/localhost 本机访问)');
+      return;
+    }
+    if (isForbiddenOrigin(req.headers.origin)) {
+      reject(403, 'FORBIDDEN', '拒绝跨源 Origin 请求');
+      return;
+    }
+    if (req.headers['x-nodeflow-agent'] !== '1') {
+      reject(403, 'FORBIDDEN', '缺少 X-NodeFlow-Agent: 1 头');
       return;
     }
 
+    let url: URL;
+    try {
+      url = new URL(req.url ?? '/', `http://127.0.0.1:${port}`);
+    } catch {
+      reject(400, 'INVALID_REQUEST', 'URL 非法');
+      return;
+    }
+
+    // health 允许无 token(探活);其余端点一律要求密钥
+    const isHealth = req.method === 'GET' && url.pathname === '/agent/v1/health';
+    if (!isHealth) {
+      const provided = extractToken(req);
+      if (!provided || !timingSafeEqual(provided, token)) {
+        reject(401, 'UNAUTHORIZED', '缺少或无效的 Agent Bridge token');
+        return;
+      }
+    }
+
     if (req.method === 'GET') {
-      if (url.pathname === '/agent/v1/health') {
+      if (isHealth) {
         respondJson(res, 200, { status: 'ok', agentBridge: true });
         return;
       }
       const qtype = pathQueryType(url.pathname);
       if (!qtype) {
-        respondJson(res, 404, makeResponse('', false, undefined, { code: 'INVALID_REQUEST', message: `未知路径 ${url.pathname}` }));
+        reject(404, 'INVALID_REQUEST', `未知路径 ${url.pathname}`);
         return;
       }
       const id = `http_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
@@ -175,8 +271,8 @@ export function startAgentBridge(port = AGENT_DEFAULT_PORT): http.Server {
     }
 
     if (req.method === 'POST') {
-      const path = url.pathname;
-      if (path === '/agent/v1/command' || path === '/agent/v1/assert') {
+      const pathName = url.pathname;
+      if (pathName === '/agent/v1/command' || pathName === '/agent/v1/assert') {
         void parseBody(req)
           .then((body) => {
             const o = (typeof body === 'object' && body !== null ? body : {}) as Record<string, unknown>;
@@ -185,10 +281,9 @@ export function startAgentBridge(port = AGENT_DEFAULT_PORT): http.Server {
             const requestId =
               typeof o.requestId === 'string' && o.requestId ? o.requestId : `http_${Date.now()}`;
             const rawType = typeof o.type === 'string' ? o.type : '';
-            const type = path === '/agent/v1/assert' ? 'assert' : rawType;
-            // assert:外层 payload 或整体 body 中应含 {type: assertNodeExists, ...};不把请求信封本身当 payload
+            const type = pathName === '/agent/v1/assert' ? 'assert' : rawType;
             const payload =
-              path === '/agent/v1/assert'
+              pathName === '/agent/v1/assert'
                 ? o.payload !== undefined
                   ? o.payload
                   : { type: rawType, ...o }
@@ -199,26 +294,23 @@ export function startAgentBridge(port = AGENT_DEFAULT_PORT): http.Server {
             );
           })
           .catch((e) => {
-            respondJson(
-              res,
-              400,
-              makeResponse('', false, undefined, { code: 'INVALID_REQUEST', message: e instanceof Error ? e.message : String(e) }),
-            );
+            reject(400, 'INVALID_REQUEST', e instanceof Error ? e.message : String(e));
           });
         return;
       }
-      respondJson(res, 404, makeResponse('', false, undefined, { code: 'INVALID_REQUEST', message: `未知路径 ${path}` }));
+      reject(404, 'INVALID_REQUEST', `未知路径 ${pathName}`);
       return;
     }
 
-    respondJson(res, 405, makeResponse('', false, undefined, { code: 'INVALID_REQUEST', message: '仅支持 GET/POST' }));
+    reject(405, 'INVALID_REQUEST', '仅支持 GET/POST');
   });
 
   server.listen(port, '127.0.0.1', () => {
-    console.log(`[Agent Bridge] listening on http://127.0.0.1:${port} (local test only)`);
+    console.log(`[Agent Bridge] listening on http://127.0.0.1:${port} (token required)`);
+    console.log(`[Agent Bridge] token file: ${AGENT_TOKEN_FILE}`);
   });
   server.on('error', (e) => {
     console.error(`[Agent Bridge] start failed: ${e.message}`);
   });
-  return server;
+  return { server, port, token };
 }

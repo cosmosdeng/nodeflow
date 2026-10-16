@@ -5,13 +5,27 @@ import { startAgentBridge, AGENT_DEFAULT_PORT } from './agentBridge';
 
 const isDev = Boolean(process.env.ELECTRON_START_URL) || !app.isPackaged;
 /**
- * Agent Local Test Bridge:NodeFlow next 默认自动启动(只监听 127.0.0.1),供
- * @cosmosdeng/nodeflow-mcp / WorkBuddy 等本机 Agent 客户端连接。
+ * Agent Local Test Bridge:NodeFlow next 默认自动启动(只监听 127.0.0.1,强制 token),
+ * 供 @cosmosdeng/nodeflow-mcp / WorkBuddy 等本机 Agent 客户端连接。
  * 可用 NODEFLOW_AGENT_BRIDGE=0 显式关闭(测试/不想要时)。
  */
 const agentBridgeEnabled = process.env.NODEFLOW_AGENT_BRIDGE !== '0';
 /** test-only commands(reset / seedFixture)默认关闭:仅 NODEFLOW_AGENT_TEST_CMDS=1 时下发能力。 */
 const agentBridgeTestEnabled = process.env.NODEFLOW_AGENT_TEST_CMDS === '1';
+
+/** 只允许 http(s) 交给系统浏览器,阻断 file:/javascript:/自定义 scheme */
+function safeOpenExternal(url: string): void {
+  try {
+    const u = new URL(url);
+    if (u.protocol === 'http:' || u.protocol === 'https:') {
+      shell.openExternal(url);
+    } else {
+      console.warn(`[main] 拒绝打开非 http(s) 外链: ${url}`);
+    }
+  } catch {
+    console.warn(`[main] 拒绝打开非法 URL: ${url}`);
+  }
+}
 
 const appIcon = path.join(__dirname, '..', 'assets', 'icon.png');
 
@@ -109,7 +123,7 @@ function createWindow(): void {
           },
         });
         child.webContents.setWindowOpenHandler(({ url: inner }) => {
-          shell.openExternal(inner);
+          safeOpenExternal(inner);
           return { action: 'deny' };
         });
         if (isDev) {
@@ -124,7 +138,7 @@ function createWindow(): void {
     } catch {
       /* URL 解析失败则按外链处理 */
     }
-    shell.openExternal(url);
+    safeOpenExternal(url);
     return { action: 'deny' };
   });
 
@@ -202,7 +216,7 @@ app.whenReady().then(() => {
     const rawPort = process.env.NODEFLOW_AGENT_BRIDGE_PORT;
     const port = rawPort ? Number.parseInt(rawPort, 10) : AGENT_DEFAULT_PORT;
     if (Number.isFinite(port) && port > 0 && port < 65536) {
-      startAgentBridge(port);
+      startAgentBridge({ port });
     } else {
       console.error(`[Agent Bridge] 非法端口 NODEFLOW_AGENT_BRIDGE_PORT=${rawPort},跳过启动`);
     }

@@ -87,6 +87,7 @@ import {
   validateDocumentData,
   type NormalizedDocument,
 } from '../lib/document';
+import { validateGraph } from '../lib/graphValidation';
 
 const SAVE_KEY = 'nodeflow:graph:v1';
 const PREFS_KEY = 'nodeflow:prefs:v1';
@@ -1245,6 +1246,80 @@ function restoreTabsFromSnapshot(
   return { compositeTabs, activeTabId };
 }
 
+type SnapshotFields = Pick<
+  GraphSnapshot,
+  | 'nodes'
+  | 'edges'
+  | 'viewport'
+  | 'annotations'
+  | 'stages'
+  | 'participants'
+  | 'organizations'
+  | 'participantOrder'
+  | 'participantOrderMode'
+  | 'stageOrder'
+  | 'arrangePending'
+  | 'compositeTabs'
+  | 'activeTabId'
+  | 'at'
+>;
+
+/** 从 store 当前状态提取完整历史快照（单一来源，禁止再手写字段列表） */
+function makeSnapshot(s: SnapshotFields): GraphSnapshot {
+  return {
+    nodes: s.nodes,
+    edges: s.edges,
+    viewport: s.viewport,
+    annotations: s.annotations,
+    stages: s.stages,
+    participants: s.participants,
+    organizations: s.organizations,
+    participantOrder: s.participantOrder,
+    participantOrderMode: s.participantOrderMode,
+    stageOrder: s.stageOrder,
+    arrangePending: s.arrangePending,
+    compositeTabs: s.compositeTabs,
+    activeTabId: s.activeTabId,
+    at: s.at ?? Date.now(),
+  };
+}
+
+/** 从历史快照恢复字段到 store 切片（与 makeSnapshot 对称） */
+function restoreSnapshotFields(
+  s: FlowStore,
+  target: GraphSnapshot,
+): Pick<
+  FlowStore,
+  | 'nodes'
+  | 'edges'
+  | 'viewport'
+  | 'annotations'
+  | 'stages'
+  | 'participants'
+  | 'organizations'
+  | 'participantOrder'
+  | 'participantOrderMode'
+  | 'stageOrder'
+  | 'arrangePending'
+  | 'compositeTabs'
+  | 'activeTabId'
+> {
+  return {
+    nodes: target.nodes,
+    edges: target.edges,
+    viewport: target.viewport,
+    annotations: target.annotations ?? [],
+    stages: target.stages ?? [],
+    participants: target.participants ?? [],
+    organizations: target.organizations ?? [],
+    participantOrder: target.participantOrder ?? [],
+    participantOrderMode: target.participantOrderMode ?? 'auto',
+    stageOrder: target.stageOrder ?? [],
+    arrangePending: target.arrangePending ?? false,
+    ...restoreTabsFromSnapshot(s, target),
+  };
+}
+
 /** 关闭组合内部画布标签(纯函数),返回需要合并的状态片段 */
 function closeCompositeTabInState(s: FlowStore, id: string) {
   const compositeTabs = s.compositeTabs.filter((t) => t !== id);
@@ -1473,25 +1548,7 @@ export const useGraphStore = create<FlowStore>()(
 
     markHistory: () =>
       set((s) => ({
-        past: [
-          ...s.past.slice(-99),
-          {
-            nodes: s.nodes,
-            edges: s.edges,
-            viewport: s.viewport,
-            annotations: s.annotations,
-            stages: s.stages,
-            participants: s.participants,
-            organizations: s.organizations,
-            participantOrder: s.participantOrder,
-            participantOrderMode: s.participantOrderMode,
-            stageOrder: s.stageOrder,
-            arrangePending: s.arrangePending,
-            compositeTabs: s.compositeTabs,
-            activeTabId: s.activeTabId,
-            at: Date.now(),
-          },
-        ],
+        past: [...s.past.slice(-99), makeSnapshot(s)],
         future: [],
       })),
 
@@ -1502,37 +1559,8 @@ export const useGraphStore = create<FlowStore>()(
         const prev = s.past[s.past.length - 1];
         return {
           past: s.past.slice(0, -1),
-          future: [
-            ...s.future,
-            {
-              nodes: s.nodes,
-              edges: s.edges,
-              viewport: s.viewport,
-              annotations: s.annotations,
-              stages: s.stages,
-              participants: s.participants,
-              organizations: s.organizations,
-              participantOrder: s.participantOrder,
-              participantOrderMode: s.participantOrderMode,
-              stageOrder: s.stageOrder,
-              arrangePending: s.arrangePending,
-              compositeTabs: s.compositeTabs,
-              activeTabId: s.activeTabId,
-              at: Date.now(),
-            },
-          ],
-          nodes: prev.nodes,
-          edges: prev.edges,
-          viewport: prev.viewport,
-          annotations: prev.annotations ?? [],
-          stages: prev.stages ?? [],
-          participants: prev.participants ?? [],
-          organizations: prev.organizations ?? [],
-          participantOrder: prev.participantOrder ?? [],
-          participantOrderMode: prev.participantOrderMode ?? 'auto',
-          stageOrder: prev.stageOrder ?? [],
-          arrangePending: prev.arrangePending ?? false,
-          ...restoreTabsFromSnapshot(s, prev),
+          future: [...s.future, makeSnapshot(s)],
+          ...restoreSnapshotFields(s, prev),
         };
       });
     },
@@ -1544,37 +1572,8 @@ export const useGraphStore = create<FlowStore>()(
         const next = s.future[s.future.length - 1];
         return {
           future: s.future.slice(0, -1),
-          past: [
-            ...s.past,
-            {
-              nodes: s.nodes,
-              edges: s.edges,
-              viewport: s.viewport,
-              annotations: s.annotations,
-              stages: s.stages,
-              participants: s.participants,
-              organizations: s.organizations,
-              participantOrder: s.participantOrder,
-              participantOrderMode: s.participantOrderMode,
-              stageOrder: s.stageOrder,
-              arrangePending: s.arrangePending,
-              compositeTabs: s.compositeTabs,
-              activeTabId: s.activeTabId,
-              at: Date.now(),
-            },
-          ],
-          nodes: next.nodes,
-          edges: next.edges,
-          viewport: next.viewport,
-          annotations: next.annotations ?? [],
-          stages: next.stages ?? [],
-          participants: next.participants ?? [],
-          organizations: next.organizations ?? [],
-          participantOrder: next.participantOrder ?? [],
-          participantOrderMode: next.participantOrderMode ?? 'auto',
-          stageOrder: next.stageOrder ?? [],
-          arrangePending: next.arrangePending ?? false,
-          ...restoreTabsFromSnapshot(s, next),
+          past: [...s.past, makeSnapshot(s)],
+          ...restoreSnapshotFields(s, next),
         };
       });
     },
@@ -1586,25 +1585,8 @@ export const useGraphStore = create<FlowStore>()(
         const target = s.past[index];
         return {
           past: s.past.slice(0, index),
-          future: [
-            ...s.future,
-            {
-              nodes: s.nodes,
-              edges: s.edges,
-              viewport: s.viewport,
-              annotations: s.annotations,
-              stages: s.stages,
-              compositeTabs: s.compositeTabs,
-              activeTabId: s.activeTabId,
-              at: Date.now(),
-            },
-          ],
-          nodes: target.nodes,
-          edges: target.edges,
-          viewport: target.viewport,
-          annotations: target.annotations ?? [],
-          stages: target.stages ?? [],
-          ...restoreTabsFromSnapshot(s, target),
+          future: [...s.future, makeSnapshot(s)],
+          ...restoreSnapshotFields(s, target),
         };
       });
     },
@@ -2577,6 +2559,18 @@ export const useGraphStore = create<FlowStore>()(
     loadGraph: (data) => {
       if (get().allLocked) return;
       get().markHistory();
+      const semantic = validateGraph({
+        nodes: data.nodes,
+        edges: data.edges,
+        stages: data.stages,
+        annotations: data.annotations,
+      });
+      if (!semantic.valid) {
+        console.warn(
+          '[loadGraph] 图语义校验未通过:',
+          semantic.issues.filter((i) => i.severity === 'error').map((i) => i.message),
+        );
+      }
       set({
         nodes: data.nodes,
         edges: data.edges,
@@ -2758,6 +2752,19 @@ export const useGraphStore = create<FlowStore>()(
         if (issues.length > 0) {
           set({ loadError: `项目文件结构无效:${issues.map((i) => i.field).join(', ')}。` });
           return false;
+        }
+        // 语义校验:只告警不阻断(重复 ID / 悬空连线 / 组合端口异常等)
+        const semantic = validateGraph({
+          nodes: norm.nodes,
+          edges: norm.edges,
+          stages: norm.stages,
+          annotations: norm.annotations,
+        });
+        if (!semantic.valid) {
+          console.warn(
+            '[loadProject] 图语义校验未通过:',
+            semantic.issues.filter((i) => i.severity === 'error').map((i) => i.message),
+          );
         }
         const participantsArr = extractParticipants(data) as Participant[];
         const organizationsArr = extractOrganizations(data) as Organization[];
