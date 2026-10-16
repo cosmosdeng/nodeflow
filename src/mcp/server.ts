@@ -76,11 +76,12 @@ export function createNodeFlowMcpServer(opts: NodeFlowMcpServerOptions): McpServ
   const isMcpResult = (v: unknown): v is { content: unknown[] } =>
     typeof v === 'object' && v !== null && Array.isArray((v as { content?: unknown }).content);
 
-  const invoke = async (type: string, payload?: unknown): Promise<AgentResponse> => {
+  const invoke = async (type: string, payload?: unknown, expectedRevision?: number): Promise<AgentResponse> => {
     const req: AgentRequest = {
       protocolVersion: AGENT_PROTOCOL_VERSION,
       requestId: RID(),
       type: type as AgentRequest['type'],
+      ...(expectedRevision !== undefined ? { expectedRevision } : {}),
       payload,
     };
     return opts.callAgent(req);
@@ -89,14 +90,17 @@ export function createNodeFlowMcpServer(opts: NodeFlowMcpServerOptions): McpServ
   const guarded = async (
     agentType: string,
     payload: unknown,
+    expectedRevision?: number,
   ): Promise<{ success: true; data: unknown } | { success: false; error: AgentResponse['error'] }> => {
-    const res = await invoke(agentType, payload);
+    const res = await invoke(agentType, payload, expectedRevision);
     if (res.success) return { success: true as const, data: res.data };
     return { success: false as const, error: res.error };
   };
 
   const mutation = async (agentType: string, args: Record<string, unknown>) => {
-    const out = await guarded(agentType, args);
+    const { expectedRevision, ...payload } = args;
+    const rev = typeof expectedRevision === 'number' ? expectedRevision : undefined;
+    const out = await guarded(agentType, payload, rev);
     if (!out.success) return toolError(out.error);
     const cmd = (out.data ?? {}) as Partial<AgentCommandResult>;
     return {
@@ -130,35 +134,52 @@ export function createNodeFlowMcpServer(opts: NodeFlowMcpServerOptions): McpServ
     const payload: Record<string, unknown> = { label: a.label };
     if (a.description !== undefined) payload.description = a.description;
     if (a.x !== undefined && a.y !== undefined) payload.position = { x: a.x, y: a.y };
+    if (a.expectedRevision !== undefined) payload.expectedRevision = a.expectedRevision;
     return mutation('createNode', payload);
   });
   register('update_node', '更新节点 label/description', async (a) => {
     const patch: Record<string, unknown> = {};
     if (a.label !== undefined) patch.label = a.label;
     if (a.description !== undefined) patch.description = a.description;
-    return mutation('updateNode', { nodeId: a.nodeId, patch });
+    return mutation('updateNode', { nodeId: a.nodeId, patch, expectedRevision: a.expectedRevision });
   });
-  register('delete_node', '删除节点', (a) => mutation('deleteNode', { nodeId: a.nodeId }));
+  register('delete_node', '删除节点', (a) => mutation('deleteNode', a));
   register('create_participant', '创建参与方', (a) => mutation('createParticipant', a));
-  register('update_participant', '更新参与方', (a) => mutation('updateParticipant', { id: a.id, patch: { name: a.name, type: a.type } }));
-  register('delete_participant', '删除参与方', (a) => mutation('deleteParticipant', { id: a.id }));
+  register('update_participant', '更新参与方', (a) =>
+    mutation('updateParticipant', {
+      id: a.id,
+      expectedRevision: a.expectedRevision,
+      patch: {
+        ...(a.name !== undefined ? { name: a.name } : {}),
+        ...(a.type !== undefined ? { type: a.type } : {}),
+        ...(a.organizationId !== undefined ? { organizationId: a.organizationId } : {}),
+      },
+    }),
+  );
+  register('delete_participant', '删除参与方', (a) => mutation('deleteParticipant', a));
   register('create_stage', '创建阶段(Stage)', (a) => mutation('createStage', a));
-  register('update_stage', '更新阶段名', (a) => mutation('updateStage', { id: a.id, patch: { name: a.name } }));
-  register('delete_stage', '删除阶段', (a) => mutation('deleteStage', { id: a.id }));
+  register('update_stage', '更新阶段名', (a) =>
+    mutation('updateStage', { id: a.id, expectedRevision: a.expectedRevision, patch: { name: a.name } }),
+  );
+  register('delete_stage', '删除阶段', (a) => mutation('deleteStage', a));
   register('connect_edge', '在两节点间创建连线(默认 out_1→in_1)', (a) => mutation('connectNodes', a));
-  register('delete_edge', '删除连线', (a) => mutation('deleteEdge', { id: a.id }));
+  register('delete_edge', '删除连线', (a) => mutation('deleteEdge', a));
   register('move_node', '移动节点到(x,y)(一次原子历史)', (a) =>
-    mutation('moveNode', { nodeId: a.nodeId, position: { x: a.x, y: a.y } }),
+    mutation('moveNode', {
+      nodeId: a.nodeId,
+      position: { x: a.x, y: a.y },
+      expectedRevision: a.expectedRevision,
+    }),
   );
   register('assign_participant', '把节点分配给参与方(语义,不自动重排)', (a) =>
-    mutation('assignParticipant', { nodeId: a.nodeId, participantId: a.participantId }),
+    mutation('assignParticipant', a),
   );
   register('assign_stage', '把节点归入阶段(语义,不自动重排)', (a) =>
-    mutation('assignStage', { nodeId: a.nodeId, stageId: a.stageId }),
+    mutation('assignStage', a),
   );
-  register('arrange', '执行与工具栏一致的 Smart Arrange', () => mutation('arrange', {}));
-  register('undo', '撤销一次(与 GUI 同一 history)', () => mutation('undo', {}));
-  register('redo', '重做一次', () => mutation('redo', {}));
+  register('arrange', '执行与工具栏一致的 Smart Arrange', (a) => mutation('arrange', a));
+  register('undo', '撤销一次(与 GUI 同一 history)', (a) => mutation('undo', a));
+  register('redo', '重做一次', (a) => mutation('redo', a));
 
   // ---- Phase D:Gateway / Artifact / Annotation ----
   register('create_gateway', '创建 BPMN 网关(exclusive/parallel/inclusive)', (a) => {
@@ -196,11 +217,15 @@ export function createNodeFlowMcpServer(opts: NodeFlowMcpServerOptions): McpServ
   register('assert', '执行 NodeFlow 语义/几何断言,返回 {passed,actual,expected}', async (a) => {
     const out = await guarded('assert', a);
     if (!out.success) {
-      // 断言失败是结构化业务结果:透传给 MCP,不吞掉
+      // 断言失败是结构化业务结果:保留 passed/actual/expected,同时标 isError 与其它失败一致
       const details = out.error?.details && typeof out.error.details === 'object'
         ? (out.error.details as { result?: unknown }).result
         : null;
-      return { passed: false, assertion: a.type, result: details ?? out.error };
+      const body = { passed: false, assertion: a.type, result: details ?? out.error };
+      return {
+        content: [{ type: 'text', text: JSON.stringify(body) }],
+        isError: true,
+      };
     }
     return out.data;
   });

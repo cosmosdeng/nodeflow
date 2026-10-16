@@ -13,8 +13,9 @@ import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
 import { createNodeFlowMcpServer } from '../../src/mcp/server';
 import { resolveBridgeUrl } from './env';
 import { friendlyBridgeCall } from './friendly';
+import pkg from '../package.json';
 
-const VERSION = '0.4.0-next.2';
+const VERSION = pkg.version;
 
 function log(msg: string): void {
   // 只写 stderr,绝不污染 stdout(stdio MCP protocol)。

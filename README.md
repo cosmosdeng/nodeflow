@@ -5,7 +5,7 @@
 > 两条发布线:
 >
 > - **正式版(Stable):v0.3.2**(main 分支)— 参与方 / 组织管理、阶段域注释、`.nodeflow` v4 兼容层等,推荐稳定使用。macOS 提供 **Apple Silicon(arm64)** 与 **Intel(x64)** 两种安装包。
-> - **Next 预览版:v0.4.0-next.2**(next 分支)— 在正式版之上新增「参与方×阶段」矩阵、语义再指派等功能,详见下文[正式版与 Next 预览版差异](#stable-vs-next)。next 分支当前还包含已通过完整验证的 Agent Interface + MCP Adapter(尚未随版本发布)。
+> - **Next 预览版:v0.4.0-next.3**(next 分支)— 在正式版之上新增「参与方×阶段」矩阵、语义再指派(GUI 拖拽)等功能,详见下文[正式版与 Next 预览版差异](#stable-vs-next)。next 分支当前还包含已通过完整验证的 Agent Interface + MCP Adapter(尚未随版本发布)。
 >
 > 两者都是**免费开源的桌面应用**,安装方式完全相同,只是功能线不同。
 
@@ -35,7 +35,7 @@
 - **属性面板(右)**:选中节点 / 连线 / 中间产物后即可编辑其全部属性
 - **右键上下文菜单**:画布 / 节点 / 复合节点右键弹出快捷操作菜单
 - **删除确认**:删除节点 / 连线弹确认对话框;端口可悬停删除(每方向至少保留 1 个),删除端口会同步删除关联连线;所有删除均可用撤销完整还原
-- **单元测试**:核心纯函数(组合端口 / 执行主体 / 布局算法 / 复制粘贴 / 阶段域 / 网关 / 参与方)与组合状态机 / Agent 断言 / MCP 均有 vitest 覆盖(当前开发线 312 用例 / 34 文件全量通过)
+- **单元测试**:核心纯函数(组合端口 / 执行主体 / 布局算法 / 复制粘贴 / 阶段域 / 网关 / 参与方 / 连线绕障 / SVG 导出)与组合状态机 / 历史快照 / Agent 断言 / MCP / Bridge 鉴权 均有 vitest 覆盖(当前开发线 **441 用例 / 46 文件**全量通过)
 
 <a id="stable-vs-next"></a>
 
@@ -44,7 +44,7 @@
 | | 正式版 Stable | Next 预览版 |
 | --- | --- | --- |
 | 分支 | `main` | `next` |
-| 最新版本 | **v0.3.2** | **v0.4.0-next.2**(其后还有 Agent/MCP 开发中) |
+| 最新版本 | **v0.3.2** | **v0.4.0-next.3**(其后还有 Agent/MCP 开发中) |
 | 安装 | GitHub Releases(正式 Release) | GitHub Releases(标为 Pre-release) |
 | 适合人群 | 追求稳定、用于真实绘图 | 想尝鲜矩阵 / 参与方可视化 / Agent 能力的用户 |
 | 参与方 | 可在「参与方」面板管理参与方 / 组织;节点属性面板可分配参与方(显式 Assign,语义不改几何) | 全部继承正式版,并新增参与方**行带**可视化、弹性带包含节点 |
@@ -166,7 +166,7 @@ NODEFLOW_AGENT_BRIDGE=0 bun run dev
 #### 3. 检查 Bridge
 
 ```bash
-curl http://127.0.0.1:8787/agent/v1/health
+curl -H 'X-NodeFlow-Agent: 1' http://127.0.0.1:8787/agent/v1/health
 ```
 
 预期:
@@ -178,7 +178,13 @@ curl http://127.0.0.1:8787/agent/v1/health
 }
 ```
 
-返回正常即表示 NodeFlow Agent Bridge 已在运行。
+返回正常即表示 NodeFlow Agent Bridge 已在运行。非 health 端点还需要共享密钥（自动写入 `~/.nodeflow/agent-bridge.json`）:
+
+```bash
+TOKEN=$(python3 -c "import json;print(json.load(open('$HOME/.nodeflow/agent-bridge.json'))['token'])")
+curl -H "Authorization: Bearer $TOKEN" -H 'X-NodeFlow-Agent: 1' \
+  http://127.0.0.1:8787/agent/v1/state
+```
 
 ### Run the NodeFlow MCP Server
 
@@ -324,9 +330,8 @@ Observe → Act → Screenshot → Verify
 - Edge CRUD
 - Participant CRUD
 - Stage CRUD
-- Participant assignment
-- Stage assignment
-- Semantic reassignment
+- Participant assignment (`assignParticipant`)
+- Stage assignment (`assignStage`)
 - Arrange
 - Undo / Redo
 - Gateway operations
@@ -339,17 +344,23 @@ Observe → Act → Screenshot → Verify
 
 ### Security
 
-The NodeFlow Agent Bridge is local-only by default:
+The NodeFlow Agent Bridge is local-only and authenticated:
 
 ```text
 127.0.0.1:8787
 ```
 
 - 不监听公网地址;
+- **强制共享密钥**:启动时生成 token,写入 `~/.nodeflow/agent-bridge.json`(0600);
+  请求须带 `Authorization: Bearer <token>` 或 `X-NodeFlow-Token`,以及 `X-NodeFlow-Agent: 1`。
+  `/agent/v1/health` 除外(仅探活)。
+- **Host 校验**:仅接受 `127.0.0.1` / `localhost` / `[::1]` + 当前端口,阻断 DNS rebinding;
+- **Origin 校验**:拒绝带浏览器 http(s) Origin 的请求,阻断 CSRF;
 - MCP Server 通过本地 stdio 与 MCP Client 通信;
 - 不提供任意 shell 执行;
 - 不提供任意文件系统操作;
 - 不提供 `eval`;
+- `shell.openExternal` 仅允许 `http:` / `https:`;
 - test fixture / reset / seed 能力不是普通生产能力,默认关闭;
 - 除非专门调试,**不要**开启 `NODEFLOW_AGENT_TEST_CMDS`。
 

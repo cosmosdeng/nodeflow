@@ -44,41 +44,48 @@ function pointInRectPadded(
   );
 }
 
-/** 解析 SVG path 字符串,在每条子路径段上采样若干点。支持 M/L/C(直线与三次贝塞尔)。 */
+/** 解析 SVG path 字符串,在每条子路径段上采样若干点。支持 M/L/C(直线与三次贝塞尔)。
+ *  兼容 RF 输出的紧凑格式(M0 0L20 0)、逗号分隔与科学计数法。 */
 function sampleSvgPath(path: string, perSegment = 8): Array<{ x: number; y: number }> {
   const samples: Array<{ x: number; y: number }> = [];
-  // 匹配 M/L/C 命令(含负数坐标)
-  const segRe = /([MLC])\s+(-?[\d.]+)[,\s]+(-?[\d.]+)((?:\s+-?[\d.]+[,\s]+-?[\d.]+){0,2})/gi;
+  const tokens = path.match(/[MLC]|-?(?:\d+\.?\d*|\.\d+)(?:[eE][+-]?\d+)?/gi) ?? [];
+  let i = 0;
   let cursor: { x: number; y: number } | null = null;
-  let match: RegExpExecArray | null;
-  while ((match = segRe.exec(path)) !== null) {
-    const cmd = match[1];
-    const x = parseFloat(match[2]);
-    const y = parseFloat(match[3]);
+  const nextNum = (): number => {
+    const n = Number(tokens[i++]);
+    return Number.isFinite(n) ? n : NaN;
+  };
+  while (i < tokens.length) {
+    const cmd = tokens[i++].toUpperCase();
     if (cmd === 'M') {
+      const x = nextNum();
+      const y = nextNum();
+      if (!Number.isFinite(x) || !Number.isFinite(y)) break;
       cursor = { x, y };
       samples.push(cursor);
-    } else if (cmd === 'L' && cursor) {
+    } else if (cmd === 'L') {
+      const x = nextNum();
+      const y = nextNum();
+      if (!cursor || !Number.isFinite(x) || !Number.isFinite(y)) break;
       const end = { x, y };
-      for (let i = 1; i <= perSegment; i++) {
-        const t = i / perSegment;
+      for (let s = 1; s <= perSegment; s++) {
+        const t = s / perSegment;
         samples.push({
           x: cursor.x + (end.x - cursor.x) * t,
           y: cursor.y + (end.y - cursor.y) * t,
         });
       }
       cursor = end;
-    } else if (cmd === 'C' && cursor) {
-      // 读取剩余控制点
-      const rest = match[4].trim().split(/[,\s]+/).map(Number);
-      const c1x = x;
-      const c1y = y;
-      const c2x = rest[0];
-      const c2y = rest[1];
-      const ex = rest[2];
-      const ey = rest[3];
-      for (let i = 1; i <= perSegment * 2; i++) {
-        const t = i / (perSegment * 2);
+    } else if (cmd === 'C') {
+      const c1x = nextNum();
+      const c1y = nextNum();
+      const c2x = nextNum();
+      const c2y = nextNum();
+      const ex = nextNum();
+      const ey = nextNum();
+      if (!cursor || ![c1x, c1y, c2x, c2y, ex, ey].every(Number.isFinite)) break;
+      for (let s = 1; s <= perSegment * 2; s++) {
+        const t = s / (perSegment * 2);
         const mt = 1 - t;
         samples.push({
           x:
@@ -94,6 +101,9 @@ function sampleSvgPath(path: string, perSegment = 8): Array<{ x: number; y: numb
         });
       }
       cursor = { x: ex, y: ey };
+    } else {
+      // 未知命令:停止解析,避免错位
+      break;
     }
   }
   return samples;

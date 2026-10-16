@@ -5,6 +5,8 @@
 import { z } from 'zod';
 
 const position = { x: z.number(), y: z.number() };
+/** 乐观并发:客户端读到的 revision;不匹配则 REVISION_CONFLICT(可选) */
+const expectedRevision = { expectedRevision: z.number().optional() };
 
 export const NODE_ID = z.string().min(1);
 export const NULLABLE_STRING = z.string().min(1).nullable();
@@ -26,19 +28,23 @@ export const toolSchemas = {
     description: z.string().optional(),
     x: z.number().optional(),
     y: z.number().optional(),
+    ...expectedRevision,
   },
   update_node: {
     nodeId: NODE_ID,
     label: z.string().optional(),
     description: z.string().optional(),
+    ...expectedRevision,
   },
-  delete_node: { nodeId: NODE_ID },
+  delete_node: { nodeId: NODE_ID, ...expectedRevision },
 
   create_participant: {
     name: z.string().min(1),
     type: z
       .enum(['person', 'role', 'organization', 'department', 'machine', 'software', 'ai-agent'])
       .optional(),
+    organizationId: z.string().min(1).nullable().optional(),
+    ...expectedRevision,
   },
   update_participant: {
     id: NODE_ID,
@@ -46,8 +52,10 @@ export const toolSchemas = {
     type: z
       .enum(['person', 'role', 'organization', 'department', 'machine', 'software', 'ai-agent'])
       .optional(),
+    organizationId: z.string().min(1).nullable().optional(),
+    ...expectedRevision,
   },
-  delete_participant: { id: NODE_ID },
+  delete_participant: { id: NODE_ID, ...expectedRevision },
 
   create_stage: {
     name: z.string().min(1).optional(),
@@ -55,24 +63,26 @@ export const toolSchemas = {
     y: z.number().optional(),
     width: z.number().optional(),
     height: z.number().optional(),
+    ...expectedRevision,
   },
-  update_stage: { id: NODE_ID, name: z.string().min(1).optional() },
-  delete_stage: { id: NODE_ID },
+  update_stage: { id: NODE_ID, name: z.string().min(1).optional(), ...expectedRevision },
+  delete_stage: { id: NODE_ID, ...expectedRevision },
 
   connect_edge: {
     source: NODE_ID,
     target: NODE_ID,
     sourceHandle: z.string().optional(),
     targetHandle: z.string().optional(),
+    ...expectedRevision,
   },
-  delete_edge: { id: NODE_ID },
+  delete_edge: { id: NODE_ID, ...expectedRevision },
 
-  move_node: { nodeId: NODE_ID, ...position },
-  assign_participant: { nodeId: NODE_ID, participantId: NULLABLE_STRING },
-  assign_stage: { nodeId: NODE_ID, stageId: NULLABLE_STRING },
-  arrange: {},
-  undo: {},
-  redo: {},
+  move_node: { nodeId: NODE_ID, ...position, ...expectedRevision },
+  assign_participant: { nodeId: NODE_ID, participantId: NULLABLE_STRING, ...expectedRevision },
+  assign_stage: { nodeId: NODE_ID, stageId: NULLABLE_STRING, ...expectedRevision },
+  arrange: { ...expectedRevision },
+  undo: { ...expectedRevision },
+  redo: { ...expectedRevision },
 
   assert: {
     type: z.enum([
@@ -98,9 +108,14 @@ export const toolSchemas = {
     stageId: z.string().nullable().optional(),
     axis: z.enum(['participant', 'stage']).optional(),
     bandId: z.string().optional(),
+    expected: z.union([z.boolean(), z.string()]).optional(),
     expectedIds: z.array(z.string()).optional(),
+    expectedParticipantIds: z.array(z.string()).optional(),
+    expectedStageIds: z.array(z.string()).optional(),
+    nodeIds: z.array(z.string()).optional(),
     compositeId: z.string().nullable().optional(),
     childIds: z.array(z.string()).optional(),
+    parentCompositeId: z.string().nullable().optional(),
     id: z.string().optional(),
     kind: z.string().optional(),
     content: z.string().optional(),
@@ -118,22 +133,29 @@ export const toolSchemas = {
     type: z.enum(['exclusive', 'parallel', 'inclusive']),
     x: z.number().optional(),
     y: z.number().optional(),
+    ...expectedRevision,
   },
-  change_gateway_type: { nodeId: NODE_ID, type: z.enum(['exclusive', 'parallel', 'inclusive']) },
+  change_gateway_type: {
+    nodeId: NODE_ID,
+    type: z.enum(['exclusive', 'parallel', 'inclusive']),
+    ...expectedRevision,
+  },
 
   attach_artifact: {
     edgeId: NODE_ID,
     kind: z.enum(['document', 'image', 'video', 'audio', 'code', 'data', 'other']),
     label: z.string().optional(),
     description: z.string().optional(),
+    ...expectedRevision,
   },
   update_artifact: {
     edgeId: NODE_ID,
     kind: z.enum(['document', 'image', 'video', 'audio', 'code', 'data', 'other']).optional(),
     label: z.string().optional(),
     description: z.string().optional(),
+    ...expectedRevision,
   },
-  remove_artifact: { edgeId: NODE_ID },
+  remove_artifact: { edgeId: NODE_ID, ...expectedRevision },
 
   create_annotation: {
     targetKind: z.enum(['canvas', 'node', 'edge', 'stage', 'artifact']),
@@ -145,13 +167,19 @@ export const toolSchemas = {
     content: z.string().optional(),
     x: z.number().optional(),
     y: z.number().optional(),
+    ...expectedRevision,
   },
-  update_annotation: { id: NODE_ID, title: z.string().optional(), content: z.string().optional() },
-  delete_annotation: { id: NODE_ID },
-  move_annotation: { id: NODE_ID, x: z.number(), y: z.number() },
+  update_annotation: {
+    id: NODE_ID,
+    title: z.string().optional(),
+    content: z.string().optional(),
+    ...expectedRevision,
+  },
+  delete_annotation: { id: NODE_ID, ...expectedRevision },
+  move_annotation: { id: NODE_ID, x: z.number(), y: z.number(), ...expectedRevision },
 
   // test.fixture(默认不暴露)
-  reset: {},
+  reset: { ...expectedRevision },
   seed_fixture: {},
 } as const;
 

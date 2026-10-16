@@ -8,5 +8,5 @@
 export { createNodeFlowMcpServer } from '../../src/mcp/server';
 export { httpBridgeCall } from '../../src/mcp/bridge';
 export { toolSchemas } from '../../src/mcp/schemas';
-export { DEFAULT_BRIDGE_URL, resolveBridgeUrl } from './env';
+export { DEFAULT_BRIDGE_URL, resolveBridgeUrl, resolveBridgeToken } from './env';
 export { friendlyBridgeCall } from './friendly';

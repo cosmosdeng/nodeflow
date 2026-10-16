@@ -1,11 +1,14 @@
 import { memo, useMemo, useRef, useState } from 'react';
 import { BaseEdge, EdgeLabelRenderer, type EdgeProps } from '@xyflow/react';
-import { ARTIFACT_META, uid, type FlowEdge } from '../types';
+import { useShallow } from 'zustand/react/shallow';
+import { ARTIFACT_META, uid, type FlowEdge, type FlowNode } from '../types';
 import { useGraphStore } from '../store/graphStore';
-import { computeEdgePath } from '../lib/edgePath';
+import { computeEdgePath, type ObstacleRect } from '../lib/edgePath';
 import { GATEWAY_BRANCH_COLORS } from '../lib/gateway';
 import EditableText from './EditableText';
 import AnnotationBox from './AnnotationBox';
+
+const EMPTY_OBSTACLES: ObstacleRect[] = [];
 
 function FlowEdgeComponent({
   id,
@@ -27,22 +30,19 @@ function FlowEdgeComponent({
   const updateEdge = useGraphStore((s) => s.updateEdge);
   const edgeStyle = useGraphStore((s) => s.edgeStyle);
   const allLocked = useGraphStore((s) => s.allLocked);
-  const allNodes = useGraphStore((s) => s.nodes);
-  const annotations = useGraphStore((s) => s.annotations);
   const addAnnotation = useGraphStore((s) => s.addAnnotation);
   const updateAnnotation = useGraphStore((s) => s.updateAnnotation);
   const deleteAnnotation = useGraphStore((s) => s.deleteAnnotation);
   const toggleAnnotationCollapsed = useGraphStore((s) => s.toggleAnnotationCollapsed);
   const artifact = data?.artifact ?? null;
-  // 归属该连线的注释(连线归属)
-  const edgeAnnots = useMemo(
-    () => annotations.filter((a) => a.target.kind === 'edge' && a.target.edgeId === id),
-    [annotations, id],
+  // 只订阅归属该连线/产物的注释
+  const edgeAnnots = useGraphStore(
+    useShallow((s) => s.annotations.filter((a) => a.target.kind === 'edge' && a.target.edgeId === id)),
   );
-  // 归属该产物(连线中间产物)的注释
-  const artifactAnnots = useMemo(
-    () => annotations.filter((a) => a.target.kind === 'artifact' && a.target.edgeId === id),
-    [annotations, id],
+  const artifactAnnots = useGraphStore(
+    useShallow((s) =>
+      s.annotations.filter((a) => a.target.kind === 'artifact' && a.target.edgeId === id),
+    ),
   );
   // 画布上连线说明是否处于内联编辑态(用于编辑时允许换行/扩展)
   const [labelEditing, setLabelEditing] = useState(false);
@@ -63,20 +63,22 @@ function FlowEdgeComponent({
   const tgtLocked = useGraphStore((s) => s.nodes.find((n) => n.id === target)?.data?.locked);
   const edgeLocked = !!allLocked || !!srcLocked || !!tgtLocked;
 
-  // 收集所有可见节点作为障碍物用于连线绕障。
-  // 排除 source 节点本身(路径从 source 端口出发即离开,无需绕);保留 target 节点
-  // (连线中段/标签可能落在 target 节点头部,需要绕开)以及其它中间节点。
-  const obstacles = useMemo(
-    () =>
-      allNodes
-        .filter((n) => n.id !== source && !n.hidden)
-        .map((n) => ({
+  // 收集所有可见节点作为障碍物用于连线绕障(shallow 比较,几何未变时不重算)。
+  // 排除 source 节点本身;保留 target 节点及其它中间节点。
+  const obstacles = useGraphStore(
+    useShallow((s) => {
+      const rects: ObstacleRect[] = [];
+      for (const n of s.nodes as FlowNode[]) {
+        if (n.id === source || n.hidden) continue;
+        rects.push({
           x: n.position.x,
           y: n.position.y,
           width: n.measured?.width ?? 230,
           height: n.measured?.height ?? 120,
-        })),
-    [allNodes, source],
+        });
+      }
+      return rects;
+    }),
   );
 
   const { path, labelX, labelY } = useMemo(
@@ -88,7 +90,7 @@ function FlowEdgeComponent({
         targetX,
         targetY,
         targetPosition,
-        obstacles,
+        obstacles: obstacles.length ? obstacles : EMPTY_OBSTACLES,
         edgeStyle,
       }),
     [
@@ -109,21 +111,16 @@ function FlowEdgeComponent({
     (s) => s.selected?.kind === 'artifact' && s.selected.edgeId === id,
   );
 
-  // 网关分支连线配色:若 source 是网关,按 sourceHandle 的分支序号从调色板取色,各分支颜色不同
-  const edgeColor = useMemo(() => {
-    const src = allNodes.find((n) => n.id === source);
-    if (src?.data?.gateway) {
-      // 通过 store 找到本连线的 sourceHandle(EdgeProps 未直接暴露)
-      const e = useGraphStore.getState().edges.find((x) => x.id === id);
-      const sh = e?.sourceHandle;
-      if (sh) {
-        const idx = src.data.outputs.findIndex((o) => o.id === sh);
-        if (idx >= 0) return GATEWAY_BRANCH_COLORS[idx % GATEWAY_BRANCH_COLORS.length];
-      }
-    }
-    return undefined; // 非网关连线用默认色
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [source, allNodes, id]);
+  // 网关分支连线配色:若 source 是网关,按 sourceHandle 的分支序号从调色板取色
+  const edgeColor = useGraphStore((s) => {
+    const src = s.nodes.find((n) => n.id === source);
+    if (!src?.data?.gateway) return undefined;
+    const e = s.edges.find((x) => x.id === id);
+    const sh = e?.sourceHandle;
+    if (!sh) return undefined;
+    const idx = src.data.outputs.findIndex((o) => o.id === sh);
+    return idx >= 0 ? GATEWAY_BRANCH_COLORS[idx % GATEWAY_BRANCH_COLORS.length] : undefined;
+  });
 
   return (
     <>

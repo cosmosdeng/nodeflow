@@ -1,6 +1,7 @@
 import { Fragment, memo, useEffect, useMemo, useRef, useState } from 'react';
 import { Handle, Position, useUpdateNodeInternals, type NodeProps } from '@xyflow/react';
-import { ACTOR_META, uid, type ActorType, type FlowNode, type PortDef } from '../types';
+import { useShallow } from 'zustand/react/shallow';
+import { ACTOR_META, uid, type ActorType, type FlowEdge, type FlowNode, type PortDef } from '../types';
 import { GATEWAY_META } from '../lib/gateway';
 import { computeCompositeActor, computeCompositePorts } from '../lib/composite';
 import { openCompositePopup } from '../lib/compositePopup';
@@ -8,6 +9,9 @@ import { useGraphStore } from '../store/graphStore';
 import ActorIcon from './ActorIcon';
 import EditableText from './EditableText';
 import AnnotationBox from './AnnotationBox';
+
+const EMPTY_NODES: FlowNode[] = [];
+const EMPTY_EDGES: FlowEdge[] = [];
 
 /* ------------------------------------------------------------------ */
 /* 节点                                                                */
@@ -20,24 +24,25 @@ function FlowNodeComponent({ id, data, selected }: NodeProps<FlowNode>) {
   const updateNode = useGraphStore((s) => s.updateNode);
   const removePort = useGraphStore((s) => s.removePort);
   const setNodeDraggable = useGraphStore((s) => s.setNodeDraggable);
-  const edges = useGraphStore((s) => s.edges);
-  const allNodes = useGraphStore((s) => s.nodes);
+  const composite = data.composite;
+  // 非组合节点不订阅 nodes/edges,避免任一节点变更触发全图节点重渲
+  const edges = useGraphStore(useShallow((s) => (composite ? s.edges : EMPTY_EDGES)));
+  const allNodes = useGraphStore(useShallow((s) => (composite ? s.nodes : EMPTY_NODES)));
   const toggleComposite = useGraphStore((s) => s.toggleComposite);
   const openCompositeTab = useGraphStore((s) => s.openCompositeTab);
   const pendingAutoEdit = useGraphStore((s) => s.pendingAutoEdit);
   const requestAutoEdit = useGraphStore((s) => s.requestAutoEdit);
-  const annotations = useGraphStore((s) => s.annotations);
+  // 只订阅归属本节点的注释
+  const nodeAnnots = useGraphStore(
+    useShallow((s) =>
+      s.annotations.filter((a) => a.target.kind === 'node' && a.target.nodeId === id),
+    ),
+  );
   const addAnnotation = useGraphStore((s) => s.addAnnotation);
   const updateAnnotation = useGraphStore((s) => s.updateAnnotation);
   const deleteAnnotation = useGraphStore((s) => s.deleteAnnotation);
   const toggleAnnotationCollapsed = useGraphStore((s) => s.toggleAnnotationCollapsed);
 
-  const composite = data.composite;
-  // 归属本节点的注释(节点归属)
-  const nodeAnnots = useMemo(
-    () => annotations.filter((a) => a.target.kind === 'node' && a.target.nodeId === id),
-    [annotations, id],
-  );
   // 悬停节点(无注释时悬停显示添加 pin;离开后延迟隐藏,留出移入 pin 的时间)
   const [nodeHovered, setNodeHovered] = useState(false);
   const nodeHoverTimer = useRef<ReturnType<typeof setTimeout> | null>(null);

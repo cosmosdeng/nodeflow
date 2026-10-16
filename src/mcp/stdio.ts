@@ -11,6 +11,7 @@
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { createNodeFlowMcpServer } from './server';
 import { httpBridgeCall } from './bridge';
+import rootPkg from '../../package.json';
 
 const bridgeUrl = process.env.NODEFLOW_MCP_BRIDGE_URL ?? 'http://127.0.0.1:8787';
 const testFixture = process.env.NODEFLOW_MCP_TEST_FIXTURE === '1';
@@ -18,7 +19,7 @@ const testFixture = process.env.NODEFLOW_MCP_TEST_FIXTURE === '1';
 async function main(): Promise<void> {
   const server = createNodeFlowMcpServer({
     name: 'nodeflow-mcp',
-    version: '0.4.0',
+    version: rootPkg.version,
     callAgent: httpBridgeCall(bridgeUrl),
     testFixture,
   });
