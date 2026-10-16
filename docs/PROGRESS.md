@@ -10,7 +10,7 @@
 
 对 `next` 分支做了一轮完整代码评估（架构 / 质量 / 安全 / 工程化），随后按 P0 → P1 → P2 修复并推送到 GitHub。
 
-评估结论摘要：领域建模与 Agent/MCP 协议设计成熟；主要风险在 **jumpTo 快照丢字段、Agent Bridge 无鉴权、无 CI、god store**。完整评估见会话产出（`docs/CODE_REVIEW.md` 待落盘）。
+评估结论摘要：领域建模与 Agent/MCP 协议设计成熟；主要风险在 **jumpTo 快照丢字段、Agent Bridge 无鉴权、无 CI、god store**。完整评估见 [`docs/CODE_REVIEW.md`](./CODE_REVIEW.md)。
 
 ### 已完成
 
@@ -56,7 +56,7 @@
 2. **键盘连线 / 移动替代**（a11y）—— 需要交互设计决策
 3. **npm dist-tag**：`latest` 仍指向 prerelease `0.4.0-next.2`，发布时需 `npm dist-tag add @cosmosdeng/nodeflow-mcp@0.4.0-next.3 latest` 或改用 `@next`
 4. **Agent Bridge 默认策略**：当前仍默认启动但强制 token；若需默认关闭，改 `main.ts` 的 `NODEFLOW_AGENT_BRIDGE` 判断
-5. **`docs/CODE_REVIEW.md`**：完整评估意见尚未落盘进仓库
+5. ~~**`docs/CODE_REVIEW.md`**~~：✅ 已落盘（2026-10-17）
 
 ### 环境备注
 
