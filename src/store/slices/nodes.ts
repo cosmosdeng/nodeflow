@@ -1,11 +1,24 @@
-import type { FlowNode, FlowEdge, FlowNodeData } from '../../types'
+import type { FlowNode, FlowEdge, FlowNodeData } from '../../types';
 import type { FlowStore } from '../types';
 import type { SliceDeps } from './deps';
-import { getNodeSize } from '../../lib/composite'
-import { annotationTargetMatches, annotationTargetsNode, anyAnnotationExpanded, createAnnotation, toggleAnnotationCollapsed as toggleAnnotationCollapsedIn } from '../../lib/annotation'
+import { getNodeSize } from '../../lib/composite';
+import {
+  annotationTargetMatches,
+  annotationTargetsNode,
+  anyAnnotationExpanded,
+  createAnnotation,
+  toggleAnnotationCollapsed as toggleAnnotationCollapsedIn,
+} from '../../lib/annotation';
 import { createDefaultNode, uid } from '../../types';
-import {findNodeById} from '../../domain/graph/queries';
-import { collectAllDescendants, remapHandle, removeChildFromComposites, edgeReferencesNode, refreshCompositeHidden, expandComposite } from '../compositeHelpers'
+import { findNodeById } from '../../domain/graph/queries';
+import {
+  collectAllDescendants,
+  remapHandle,
+  removeChildFromComposites,
+  edgeReferencesNode,
+  refreshCompositeHidden,
+  expandComposite,
+} from '../compositeHelpers';
 import { closeCompositeTabInState } from '../historyHelpers';
 
 export function createNodesSlice({ set, get }: SliceDeps): Partial<FlowStore> {

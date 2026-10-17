@@ -9,7 +9,7 @@ on:
 
 jobs:
   test:
-    name: Typecheck & Test
+    name: Typecheck, Lint, Test & Build
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -29,5 +29,14 @@ jobs:
       - name: Typecheck (electron)
         run: bunx tsc -p tsconfig.electron.json --noEmit
 
+      - name: Lint (ESLint)
+        run: bun run lint
+
+      - name: Format check (Prettier)
+        run: bun run format:check
+
       - name: Unit tests
         run: bun run test
+
+      - name: Build (renderer + electron)
+        run: bun run build

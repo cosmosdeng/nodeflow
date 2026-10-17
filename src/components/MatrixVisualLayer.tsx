@@ -32,7 +32,6 @@ const DEFAULT_EMPTY_H = 60;
 const DEFAULT_BAND_W = 600;
 /** 空 Stage 列宽下限,保证标签可读 */
 
-
 interface Rect {
   l: number;
   t: number;

@@ -23,8 +23,6 @@ export interface NodeFlowMcpServerOptions {
   testFixture?: boolean;
 }
 
-
-
 const caps = (testFixture: boolean) => ({
   'graph.read': true,
   'graph.write': true,

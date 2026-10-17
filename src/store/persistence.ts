@@ -1,7 +1,18 @@
 /**
  * 持久化:示例图、偏好、多文档 localStorage 读写、初始文档构建。
  */
-import { type FlowNode, type FlowEdge, type GraphSnapshot, type GraphDocument, type EdgeStyle, type ThemeMode, type Stage, type Participant, DOCUMENT_COLORS, createDefaultNode } from '../types'
+import {
+  type FlowNode,
+  type FlowEdge,
+  type GraphSnapshot,
+  type GraphDocument,
+  type EdgeStyle,
+  type ThemeMode,
+  type Stage,
+  type Participant,
+  DOCUMENT_COLORS,
+  createDefaultNode,
+} from '../types';
 
 export const SAVE_KEY = 'nodeflow:graph:v1';
 export const PREFS_KEY = 'nodeflow:prefs:v1';

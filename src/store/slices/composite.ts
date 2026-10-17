@@ -1,10 +1,10 @@
-import type { FlowNode, Annotation } from '../../types'
+import type { FlowNode, Annotation } from '../../types';
 import type { FlowStore } from '../types';
 import type { SliceDeps } from './deps';
 import { buildNodesById, collapseComposite, expandComposite } from '../compositeHelpers';
 import { closeCompositeTabInState } from '../historyHelpers';
-import {computeCompositeActor, computeCompositeBounds} from '../../lib/composite';
-import {uid} from '../../types';
+import { computeCompositeActor, computeCompositeBounds } from '../../lib/composite';
+import { uid } from '../../types';
 import { findNodeById } from '../../domain/graph/queries';
 
 export function createCompositeSlice({ set, get }: SliceDeps): Partial<FlowStore> {

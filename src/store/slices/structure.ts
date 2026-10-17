@@ -1,13 +1,13 @@
-import type { Stage } from '../../types'
-import {annotationTargetsStage} from '../../lib/annotation';
+import type { Stage } from '../../types';
+import { annotationTargetsStage } from '../../lib/annotation';
 import type { FlowStore } from '../types';
 import type { SliceDeps } from './deps';
-import { addNodeToStage, computeStageMembership, computeStageMinSize, detachNodeIdsFromStages } from '../../lib/stage'
-import {findStageEmptySpot} from '../../lib/geometry';
+import { addNodeToStage, computeStageMembership, computeStageMinSize, detachNodeIdsFromStages } from '../../lib/stage';
+import { findStageEmptySpot } from '../../lib/geometry';
 import { detachOrganizationFromParticipants, detachParticipantFromNodes } from '../../lib/participant';
 import { arrangeSwimlanes, computeMatrixLayout } from '../../lib/arrange';
 import { computeLayout } from '../../lib/layout';
-import {uid} from '../../types';
+import { uid } from '../../types';
 
 export function createStructureSlice({ set, get }: SliceDeps): Partial<FlowStore> {
   return {

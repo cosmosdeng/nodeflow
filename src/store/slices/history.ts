@@ -1,4 +1,3 @@
-
 import type { FlowStore } from '../types';
 import type { SliceDeps } from './deps';
 import { makeSnapshot, restoreSnapshotFields } from '../historyHelpers';

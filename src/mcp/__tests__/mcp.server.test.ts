@@ -4,7 +4,7 @@ import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js';
 import { createNodeFlowMcpServer } from '../server';
 import { executeAgentRequest } from '../../agent/executor';
 import { setAgentTestCommandsEnabled } from '../../agent/capabilities';
-import { AGENT_PROTOCOL_VERSION } from '../../agent/types'
+import { AGENT_PROTOCOL_VERSION } from '../../agent/types';
 
 interface ContentLike {
   type?: string;

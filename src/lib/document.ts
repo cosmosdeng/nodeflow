@@ -121,8 +121,6 @@ export interface NormalizedDocument {
   activeTabId: string;
 }
 
-
-
 /** 只保留存在的 Node 内部 Document 字段,剥离 React Flow / Derived 字段(selected/measured/hidden/draggable) */
 function normalizeNode(n: unknown): FlowNode {
   if (typeof n !== 'object' || n === null) return n as FlowNode;

@@ -4,6 +4,36 @@
 
 ---
 
+## 2026-10-17（六）代码评审后的基线加固
+
+承接对 `PROGRESS.md` 上一阶段的自查结论，补两块「新能力没被纳入体系」的缺口。
+
+### 已完成
+
+| 项 | 内容 | 模块 |
+|---|---|---|
+| **键盘移动纳入历史栈** | 方向键移动原直接调 `onNodesChange`，而历史快照只在 `handleNodeDragStart` 打点 → 键盘移动**无法撤销**。新增 store action `nudgeSelectedNodes(dx, dy, mergeWindowMs = 500)`：移动前 `markHistory()`，窗口内连续按键不分快照，「按住微调」一次 `Ctrl+Z` 回到移动前 | `src/store/slices/flow.ts` + `src/store/types.ts` + `src/App.tsx` + `src/store/runtimeFlags.ts` |
+| **键盘微调单测** | 新增 6 用例：移动生效、`undo` 还原位置、窗口内连移只占 1 条历史、超窗口各记历史、无选中 / 演示锁定下不动且不留历史 | `src/store/__tests__/graphStore.nudge.test.ts` |
+| **CI 补齐护栏** | `.github/workflows/ci.yml` 原只有 `tsc` ×2 + `vitest`，新增 `lint`（ESLint）、`format:check`（Prettier）、`build`（renderer + electron） | `.github/workflows/ci.yml` |
+| **全仓格式化** | 补跑 `bun run format` —— 上一阶段改动后 22 个文件格式已漂移（正是 CI 缺 `format:check` 的后果） | 全仓 `src` / `electron` / `mcp-server/src` |
+
+### 验证
+
+- **单元测试**：455 用例 / 48 文件全绿（新增 6 用例）
+- **类型检查**：`tsc` + `tsc -p tsconfig.electron.json` 干净
+- **Lint**：0 error / 1 warning（`EditableText` 的 `set-state-in-effect`，合理用法保留）
+- **Format**：`format:check` 全通过
+- **构建**：`bun run build` 通过
+
+### 遗留
+
+1. **npm `latest` dist-tag 指向 prerelease** `0.4.0-next.3`（发布 stable `0.4.0` 时需修正，或明确 MCP 包只有 next 线）
+2. **`syncActiveDoc` 与自动保存双写 documents**：每次 nodes 变化会重建 documents 两遍，订阅侧栏多一次渲染
+3. **`MIRROR_FIELDS` 手工维护**：新增文档字段漏登记会静默不同步，缺镜像完整性断言
+4. **组件层仍为 0 测试**：键盘连线（`L` 两步式）、DialogHost focus trap 等交互逻辑仍在组件 / `App.tsx` 内，未抽出可测单元
+
+---
+
 ## 2026-10-17（六）路线图遗留项批量修复
 
 ### 已完成

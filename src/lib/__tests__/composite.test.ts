@@ -1,7 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { FlowEdge, FlowNode } from '../../types';
 import {
-
   encodeCompositePort,
   decodeCompositePort,
   decodeCompositePortPath,

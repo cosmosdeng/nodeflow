@@ -26,7 +26,7 @@ import { useGraphStore } from '../store/graphStore';
 import { changeGatewayType, createGatewayNode, GATEWAY_KINDS, GATEWAY_META } from '../lib/gateway';
 import { computeMatrixTargetZones } from '../lib/matrixTargets';
 import { hoverCandidate, type ReassignmentAxis } from '../lib/semanticReassignment';
-import {type FlowNode, type FlowEdge, type EdgeStyle, type Stage} from '../types';
+import { type FlowNode, type FlowEdge, type EdgeStyle, type Stage } from '../types';
 
 const nodeTypes: NodeTypes = { flow: FlowNodeComponent };
 const edgeTypes: EdgeTypes = { flow: FlowEdgeComponent };

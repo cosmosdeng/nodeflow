@@ -1,15 +1,15 @@
-import type { FlowNodeData, FlowEdgeData } from '../../types'
+import type { FlowNodeData, FlowEdgeData } from '../../types';
 import type { FlowStore } from '../types';
-import {boundsToStageBox, computeStageBounds} from '../../lib/stage';
+import { boundsToStageBox, computeStageBounds } from '../../lib/stage';
 
 import type { SliceDeps } from './deps';
-import {refreshCompositeHidden} from '../compositeHelpers';
-import { encodeCompositePort, decodeCompositePortPath, getNodeSize } from '../../lib/composite'
+import { refreshCompositeHidden } from '../compositeHelpers';
+import { encodeCompositePort, decodeCompositePortPath, getNodeSize } from '../../lib/composite';
 import { annotationTargetsEdge } from '../../lib/annotation';
 import { createFlowEdge } from '../../lib/edge';
 import { setEdgeArtifact, updateEdgeArtifact } from '../../lib/artifact';
 import { findNodeById, findEdgeById } from '../../domain/graph/queries';
-import {pushOutOfRect, rectOverlaps, type Rect} from '../../lib/geometry';
+import { pushOutOfRect, rectOverlaps, type Rect } from '../../lib/geometry';
 import { createDefaultNode, uid } from '../../types';
 
 export function createEdgesSlice({ set, get }: SliceDeps): Partial<FlowStore> {

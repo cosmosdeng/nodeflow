@@ -6,14 +6,7 @@
 import { useGraphStore } from '../store/graphStore';
 import { getAnnotationsDto, getNodesDto, getParticipantsDto, getStagesDto } from './queries';
 import { isNodeInsideParticipantBand, isNodeInsideStageBand, nodeRect, rectsOverlap, zonesOf } from './geometry';
-import {
-  asOptionalString,
-  asPayloadRecord,
-  asString,
-  asStringArray,
-  asOptionalNumber,
-  asBoolean,
-} from './validation';
+import { asOptionalString, asPayloadRecord, asString, asStringArray, asOptionalNumber, asBoolean } from './validation';
 import type { AgentAssertionResult, AgentAssertionType } from './types';
 
 function fail(

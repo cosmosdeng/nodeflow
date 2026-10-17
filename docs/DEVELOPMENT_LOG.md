@@ -2,6 +2,17 @@
 
 > 按时间倒序记录开发历程。新功能、重要修复、里程碑都应在此追加。
 
+## 2026-10-17 · 键盘微调历史栈 + CI 护栏(完成)
+
+- **键盘移动可撤销**:方向键移动原在 `App.tsx` 内直接调 `onNodesChange`,而历史快照只在 `FlowCanvas` 的 `handleNodeDragStart` 打点,导致键盘移动**无法 Ctrl+Z 还原**。新增 store action `nudgeSelectedNodes(dx, dy, mergeWindowMs = 500)`(`src/store/slices/flow.ts`):移动前 `markHistory()`,500ms 窗口内连续按键不分快照,「按住微调」一次撤销回到移动前;`App.tsx` 方向键分支改走该 action。合并窗口时间戳存于 `src/store/runtimeFlags.ts`(不进 state、不持久化)。
+- **新增单测**:`src/store/__tests__/graphStore.nudge.test.ts` 6 用例 —— 移动生效、`undo` 还原位置、窗口内连移只占 1 条历史、超窗口各记历史、无选中 / 演示锁定下不动且不留历史。
+- **CI 补齐护栏**:`.github/workflows/ci.yml` 原仅 `tsc` ×2 + `vitest`,新增 `lint`(ESLint)、`format:check`(Prettier)、`build`(renderer + electron)。
+- **全仓格式化**:补跑 `bun run format` —— 上一阶段改动后 22 个文件格式已漂移,正是 CI 缺 `format:check` 的直接后果。
+- 验证:455 测试 / 48 文件全绿;`tsc` + electron `tsc` 干净;lint 0 error / 1 warn;`format:check` 全通过;`bun run build` 通过。
+- 遗留:npm `latest` 仍指向 prerelease `0.4.0-next.3`;`syncActiveDoc` 与自动保存双写 documents;`MIRROR_FIELDS` 手工维护;组件层仍 0 测试。
+
+---
+
 ## 2026-08-26 · 泳道坐标修复 + 阶段域注释(完成)
 
 - **泳道显示修复**:修复两个坐标 bug——`computeSwimlaneBounds` 误把 viewport 平移当原点(改为固定流坐标起点 START_X/START_Y)、FlowCanvas 渲染转换方向错误(`(lane.x - viewport.x)*zoom` 应为 `lane.x*zoom + viewport.x`,与 StageComponent 一致)。修复后参与方对应的泳道正常显示(空 lane 显示最小高度带)。

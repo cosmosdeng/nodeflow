@@ -8,7 +8,7 @@ import { subscribeWithSelector } from 'zustand/middleware';
 import { shallow } from 'zustand/shallow';
 
 import type { FlowStore, Selection, AutoEditTarget } from './types';
-import { seedGraph, prefs, initialDocs, initialActiveDoc } from './persistence'
+import { seedGraph, prefs, initialDocs, initialActiveDoc } from './persistence';
 import { graphObservableFingerprint } from './agentRevision';
 import { createFlowSlice } from './slices/flow';
 import { createHistorySlice } from './slices/history';

@@ -1,4 +1,4 @@
-import type { GraphDocument, ViewportState, Participant, Organization } from '../../types'
+import type { GraphDocument, ViewportState, Participant, Organization } from '../../types';
 import type { FlowStore } from '../types';
 import type { SliceDeps } from './deps';
 import {
@@ -19,8 +19,8 @@ import {
   type NormalizedDocument,
 } from '../../lib/document';
 import { validateGraph } from '../../lib/graphValidation';
-import {DOCUMENT_COLORS, uid} from '../../types';
-import { persistDocument, loadDocsIndex, persistDocsIndex, docKey } from '../persistence'
+import { DOCUMENT_COLORS, uid } from '../../types';
+import { persistDocument, loadDocsIndex, persistDocsIndex, docKey } from '../persistence';
 
 export function createDocumentsSlice({ set, get }: SliceDeps): Partial<FlowStore> {
   return {

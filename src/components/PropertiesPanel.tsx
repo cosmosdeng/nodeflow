@@ -764,7 +764,6 @@ function MissingNotice() {
 export default function PropertiesPanel({ onClose }: { onClose: () => void }) {
   const selected = useGraphStore((s) => s.selected);
   const allLocked = useGraphStore((s) => s.allLocked);
-  
 
   let title = '属性';
   let body: ReactNode = (
