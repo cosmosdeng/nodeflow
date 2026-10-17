@@ -24,7 +24,7 @@
 
 - **单元测试**：449 用例 / 47 文件全绿（新增环层级、深链防爆栈、多障碍绕行 2 测）
 - **类型检查**：`tsc` + `tsc -p tsconfig.electron.json` 干净
-- **Lint**：0 error / 222 warning（存量 warning 可逐步清理）
+- **Lint**：0 error / 1 warning（`EditableText` 的 `set-state-in-effect`，合理用法保留）
 - **构建**：`bun run build` 通过
 
 ### ESLint 存量 warning 清理（222 → 1）
@@ -34,6 +34,13 @@
 - 修复 `exhaustive-deps`：FlowCanvas useCallback 补依赖、OutlinePanel 内联 `visibleCountOf`
 - 修复无用 eslint-disable 指令
 - 仅余 `EditableText` 的 `set-state-in-effect` warn（autoFocus→editing 模式切换，合理用法）
+
+### 提交
+
+| Commit | 内容 |
+|---|---|
+| `a18ea68` | fix(lint,algo,store): 路线图遗留项批量修复 |
+| `9e19258` | lint: warning 清理 222 → 1 |
 
 ### 遗留
 
