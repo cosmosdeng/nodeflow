@@ -121,7 +121,7 @@ export interface NormalizedDocument {
   activeTabId: string;
 }
 
-const defaultViewport: ViewportState = { x: 0, y: 0, zoom: 1 };
+
 
 /** 只保留存在的 Node 内部 Document 字段,剥离 React Flow / Derived 字段(selected/measured/hidden/draggable) */
 function normalizeNode(n: unknown): FlowNode {

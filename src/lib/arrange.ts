@@ -1,7 +1,7 @@
 import type { FlowEdge, FlowNode, Organization, Participant, Stage, ViewportState } from '../types';
 import { getNodeSize } from './composite';
 import { computeLayout, computeLevels } from './layout';
-import { classifyMatrixNode, hasValidParticipant, hasValidStage } from './matrixClassification';
+import {classifyMatrixNode} from './matrixClassification';
 import { computeStageOnlyColumnAnchors } from './stageOnlyAnchor';
 import { computeFreeNodePlacements } from './freePlacement';
 

@@ -11,7 +11,6 @@ import {
   asPayloadRecord,
   asString,
   asStringArray,
-  asNumber,
   asOptionalNumber,
   asBoolean,
 } from './validation';

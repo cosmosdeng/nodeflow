@@ -1,18 +1,4 @@
-import type {
-  FlowNode,
-  FlowEdge,
-  GraphSnapshot,
-  GraphDocument,
-  ViewportState,
-  Artifact,
-  FlowNodeData,
-  FlowEdgeData,
-  Annotation,
-  Stage,
-  Participant,
-  Organization,
-  ParticipantOrderMode,
-} from '../../types';
+import type { GraphDocument, ViewportState, Participant, Organization } from '../../types'
 import type { FlowStore } from '../types';
 import type { SliceDeps } from './deps';
 import {
@@ -33,33 +19,8 @@ import {
   type NormalizedDocument,
 } from '../../lib/document';
 import { validateGraph } from '../../lib/graphValidation';
-import { DOCUMENT_COLORS, createDefaultNode, uid } from '../../types';
-import {
-  loadSaved,
-  persistDocument,
-  loadPersistedDocument,
-  loadDocsIndex,
-  persistDocsIndex,
-  docKey,
-  seedGraph,
-} from '../persistence';
-import { collapseComposite, expandComposite, refreshCompositeHidden, buildNodesById } from '../compositeHelpers';
-import { closeCompositeTabInState } from '../historyHelpers';
-import {
-  applyCompositeBoxes,
-  computeCompositeBounds,
-  computeCompositeActor,
-  computeCompositePorts,
-  encodeCompositePort,
-  decodeCompositePort,
-  decodeCompositePortPath,
-  findParentCompositeId,
-  getNodeSize,
-  isCompositePort,
-  COMPOSITE_PAD,
-  COMPOSITE_PREFIX,
-} from '../../lib/composite';
-import { findNodeById, findEdgeById } from '../../domain/graph/queries';
+import {DOCUMENT_COLORS, uid} from '../../types';
+import { persistDocument, loadDocsIndex, persistDocsIndex, docKey } from '../persistence'
 
 export function createDocumentsSlice({ set, get }: SliceDeps): Partial<FlowStore> {
   return {
@@ -497,7 +458,6 @@ export function createDocumentsSlice({ set, get }: SliceDeps): Partial<FlowStore
           dirty: false,
           selected: null,
         });
-        const idx = loadDocsIndex() ?? { docs: [], activeId: newId };
         persistDocsIndex({
           docs: [{ id: newId, name: emptyDoc.name, color: emptyDoc.color, lastSavedAt: null }],
           activeId: newId,

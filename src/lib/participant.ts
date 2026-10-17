@@ -12,7 +12,7 @@ export function validateParticipants(
   organizations: readonly Organization[],
 ): { field: string; reason: string }[] {
   const issues: { field: string; reason: string }[] = [];
-  const pids = new Set(participants.map((p) => p.id));
+  
   const oids = new Set(organizations.map((o) => o.id));
   // participant.id 唯一
   const seen = new Set<string>();

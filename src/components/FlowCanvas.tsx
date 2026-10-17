@@ -26,7 +26,7 @@ import { useGraphStore } from '../store/graphStore';
 import { changeGatewayType, createGatewayNode, GATEWAY_KINDS, GATEWAY_META } from '../lib/gateway';
 import { computeMatrixTargetZones } from '../lib/matrixTargets';
 import { hoverCandidate, type ReassignmentAxis } from '../lib/semanticReassignment';
-import { type FlowNode, type FlowEdge, type EdgeStyle, type Stage, type GatewayType } from '../types';
+import {type FlowNode, type FlowEdge, type EdgeStyle, type Stage} from '../types';
 
 const nodeTypes: NodeTypes = { flow: FlowNodeComponent };
 const edgeTypes: EdgeTypes = { flow: FlowEdgeComponent };
@@ -66,33 +66,12 @@ export default function FlowCanvas() {
   const toggleComposite = useGraphStore((s) => s.toggleComposite);
   const insertNodeOnEdge = useGraphStore((s) => s.insertNodeOnEdge);
   const stages = useGraphStore((s) => s.stages);
-  const stageFlashId = useGraphStore((s) => s.stageFlashId);
-  const addStage = useGraphStore((s) => s.addStage);
-  const swimlaneEnabled = useGraphStore((s) => s.swimlaneEnabled);
-  const participants = useGraphStore((s) => s.participants);
-  const swimlaneOrder = useGraphStore((s) => s.swimlaneOrder);
-  const updateStage = useGraphStore((s) => s.updateStage);
-  const deleteStage = useGraphStore((s) => s.deleteStage);
-  const selectStage = useGraphStore((s) => s.selectStage);
-  const setStageNodes = useGraphStore((s) => s.setStageNodes);
-  const detachNodeFromStages = useGraphStore((s) => s.detachNodeFromStages);
-  const syncStageMembership = useGraphStore((s) => s.syncStageMembership);
-  const moveStageNodes = useGraphStore((s) => s.moveStageNodes);
-  const resizeStage = useGraphStore((s) => s.resizeStage);
-  const enterNodeToStage = useGraphStore((s) => s.enterNodeToStage);
   const detachNodesFromStages = useGraphStore((s) => s.detachNodesFromStages);
-  const autoGrowStage = useGraphStore((s) => s.autoGrowStage);
   const annotations = useGraphStore((s) => s.annotations);
-  const addAnnotation = useGraphStore((s) => s.addAnnotation);
   const updateAnnotation = useGraphStore((s) => s.updateAnnotation);
   const deleteAnnotation = useGraphStore((s) => s.deleteAnnotation);
   const toggleAnnotationCollapsed = useGraphStore((s) => s.toggleAnnotationCollapsed);
   const setAnnotationPosition = useGraphStore((s) => s.setAnnotationPosition);
-  const toggleLock = (id: string) => {
-    const n = useGraphStore.getState().nodes.find((x) => x.id === id);
-    if (!n) return;
-    useGraphStore.getState().updateNode(id, { locked: !n.data.locked });
-  };
 
   // Phase C:拖拽释放在目标带后弹出的重分配确认(仅 runtime)
   const [reassignRequest, setReassignRequest] = useState<{
@@ -223,24 +202,6 @@ export default function FlowCanvas() {
       stageEnterTimerRef.current = null;
     }
     stageEnterTargetRef.current = null;
-  }, []);
-
-  // 节点/域闪烁反馈
-  const setStageFlash = useCallback((stageId: string, nodeId: string) => {
-    useGraphStore.setState({ stageFlashId: stageId });
-    useGraphStore.setState((s) => ({
-      nodes: s.nodes.map((n) => (n.id === nodeId ? { ...n, className: `${n.className ?? ''} nf-flash`.trim() } : n)),
-    }));
-    window.setTimeout(() => {
-      useGraphStore.setState({ stageFlashId: null });
-      useGraphStore.setState((s) => ({
-        nodes: s.nodes.map((n) =>
-          n.className?.includes('nf-flash')
-            ? { ...n, className: n.className.replace(/\s*nf-flash\s*/g, '').trim() }
-            : n,
-        ),
-      }));
-    }, 700);
   }, []);
 
   // ---- Phase C Semantic Reassignment(drag → hover ≈1s → 反馈 → 确认) ----
@@ -743,6 +704,9 @@ export default function FlowCanvas() {
       toggleComposite,
       detachNodesFromStages,
       allLocked,
+      copySelection,
+      pasteClipboard,
+      screenToFlowPosition,
     ],
   );
 

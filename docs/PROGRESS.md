@@ -27,12 +27,19 @@
 - **Lint**：0 error / 222 warning（存量 warning 可逐步清理）
 - **构建**：`bun run build` 通过
 
+### ESLint 存量 warning 清理（222 → 1）
+
+- 批量清理冗余 import（184 个 unused specifier）：store 切片 god store 拆分遗留、类型导入
+- 移除未用局部变量/函数/解构 selector（FlowCanvas 19 个、FlowNodeComponent 等）
+- 修复 `exhaustive-deps`：FlowCanvas useCallback 补依赖、OutlinePanel 内联 `visibleCountOf`
+- 修复无用 eslint-disable 指令
+- 仅余 `EditableText` 的 `set-state-in-effect` warn（autoFocus→editing 模式切换，合理用法）
+
 ### 遗留
 
 1. **键盘连线 / 移动替代**（完整 a11y）—— 需交互设计决策
 2. **npm `latest` dist-tag** 指向 stable —— 发布时修正
-3. ESLint 存量 222 warning（unused-vars / no-explicit-any 等）逐步清理
-4. `docs/UI_UX_DESIGN.md` 与实现同步
+3. `docs/UI_UX_DESIGN.md` 与实现同步
 
 ---
 

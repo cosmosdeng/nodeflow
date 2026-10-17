@@ -1,24 +1,10 @@
-import type {
-  FlowNode,
-  FlowEdge,
-  GraphSnapshot,
-  GraphDocument,
-  ViewportState,
-  Artifact,
-  FlowNodeData,
-  FlowEdgeData,
-  Annotation,
-  Stage,
-  Participant,
-  Organization,
-  ParticipantOrderMode,
-} from '../../types';
+import type { FlowNode, Annotation } from '../../types'
 import type { FlowStore } from '../types';
 import type { SliceDeps } from './deps';
 import { buildNodesById, collapseComposite, expandComposite } from '../compositeHelpers';
 import { closeCompositeTabInState } from '../historyHelpers';
-import { computeCompositeActor, computeCompositeBounds, applyCompositeBoxes } from '../../lib/composite';
-import { createDefaultNode, uid, DOCUMENT_COLORS } from '../../types';
+import {computeCompositeActor, computeCompositeBounds} from '../../lib/composite';
+import {uid} from '../../types';
 import { findNodeById } from '../../domain/graph/queries';
 
 export function createCompositeSlice({ set, get }: SliceDeps): Partial<FlowStore> {

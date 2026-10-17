@@ -54,17 +54,15 @@ function hasOutputPort(node: FlowNode, portId: string): boolean {
 /**
  * 校验 Graph。
  * @param graph 需要校验的图数据
- * @param activeCanvasNodeIds 当前画布(主画布或某组合内部)可见的节点 id 集合。
+ * @param _activeCanvasNodeIds 当前画布(主画布或某组合内部)可见的节点 id 集合。
  *    用于区分「跨画布引用」与「非法悬空引用」。不传时默认所有节点都在同一画布校验。
  */
-export function validateGraph(graph: GraphInput, activeCanvasNodeIds?: Set<string>): GraphValidationResult {
+export function validateGraph(graph: GraphInput, _activeCanvasNodeIds?: Set<string>): GraphValidationResult {
   const issues: ValidationIssue[] = [];
   const nodes = graph.nodes;
   const edges = graph.edges;
   const stages = graph.stages ?? [];
   const annotations = graph.annotations ?? [];
-
-  const visible = activeCanvasNodeIds ?? new Set(nodes.map((n) => n.id));
 
   // ---- ID 唯一性 ----
   const nodeIds = new Set<string>();

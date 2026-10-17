@@ -1,36 +1,15 @@
-import type {
-  FlowNode,
-  FlowEdge,
-  GraphSnapshot,
-  GraphDocument,
-  ViewportState,
-  Artifact,
-  FlowNodeData,
-  FlowEdgeData,
-  Annotation,
-  Stage,
-  Participant,
-  Organization,
-  ParticipantOrderMode,
-} from '../../types';
+import type { FlowNodeData, FlowEdgeData } from '../../types'
 import type { FlowStore } from '../types';
-import { addNodeToStage, boundsToStageBox, computeStageBounds, computeStageMinSize } from '../../lib/stage';
+import {boundsToStageBox, computeStageBounds} from '../../lib/stage';
 
 import type { SliceDeps } from './deps';
-import { refreshCompositeHidden, removeChildFromComposites } from '../compositeHelpers';
-import {
-  encodeCompositePort,
-  decodeCompositePortPath,
-  applyCompositeBoxes,
-  getNodeSize,
-  findParentCompositeId,
-  COMPOSITE_PAD,
-} from '../../lib/composite';
+import {refreshCompositeHidden} from '../compositeHelpers';
+import { encodeCompositePort, decodeCompositePortPath, getNodeSize } from '../../lib/composite'
 import { annotationTargetsEdge } from '../../lib/annotation';
 import { createFlowEdge } from '../../lib/edge';
 import { setEdgeArtifact, updateEdgeArtifact } from '../../lib/artifact';
 import { findNodeById, findEdgeById } from '../../domain/graph/queries';
-import { findStageEmptySpot, pushNodesAwayFromBox, pushOutOfRect, rectOverlaps, type Rect } from '../../lib/geometry';
+import {pushOutOfRect, rectOverlaps, type Rect} from '../../lib/geometry';
 import { createDefaultNode, uid } from '../../types';
 
 export function createEdgesSlice({ set, get }: SliceDeps): Partial<FlowStore> {

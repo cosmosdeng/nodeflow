@@ -4,15 +4,7 @@ import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js';
 import { createNodeFlowMcpServer } from '../server';
 import { executeAgentRequest } from '../../agent/executor';
 import { setAgentTestCommandsEnabled } from '../../agent/capabilities';
-import { AGENT_PROTOCOL_VERSION, type AgentRequest } from '../../agent/types';
-
-const agent = (type: string, payload?: unknown) =>
-  executeAgentRequest({
-    protocolVersion: AGENT_PROTOCOL_VERSION,
-    requestId: `t-${Math.random().toString(36).slice(2, 7)}`,
-    type: type as AgentRequest['type'],
-    payload,
-  });
+import { AGENT_PROTOCOL_VERSION } from '../../agent/types'
 
 interface ContentLike {
   type?: string;

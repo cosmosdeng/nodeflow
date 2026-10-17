@@ -1,20 +1,4 @@
-import type {
-  FlowNode,
-  FlowEdge,
-  GraphSnapshot,
-  GraphDocument,
-  ViewportState,
-  Artifact,
-  FlowNodeData,
-  FlowEdgeData,
-  EdgeStyle,
-  ThemeMode,
-  Annotation,
-  Stage,
-  Participant,
-  Organization,
-  ParticipantOrderMode,
-} from '../../types';
+
 import type { FlowStore } from '../types';
 import type { SliceDeps } from './deps';
 import { makeSnapshot, restoreSnapshotFields } from '../historyHelpers';

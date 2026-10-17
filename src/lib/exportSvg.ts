@@ -274,7 +274,7 @@ export function buildSvg(
 }
 
 /** 把 path 的坐标按 (sx, sy) 映射并缩放 */
-function transformPath(path: string, sx: (x: number) => number, sy: (y: number) => number, scale: number): string {
+function transformPath(path: string, sx: (x: number) => number, sy: (y: number) => number, _scale: number): string {
   return path.replace(/([MLC])\s+(-?[\d.]+)[,\s]+(-?[\d.]+)/gi, (_m, c: string, a: string, b: string) => {
     const x = parseFloat(a);
     const y = parseFloat(b);

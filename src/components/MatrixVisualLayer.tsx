@@ -31,7 +31,7 @@ const MIN_LANE_LABEL_H = 24;
 const DEFAULT_EMPTY_H = 60;
 const DEFAULT_BAND_W = 600;
 /** 空 Stage 列宽下限,保证标签可读 */
-const DEFAULT_EMPTY_STAGE_W = 120;
+
 
 interface Rect {
   l: number;
@@ -271,7 +271,7 @@ export default function MatrixVisualLayer() {
   setMatrixLabelHits(hits);
 
   const isEditingLabel = (key: string) => labelEdit?.key === key;
-  const editInput = (key: string) => (
+  const editInput = (_key: string) => (
     <input
       className="matrix-label-input"
       autoFocus

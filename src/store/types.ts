@@ -2,27 +2,7 @@
  * FlowStore 领域类型:选中、自动编辑目标、完整 Store 接口。
  * 由 graphStore 实现;切片只依赖本文件的类型。
  */
-import type {
-  FlowNode,
-  FlowEdge,
-  GraphSnapshot,
-  GraphState,
-  GraphDocument,
-  ViewportState,
-  Artifact,
-  FlowNodeData,
-  FlowEdgeData,
-  EdgeStyle,
-  ThemeMode,
-  ActorType,
-  Annotation,
-  AnnotationTarget,
-  Stage,
-  Participant,
-  Organization,
-  ParticipantOrderMode,
-  ParticipantType,
-} from '../types';
+import type { FlowNode, FlowEdge, GraphSnapshot, GraphState, GraphDocument, ViewportState, Artifact, FlowNodeData, FlowEdgeData, EdgeStyle, ThemeMode, Annotation, AnnotationTarget, Stage, Participant, Organization, ParticipantOrderMode, ParticipantType } from '../types'
 import type { Connection, OnNodesChange, OnEdgesChange } from '@xyflow/react';
 import type { LayoutDirection } from '../lib/layout';
 

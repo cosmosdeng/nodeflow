@@ -1,53 +1,11 @@
-import type {
-  FlowNode,
-  FlowEdge,
-  GraphSnapshot,
-  GraphDocument,
-  ViewportState,
-  Artifact,
-  FlowNodeData,
-  FlowEdgeData,
-  Annotation,
-  Stage,
-  Participant,
-  Organization,
-  ParticipantOrderMode,
-} from '../../types';
+import type { FlowNode, FlowEdge, FlowNodeData } from '../../types'
 import type { FlowStore } from '../types';
 import type { SliceDeps } from './deps';
-import {
-  computeCompositePorts,
-  encodeCompositePort,
-  decodeCompositePort,
-  decodeCompositePortPath,
-  findParentCompositeId,
-  isCompositePort,
-  COMPOSITE_PREFIX,
-  applyCompositeBoxes,
-  getNodeSize,
-} from '../../lib/composite';
-import {
-  annotationTargetMatches,
-  annotationTargetsEdge,
-  annotationTargetsNode,
-  annotationTargetsStage,
-  anyAnnotationExpanded,
-  createAnnotation,
-  toggleAnnotationCollapsed as toggleAnnotationCollapsedIn,
-} from '../../lib/annotation';
+import { getNodeSize } from '../../lib/composite'
+import { annotationTargetMatches, annotationTargetsNode, anyAnnotationExpanded, createAnnotation, toggleAnnotationCollapsed as toggleAnnotationCollapsedIn } from '../../lib/annotation'
 import { createDefaultNode, uid } from '../../types';
-import { findNodeById, findEdgeById } from '../../domain/graph/queries';
-import {
-  collectAllDescendants,
-  remapHandle,
-  wrapRefToOuter,
-  collapseComposite,
-  removeChildFromComposites,
-  edgeReferencesNode,
-  refreshCompositeHidden,
-  expandComposite,
-  buildNodesById,
-} from '../compositeHelpers';
+import {findNodeById} from '../../domain/graph/queries';
+import { collectAllDescendants, remapHandle, removeChildFromComposites, edgeReferencesNode, refreshCompositeHidden, expandComposite } from '../compositeHelpers'
 import { closeCompositeTabInState } from '../historyHelpers';
 
 export function createNodesSlice({ set, get }: SliceDeps): Partial<FlowStore> {

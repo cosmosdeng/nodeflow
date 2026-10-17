@@ -23,7 +23,7 @@ export interface NodeFlowMcpServerOptions {
   testFixture?: boolean;
 }
 
-const TEST_ONLY_TOOLS: ReadonlySet<string> = new Set(['reset', 'seed_fixture']);
+
 
 const caps = (testFixture: boolean) => ({
   'graph.read': true,

@@ -187,14 +187,11 @@ export default function OutlinePanel({ onClose }: Props) {
     return [...valid, ...stages.filter((st) => !seen.has(st.id)).map((st) => st.id)];
   }, [stages, stageOrder]);
 
-  const visibleCountOf = (participantId: string) =>
-    nodes.filter((n) => !n.hidden && n.data?.participantId === participantId).length;
-
   const participantItems: OrderItem[] = useMemo(
     () =>
       orderedParticipantIds.map((pid) => {
         const p = participants.find((x) => x.id === pid);
-        const count = visibleCountOf(pid);
+        const count = nodes.filter((n) => !n.hidden && n.data?.participantId === pid).length;
         return { id: pid, name: p?.name ?? '未命名参与方', count, empty: count === 0 };
       }),
     [orderedParticipantIds, participants, nodes],
@@ -280,7 +277,6 @@ export default function OutlinePanel({ onClose }: Props) {
               </div>
             )}
             {g.items.map((n) => {
-              const actor = ACTOR_META[n.data.actor];
               const composite = n.data.composite;
               const isSel = selected?.kind === 'node' && selected.id === n.id;
               const ownerId = ownerOf.get(n.id);

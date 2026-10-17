@@ -52,8 +52,6 @@ export default function EditableText({
     autoFocusPending.current = true;
     setEditing(true);
     onEditingChangeRef.current?.(true);
-    // 依赖仅 autoFocus,不依赖内联回调,避免 setNodeDraggable 触发重渲染后回调变化造成循环
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [autoFocus]);
 
   // 编辑态已应用到 DOM(contentEditable=true)后再聚焦,此时元素才可聚焦

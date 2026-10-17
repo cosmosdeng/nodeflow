@@ -8,7 +8,6 @@ import { openCompositePopup } from '../lib/compositePopup';
 import { useGraphStore } from '../store/graphStore';
 import ActorIcon from './ActorIcon';
 import EditableText from './EditableText';
-import AnnotationBox from './AnnotationBox';
 
 const EMPTY_NODES: FlowNode[] = [];
 const EMPTY_EDGES: FlowEdge[] = [];
@@ -37,8 +36,6 @@ function FlowNodeComponent({ id, data, selected }: NodeProps<FlowNode>) {
     useShallow((s) => s.annotations.filter((a) => a.target.kind === 'node' && a.target.nodeId === id)),
   );
   const addAnnotation = useGraphStore((s) => s.addAnnotation);
-  const updateAnnotation = useGraphStore((s) => s.updateAnnotation);
-  const deleteAnnotation = useGraphStore((s) => s.deleteAnnotation);
   const toggleAnnotationCollapsed = useGraphStore((s) => s.toggleAnnotationCollapsed);
 
   // 悬停节点(无注释时悬停显示添加 pin;离开后延迟隐藏,留出移入 pin 的时间)

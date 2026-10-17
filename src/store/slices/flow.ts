@@ -1,22 +1,6 @@
-import type {
-  FlowNode,
-  FlowEdge,
-  GraphSnapshot,
-  GraphDocument,
-  ViewportState,
-  Artifact,
-  FlowNodeData,
-  FlowEdgeData,
-  EdgeStyle,
-  ThemeMode,
-  Annotation,
-  Stage,
-  Participant,
-  Organization,
-  ParticipantOrderMode,
-} from '../../types';
-import type { FlowStore, Selection, AutoEditTarget } from '../types';
-import type { StoreSet, StoreGet, SliceDeps } from './deps';
+import type { FlowNode, FlowEdge } from '../../types'
+import type {FlowStore} from '../types';
+import type {SliceDeps} from './deps';
 import { applyNodeChanges, applyEdgeChanges } from '@xyflow/react';
 import { removeChildFromComposites, refreshCompositeHidden, expandComposite } from '../compositeHelpers';
 import { applyCompositeBoxes, decodeCompositePort } from '../../lib/composite';

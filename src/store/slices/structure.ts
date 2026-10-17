@@ -1,37 +1,13 @@
-import type {
-  FlowNode,
-  FlowEdge,
-  GraphSnapshot,
-  GraphDocument,
-  ViewportState,
-  Artifact,
-  FlowNodeData,
-  FlowEdgeData,
-  Annotation,
-  Stage,
-  Participant,
-  Organization,
-  ParticipantOrderMode,
-} from '../../types';
-import { annotationTargetsStage, annotationTargetsNode, annotationTargetsEdge } from '../../lib/annotation';
+import type { Stage } from '../../types'
+import {annotationTargetsStage} from '../../lib/annotation';
 import type { FlowStore } from '../types';
 import type { SliceDeps } from './deps';
-import {
-  addNodeToStage,
-  boundsToStageBox,
-  computeStageBounds,
-  computeStageMembership,
-  computeStageMinSize,
-  detachNodeIdsFromStages,
-} from '../../lib/stage';
-import { findStageEmptySpot, pushNodesAwayFromBox, pushOutOfRect, rectOverlaps, type Rect } from '../../lib/geometry';
+import { addNodeToStage, computeStageMembership, computeStageMinSize, detachNodeIdsFromStages } from '../../lib/stage'
+import {findStageEmptySpot} from '../../lib/geometry';
 import { detachOrganizationFromParticipants, detachParticipantFromNodes } from '../../lib/participant';
 import { arrangeSwimlanes, computeMatrixLayout } from '../../lib/arrange';
 import { computeLayout } from '../../lib/layout';
-import { createDefaultNode, uid } from '../../types';
-import { findNodeById } from '../../domain/graph/queries';
-import { applyCompositeBoxes, getNodeSize, COMPOSITE_PAD, computeCompositeBounds } from '../../lib/composite';
-import { refreshCompositeHidden, buildNodesById } from '../compositeHelpers';
+import {uid} from '../../types';
 
 export function createStructureSlice({ set, get }: SliceDeps): Partial<FlowStore> {
   return {

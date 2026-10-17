@@ -2,26 +2,13 @@
  * 组合节点纯/半纯 helper:塌缩/展开/隐藏刷新/端口重映射。
  * 不直接依赖 store 实例,由 slice 传入 set/get。
  */
-import { type FlowNode, type FlowEdge, type Annotation } from '../types';
-import {
-  COMPOSITE_PAD,
-  COMPOSITE_PREFIX,
-  applyCompositeBoxes,
-  computeCompositeBounds,
-  computeCompositePorts,
-  decodeCompositePortPath,
-  encodeCompositePort,
-  findParentCompositeId,
-  getNodeSize,
-  isCompositePort,
-} from '../lib/composite';
+import {type FlowNode, type FlowEdge} from '../types';
+import { COMPOSITE_PAD, COMPOSITE_PREFIX, computeCompositeBounds, computeCompositePorts, decodeCompositePortPath, encodeCompositePort, findParentCompositeId, getNodeSize, isCompositePort } from '../lib/composite'
 import { findNodeById } from '../domain/graph/queries';
 import { pushNodesAwayFromBox, type Rect } from '../lib/geometry';
 import type { FlowNodeData } from '../types';
 import type { FlowStore } from './types';
 
-type StoreSet = (partial: Partial<FlowStore> | ((s: FlowStore) => Partial<FlowStore>)) => void;
-type StoreGet = () => FlowStore;
 
 /* ------------------------------------------------------------------ */
 /* 组合节点(Composite Node)                                             */
