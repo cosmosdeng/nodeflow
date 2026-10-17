@@ -35,18 +35,25 @@
 - 修复无用 eslint-disable 指令
 - 仅余 `EditableText` 的 `set-state-in-effect` warn（autoFocus→editing 模式切换，合理用法）
 
+### 键盘 a11y + UI 文档同步
+
+- **键盘移动**：方向键移动选中节点 10px，`Shift+方向键` 大步进 50px
+- **键盘连线**：`L` 两步式（选源按 L → 选目标按 L），`Esc` 取消；连线模式悬浮提示
+- **UI_UX_DESIGN.md 同步**：补录 §4.11 对话框（DialogHost）、EditableText ARIA、交互表新增键盘操作
+
 ### 提交
 
 | Commit | 内容 |
 |---|---|
 | `a18ea68` | fix(lint,algo,store): 路线图遗留项批量修复 |
 | `9e19258` | lint: warning 清理 222 → 1 |
+| `74ac09e` | docs: PROGRESS 更新 |
 
 ### 遗留
 
-1. **键盘连线 / 移动替代**（完整 a11y）—— 需交互设计决策
-2. **npm `latest` dist-tag** 指向 stable —— 发布时修正
-3. `docs/UI_UX_DESIGN.md` 与实现同步
+1. ~~**键盘连线 / 移动替代**（完整 a11y）~~ ✅ 已完成（方向键移动 + L 键连线）
+2. **npm `latest` dist-tag** 指向 stable —— 发布时修正（需先发布 0.4.0-next.3）
+3. ~~`docs/UI_UX_DESIGN.md` 与实现同步~~ ✅ 已完成
 
 ---
 

@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import Toolbar from './components/Toolbar';
 import FlowCanvas from './components/FlowCanvas';
 import OutlinePanel from './components/OutlinePanel';
@@ -67,15 +67,80 @@ function MainApp() {
     return off;
   }, [loadProject]);
 
-  // 全局快捷键:撤销 / 重做 / 保存
+  // 全局快捷键:撤销 / 重做 / 保存 / 键盘移动 / 键盘连线
+  const linkSourceRef = useRef<string | null>(null);
+  const [linkHint, setLinkHint] = useState<string | null>(null);
+
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       // 正在编辑文本时,快捷键留给输入框本身,不触发全局操作
       const t = e.target as HTMLElement | null;
       if (t && (t.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/i.test(t.tagName))) return;
       const mod = e.ctrlKey || e.metaKey;
-      if (!mod) return;
       const key = e.key.toLowerCase();
+
+      // ---- 非修饰键:键盘移动 / 连线 / 取消 ----
+      if (!mod) {
+        // 方向键移动选中节点(Shift = 大步进)
+        if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.key)) {
+          const st = useGraphStore.getState();
+          if (st.allLocked) return;
+          const selectedNodes = st.nodes.filter((n) => n.selected);
+          if (selectedNodes.length === 0) return;
+          e.preventDefault();
+          const step = e.shiftKey ? 50 : 10;
+          const dx = e.key === 'ArrowLeft' ? -step : e.key === 'ArrowRight' ? step : 0;
+          const dy = e.key === 'ArrowUp' ? -step : e.key === 'ArrowDown' ? step : 0;
+          st.onNodesChange(
+            selectedNodes.map((n) => ({
+              type: 'position' as const,
+              id: n.id,
+              position: { x: n.position.x + dx, y: n.position.y + dy },
+            })),
+          );
+          return;
+        }
+        // L:键盘连线 — 第一次按下记录源节点,第二次按下连线到当前选中节点
+        if (key === 'l') {
+          const st = useGraphStore.getState();
+          if (st.allLocked) return;
+          const sel = st.selected;
+          if (!sel || sel.kind !== 'node') {
+            void alertDialogAsync('请先选中一个节点作为连线起点/终点,再按 L。');
+            return;
+          }
+          if (linkSourceRef.current === null) {
+            linkSourceRef.current = sel.id;
+            const srcNode = st.nodes.find((n) => n.id === sel.id);
+            setLinkHint(`连线起点:「${srcNode?.data.label ?? sel.id}」— 选中目标节点后按 L 完成,Esc 取消`);
+          } else {
+            const srcId = linkSourceRef.current;
+            linkSourceRef.current = null;
+            setLinkHint(null);
+            if (srcId === sel.id) return; // 自连忽略
+            // 源节点输出端口 → 目标节点输入端口
+            const srcNode = st.nodes.find((n) => n.id === srcId);
+            const outPort = srcNode?.data.outputs?.[0]?.id;
+            const inPort = st.nodes.find((n) => n.id === sel.id)?.data.inputs?.[0]?.id;
+            st.onConnect({
+              source: srcId,
+              sourceHandle: outPort ?? null,
+              target: sel.id,
+              targetHandle: inPort ?? null,
+            });
+          }
+          return;
+        }
+        // Esc:取消连线模式
+        if (e.key === 'Escape' && linkSourceRef.current !== null) {
+          linkSourceRef.current = null;
+          setLinkHint(null);
+          return;
+        }
+        return;
+      }
+
+      // ---- 修饰键组合 ----
       if (key === 's') {
         e.preventDefault();
         saveNow();
@@ -197,7 +262,30 @@ function MainApp() {
       <div className="app-main">
         {showOutline && <OutlinePanel onClose={() => setShowOutline(false)} />}
         {showParticipants && <ParticipantsPanel onClose={() => setShowParticipants(false)} />}
-        <FlowCanvas />
+        <div style={{ flex: 1, position: 'relative', display: 'flex' }}>
+          <FlowCanvas />
+          {linkHint && (
+            <div
+              style={{
+                position: 'absolute',
+                top: 12,
+                left: '50%',
+                transform: 'translateX(-50%)',
+                zIndex: 20,
+                padding: '8px 16px',
+                borderRadius: 8,
+                background: 'var(--accent-soft)',
+                border: '1px solid var(--accent)',
+                color: 'var(--text)',
+                fontSize: 12,
+                pointerEvents: 'none',
+                whiteSpace: 'nowrap',
+              }}
+            >
+              🔗 {linkHint}
+            </div>
+          )}
+        </div>
         {showProperties && <PropertiesPanel onClose={() => setShowProperties(false)} />}
         {showHistory && <HistoryPanel onClose={() => setShowHistory(false)} />}
       </div>
