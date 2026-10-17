@@ -41,6 +41,12 @@
 - **键盘连线**：`L` 两步式（选源按 L → 选目标按 L），`Esc` 取消；连线模式悬浮提示
 - **UI_UX_DESIGN.md 同步**：补录 §4.11 对话框（DialogHost）、EditableText ARIA、交互表新增键盘操作
 
+### npm 发布（0.4.0-next.3）
+
+- 发布 `@cosmosdeng/nodeflow-mcp@0.4.0-next.3`
+- dist-tag 修正：`latest` → `0.4.0-next.3`，`next` → `0.4.0-next.3`
+- **注意**：发布 stable `0.4.0` 时需将 `latest` 更新为 stable 版本
+
 ### 提交
 
 | Commit | 内容 |
@@ -52,7 +58,7 @@
 ### 遗留
 
 1. ~~**键盘连线 / 移动替代**（完整 a11y）~~ ✅ 已完成（方向键移动 + L 键连线）
-2. **npm `latest` dist-tag** 指向 stable —— 发布时修正（需先发布 0.4.0-next.3）
+2. ~~**npm `latest` dist-tag** 指向 stable~~ ✅ 已完成（发布 `0.4.0-next.3`，`latest`/`next` 均指向 `0.4.0-next.3`；发布 stable `0.4.0` 时需再更新 `latest`）
 3. ~~`docs/UI_UX_DESIGN.md` 与实现同步~~ ✅ 已完成
 
 ---
