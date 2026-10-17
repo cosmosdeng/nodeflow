@@ -1,10 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import {
-  runFreePlacement,
-  summarize,
-  type PlacementInput,
-  type PlacementResult,
-} from './freePlacementSpike';
+import { runFreePlacement, summarize, type PlacementInput, type PlacementResult } from './freePlacementSpike';
 import { computeMatrixLayout } from '../arrange';
 import { fixtures } from './stageParticipantFixtures';
 
@@ -118,24 +113,14 @@ describe('多 free / obstacle 类型', () => {
   it('assigned/rowOnly/stageOnly 障碍 → free 各自 local 消除、互不重叠', () => {
     const gap = 50;
     const input = {
-      occupied: [
-        R('assigned', 0, 0, 240, 150),
-        R('rowOnly', 0, 400, 240, 150),
-        R('stageOnly', 600, 0, 240, 150),
-      ],
-      free: [
-        R('F1', 0, 0, 240, 150),
-        R('F2', 0, 400, 240, 150),
-        R('F3', 600, 0, 240, 150),
-      ],
+      occupied: [R('assigned', 0, 0, 240, 150), R('rowOnly', 0, 400, 240, 150), R('stageOnly', 600, 0, 240, 150)],
+      free: [R('F1', 0, 0, 240, 150), R('F2', 0, 400, 240, 150), R('F3', 600, 0, 240, 150)],
     };
     const r = runFreePlacement({ ...input, gap, maxSteps: 4 });
     const m = summarize({ ...input, gap, maxSteps: 4 }, r);
     expect(m.overlapCount).toBe(0);
     for (const id of ['F1', 'F2', 'F3']) expect(diagOf(r, id).level).toBe('local');
-    const key = new Set(
-      ['F1', 'F2', 'F3'].map((id) => `${r.positions.get(id)!.x},${r.positions.get(id)!.y}`),
-    );
+    const key = new Set(['F1', 'F2', 'F3'].map((id) => `${r.positions.get(id)!.x},${r.positions.get(id)!.y}`));
     expect(key.size).toBe(3); // 各自就位,不集中同角
   });
 
@@ -163,10 +148,7 @@ describe('Component + 多 free', () => {
     const gap = 50;
     const input = {
       occupied: [R('P', 0, 0, 600, 800)],
-      free: [
-        R('F1', 300, 300, 200, 100),
-        R('F2', 300, 600, 200, 100),
-      ],
+      free: [R('F1', 300, 300, 200, 100), R('F2', 300, 600, 200, 100)],
       edges: [edge('P', 'F1'), edge('F1', 'F2')],
     };
     const r = runFreePlacement({ ...input, gap, maxSteps: 4 });

@@ -48,17 +48,10 @@ function toNodeDto(n: FlowNode, stageId: string | null, parentOf: Map<string, st
   const data = n.data ?? {};
   const w = n.measured?.width ?? (typeof n.width === 'number' ? n.width : null);
   const h = n.measured?.height ?? (typeof n.height === 'number' ? n.height : null);
-  const comp = data.composite && typeof data.composite === 'object'
-    ? (data.composite as { childIds?: unknown })
-    : null;
+  const comp = data.composite && typeof data.composite === 'object' ? (data.composite as { childIds?: unknown }) : null;
   const childIds = Array.isArray(comp?.childIds) ? comp.childIds.filter((x): x is string => typeof x === 'string') : [];
-  const gw = data.gateway && typeof data.gateway === 'object'
-    ? (data.gateway as { type?: unknown })
-    : null;
-  const gwType =
-    gw && (gw.type === 'exclusive' || gw.type === 'parallel' || gw.type === 'inclusive')
-      ? gw.type
-      : null;
+  const gw = data.gateway && typeof data.gateway === 'object' ? (data.gateway as { type?: unknown }) : null;
+  const gwType = gw && (gw.type === 'exclusive' || gw.type === 'parallel' || gw.type === 'inclusive') ? gw.type : null;
   return {
     id: n.id,
     type: n.type ?? 'flow',
@@ -66,8 +59,7 @@ function toNodeDto(n: FlowNode, stageId: string | null, parentOf: Map<string, st
     position: { x: n.position?.x ?? 0, y: n.position?.y ?? 0 },
     width: typeof w === 'number' && Number.isFinite(w) ? w : null,
     height: typeof h === 'number' && Number.isFinite(h) ? h : null,
-    participantId:
-      typeof data.participantId === 'string' && data.participantId ? data.participantId : null,
+    participantId: typeof data.participantId === 'string' && data.participantId ? data.participantId : null,
     stageId,
     actor: typeof data.actor === 'string' ? data.actor : 'machine',
     locked: data.locked === true,
@@ -103,7 +95,12 @@ function toEdgeDto(e: FlowEdge): AgentEdgeDto {
   };
 }
 
-function toParticipantDto(p: { id: string; name?: string; type?: string; organizationId?: string }): AgentParticipantDto {
+function toParticipantDto(p: {
+  id: string;
+  name?: string;
+  type?: string;
+  organizationId?: string;
+}): AgentParticipantDto {
   return {
     id: p.id,
     name: typeof p.name === 'string' ? p.name : p.id,

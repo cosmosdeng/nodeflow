@@ -33,8 +33,17 @@ const DEFAULT_BAND_W = 600;
 /** 空 Stage 列宽下限,保证标签可读 */
 const DEFAULT_EMPTY_STAGE_W = 120;
 
-interface Rect { l: number; t: number; r: number; b: number }
-interface LabelItem { key: string; text: string; id: string }
+interface Rect {
+  l: number;
+  t: number;
+  r: number;
+  b: number;
+}
+interface LabelItem {
+  key: string;
+  text: string;
+  id: string;
+}
 
 export default function MatrixVisualLayer() {
   const nodes = useGraphStore((s) => s.nodes);
@@ -288,11 +297,7 @@ export default function MatrixVisualLayer() {
             const s = toScreen(w);
             const hl = reassignHighlight?.stage != null && stageBands[i]?.id === reassignHighlight.stage;
             return (
-              <div
-                key={`col-${i}`}
-                className={`matrix-band matrix-col${hl ? ' reassign-target' : ''}`}
-                style={s}
-              />
+              <div key={`col-${i}`} className={`matrix-band matrix-col${hl ? ' reassign-target' : ''}`} style={s} />
             );
           })}
         {partOn &&
@@ -300,13 +305,10 @@ export default function MatrixVisualLayer() {
             // 空带只有标签,不渲染带主体
             if (w.isEmpty) return null;
             const s = toScreen(w);
-            const hl = reassignHighlight?.participant != null && participantBands[i]?.id === reassignHighlight.participant;
+            const hl =
+              reassignHighlight?.participant != null && participantBands[i]?.id === reassignHighlight.participant;
             return (
-              <div
-                key={`row-${i}`}
-                className={`matrix-band matrix-row${hl ? ' reassign-target' : ''}`}
-                style={s}
-              />
+              <div key={`row-${i}`} className={`matrix-band matrix-row${hl ? ' reassign-target' : ''}`} style={s} />
             );
           })}
       </div>

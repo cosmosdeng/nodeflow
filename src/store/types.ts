@@ -27,10 +27,7 @@ import type { Connection, OnNodesChange, OnEdgesChange } from '@xyflow/react';
 import type { LayoutDirection } from '../lib/layout';
 
 export type Selection =
-  | { kind: 'node'; id: string }
-  | { kind: 'edge'; id: string }
-  | { kind: 'artifact'; edgeId: string }
-  | null;
+  { kind: 'node'; id: string } | { kind: 'edge'; id: string } | { kind: 'artifact'; edgeId: string } | null;
 
 /**
  * 待自动进入编辑模式的目标(创建新对象后默认直接编辑)。
@@ -82,9 +79,7 @@ export interface FlowStore extends GraphState {
    */
   reassignHighlight: { participant: string | null; stage: string | null } | null;
   /** 设置 Phase C 候选高亮(合并式;传 null 全清;不写历史) */
-  setReassignHighlight: (
-    h: Partial<{ participant: string | null; stage: string | null }> | null,
-  ) => void;
+  setReassignHighlight: (h: Partial<{ participant: string | null; stage: string | null }> | null) => void;
   /**
    * Agent Interface 状态修订号(runtime-only,不持久化、不进 history snapshot)。
    * 仅由 Agent 层在成功 mutation / undo / redo 后推进;GUI 不受影响。
@@ -182,11 +177,7 @@ export interface FlowStore extends GraphState {
    * 删除节点的某个输入 / 输出端口(该方向至少保留 1 个)。
    * 会同步删除连到该端口的连线,并记录历史(撤销可恢复端口与连线)。
    */
-  removePort: (
-    id: string,
-    kind: 'input' | 'output',
-    portId: string,
-  ) => void;
+  removePort: (id: string, kind: 'input' | 'output', portId: string) => void;
 
   // ---- 泳道 (可选视觉组织,不改 geometry/语义) ----
   /** 泳道是否开启(纯展示开关,不改任何 graph/position/participant) */

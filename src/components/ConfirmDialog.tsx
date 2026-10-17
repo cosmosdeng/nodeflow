@@ -40,12 +40,7 @@ export default function ConfirmDialog({ dialog, onClose }: Props) {
 
   return (
     <div className="nf-modal-mask" onMouseDown={cancel}>
-      <div
-        className="nf-modal"
-        onMouseDown={(e) => e.stopPropagation()}
-        role="dialog"
-        aria-modal="true"
-      >
+      <div className="nf-modal" onMouseDown={(e) => e.stopPropagation()} role="dialog" aria-modal="true">
         {dialog.title && <div className="nf-modal-title">{dialog.title}</div>}
         <div className="nf-modal-message">{dialog.message}</div>
         <div className="nf-modal-actions">

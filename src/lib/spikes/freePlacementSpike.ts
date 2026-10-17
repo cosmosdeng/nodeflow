@@ -82,14 +82,10 @@ function clearAt(r: Rect, occ: Rect[]): boolean {
   return !occ.some((o) => overlap(r, o));
 }
 
-const distOf = (a: { x: number; y: number }, b: { x: number; y: number }) =>
-  Math.abs(a.x - b.x) + Math.abs(a.y - b.y);
+const distOf = (a: { x: number; y: number }, b: { x: number; y: number }) => Math.abs(a.x - b.x) + Math.abs(a.y - b.y);
 
 /** 无向连通分量(node id → component root),edges 覆盖 occupied+free */
-function componentsOf(
-  ids: string[],
-  edges: { source: string; target: string }[],
-): Map<string, Set<string>> {
+function componentsOf(ids: string[], edges: { source: string; target: string }[]): Map<string, Set<string>> {
   const parent = new Map<string, string>();
   for (const id of ids) parent.set(id, id);
   const find = (x: string): string => {
@@ -129,11 +125,7 @@ function bboxOf(rects: Rect[]): Rect {
 }
 
 /** 生成 bbox 四侧外扩候选(同 x 对中到 bbox 或保留 free 原 x 取决于 minDisplacement) */
-function peripheralCandidates(
-  f: Rect,
-  box: Rect,
-  gap: number,
-): { dx: number; dy: number; axis: string }[] {
+function peripheralCandidates(f: Rect, box: Rect, gap: number): { dx: number; dy: number; axis: string }[] {
   return [
     { dx: 0, dy: box.y + box.h + gap - f.y, axis: 'bottom' },
     { dx: box.x + box.w + gap - f.x, dy: 0, axis: 'right' },
@@ -179,21 +171,16 @@ export function runFreePlacement(input: PlacementInput): PlacementResult {
         .sort(
           (a, b) =>
             a.dist - b.dist ||
-            DIR_ORDER.findIndex((d) => d.name === a.axis) -
-              DIR_ORDER.findIndex((d) => d.name === b.axis),
+            DIR_ORDER.findIndex((d) => d.name === a.axis) - DIR_ORDER.findIndex((d) => d.name === b.axis),
         );
-      const hit = sorted.find((c) =>
-        clearAt({ ...rect, x: rect.x + c.dx, y: rect.y + c.dy }, settledRects),
-      );
+      const hit = sorted.find((c) => clearAt({ ...rect, x: rect.x + c.dx, y: rect.y + c.dy }, settledRects));
       if (hit) {
         rect.x += hit.dx;
         rect.y += hit.dy;
         level = 'local';
       } else {
         // Level 2:component peripheral(仅当分量内有已 settle 成员时)
-        const comp =
-          comps.get([...comps.keys()].find((k) => comps.get(k)!.has(f.id)) ?? f.id) ??
-          new Set([f.id]);
+        const comp = comps.get([...comps.keys()].find((k) => comps.get(k)!.has(f.id)) ?? f.id) ?? new Set([f.id]);
         const settledMembers = [...comp].filter((id) => id !== f.id && settledIdToRect.has(id));
         let placed = false;
         if (settledMembers.length > 0) {
@@ -203,12 +190,9 @@ export function runFreePlacement(input: PlacementInput): PlacementResult {
             .sort(
               (a, b) =>
                 a.dist - b.dist ||
-                ['bottom', 'right', 'top', 'left'].indexOf(a.axis) -
-                  ['bottom', 'right', 'top', 'left'].indexOf(b.axis),
+                ['bottom', 'right', 'top', 'left'].indexOf(a.axis) - ['bottom', 'right', 'top', 'left'].indexOf(b.axis),
             );
-          const pcHit = pc.find((c) =>
-            clearAt({ ...rect, x: rect.x + c.dx, y: rect.y + c.dy }, settledRects),
-          );
+          const pcHit = pc.find((c) => clearAt({ ...rect, x: rect.x + c.dx, y: rect.y + c.dy }, settledRects));
           if (pcHit) {
             rect.x += pcHit.dx;
             rect.y += pcHit.dy;
@@ -224,12 +208,9 @@ export function runFreePlacement(input: PlacementInput): PlacementResult {
             .sort(
               (a, b) =>
                 a.dist - b.dist ||
-                ['bottom', 'right', 'top', 'left'].indexOf(a.axis) -
-                  ['bottom', 'right', 'top', 'left'].indexOf(b.axis),
+                ['bottom', 'right', 'top', 'left'].indexOf(a.axis) - ['bottom', 'right', 'top', 'left'].indexOf(b.axis),
             );
-          const pcHit = pc.find((c) =>
-            clearAt({ ...rect, x: rect.x + c.dx, y: rect.y + c.dy }, settledRects),
-          );
+          const pcHit = pc.find((c) => clearAt({ ...rect, x: rect.x + c.dx, y: rect.y + c.dy }, settledRects));
           if (pcHit) {
             rect.x += pcHit.dx;
             rect.y += pcHit.dy;

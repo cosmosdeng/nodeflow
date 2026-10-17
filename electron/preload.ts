@@ -12,8 +12,7 @@ contextBridge.exposeInMainWorld('nodeflow', {
    * 返回取消订阅函数。
    */
   onOpenProjectFile: (cb: (payload: { filePath: string; content: string }) => void) => {
-    const listener = (_e: unknown, payload: { filePath: string; content: string }) =>
-      cb(payload);
+    const listener = (_e: unknown, payload: { filePath: string; content: string }) => cb(payload);
     ipcRenderer.on('open-project-file', listener);
     return () => ipcRenderer.removeListener('open-project-file', listener);
   },

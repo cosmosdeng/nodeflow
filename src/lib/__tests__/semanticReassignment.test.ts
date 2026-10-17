@@ -1,10 +1,5 @@
 import { beforeEach, describe, expect, it } from 'vitest';
-import {
-  applyIntentToSemantics,
-  cancelCandidate,
-  confirmCandidate,
-  hoverCandidate,
-} from '../semanticReassignment';
+import { applyIntentToSemantics, cancelCandidate, confirmCandidate, hoverCandidate } from '../semanticReassignment';
 import { useGraphStore } from '../../store/graphStore';
 import type { FlowNode, Stage } from '../../types';
 
@@ -243,9 +238,7 @@ describe('Phase C Semantic Reassignment(C1–C18)', () => {
     const pre = useGraphStore.getState();
     pre.markHistory();
     // 拖动过程中:只改 position,不改 semantic(不额外写历史)
-    useGraphStore.getState().onNodesChange([
-      { type: 'position', id: 'A', position: { x: 420, y: 320 } },
-    ]);
+    useGraphStore.getState().onNodesChange([{ type: 'position', id: 'A', position: { x: 420, y: 320 } }]);
     let cur = useGraphStore.getState();
     expect(cur.nodes[0].position).toEqual({ x: 420, y: 320 });
     expect(cur.nodes[0].data.participantId).toBe('P1');

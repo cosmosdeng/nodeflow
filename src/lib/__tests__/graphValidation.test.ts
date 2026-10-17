@@ -20,7 +20,15 @@ function node(id: string, data: Partial<FlowNode['data']> = {}, extra?: Partial<
 }
 
 function edge(id: string, source: string, sourceHandle: string, target: string, targetHandle: string): FlowEdge {
-  return { id, source, sourceHandle, target, targetHandle, type: 'flow', data: { label: '', artifact: null } } as FlowEdge;
+  return {
+    id,
+    source,
+    sourceHandle,
+    target,
+    targetHandle,
+    type: 'flow',
+    data: { label: '', artifact: null },
+  } as FlowEdge;
 }
 
 describe('P4-02 Graph Validation', () => {
@@ -128,7 +136,10 @@ describe('P4-02 Graph Validation', () => {
     const gw = node('GW', {
       gateway: { type: 'exclusive' },
       inputs: [{ id: 'in_1', name: '入' }],
-      outputs: [{ id: 'out_1', name: '分支1' }, { id: 'out_2', name: '分支2' }],
+      outputs: [
+        { id: 'out_1', name: '分支1' },
+        { id: 'out_2', name: '分支2' },
+      ],
     });
     const r = validateGraph({ nodes: [gw], edges: [] });
     expect(r.valid).toBe(true);

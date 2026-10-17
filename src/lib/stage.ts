@@ -16,10 +16,7 @@ export function stageContainsNode(
  * 计算每个可见节点归属的阶段域(完全包含判定)。
  * 返回 Map<nodeId, stageId>;一个节点只归属一个域(首个匹配的)。
  */
-export function computeStageMembership(
-  nodes: readonly FlowNode[],
-  stages: readonly Stage[],
-): Map<string, string> {
+export function computeStageMembership(nodes: readonly FlowNode[], stages: readonly Stage[]): Map<string, string> {
   const owned = new Map<string, string>();
   for (const n of nodes) {
     if (n.hidden) continue;

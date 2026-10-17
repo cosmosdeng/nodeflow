@@ -4,14 +4,7 @@ import type { Node, Edge } from '@xyflow/react';
 export type ActorType = 'human' | 'machine' | 'hybrid';
 
 /** 参与方(流程责任主体)类型 */
-export type ParticipantType =
-  | 'person'
-  | 'role'
-  | 'organization'
-  | 'department'
-  | 'machine'
-  | 'software'
-  | 'ai-agent';
+export type ParticipantType = 'person' | 'role' | 'organization' | 'department' | 'machine' | 'software' | 'ai-agent';
 
 /** 参与方(流程责任主体) */
 export interface Participant {
@@ -253,10 +246,7 @@ export interface GraphDocument {
 }
 
 /** 人工 / 机器 / 人机协同 标签的图标与颜色配置 */
-export const ACTOR_META: Record<
-  ActorType,
-  { label: string; color: string; bg: string; frame: string }
-> = {
+export const ACTOR_META: Record<ActorType, { label: string; color: string; bg: string; frame: string }> = {
   human: { label: '人工', color: '#e8b028', bg: 'rgba(232,176,40,.14)', frame: '#e8b028' },
   machine: { label: '机器', color: '#4ea1ff', bg: 'rgba(78,161,255,.14)', frame: '#4ea1ff' },
   hybrid: { label: '人机协同', color: '#9d6bff', bg: 'rgba(157,107,255,.14)', frame: '#22c55e' },
@@ -274,15 +264,7 @@ export const ARTIFACT_META: Record<ArtifactKind, { label: string; icon: string; 
 };
 
 export const ACTOR_KINDS: ActorType[] = ['human', 'machine', 'hybrid'];
-export const ARTIFACT_KINDS: ArtifactKind[] = [
-  'document',
-  'image',
-  'video',
-  'audio',
-  'code',
-  'data',
-  'other',
-];
+export const ARTIFACT_KINDS: ArtifactKind[] = ['document', 'image', 'video', 'audio', 'code', 'data', 'other'];
 
 export function uid(prefix = 'id'): string {
   return `${prefix}_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
@@ -305,5 +287,3 @@ export function createDefaultNode(position: { x: number; y: number }): FlowNode 
     },
   };
 }
-
-

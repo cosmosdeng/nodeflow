@@ -26,9 +26,7 @@ export function encodeCompositePort(childNodeId: string, portId: string): string
  * 例:"cid:A:cid:B:in1" → { path: ['A','B'], portId: 'in1' }
  * 嵌套组合时,端口引用会逐层前缀 cid,路径表示「从最外层到最深层」的节点链。
  */
-export function decodeCompositePortPath(
-  ref: string | null | undefined,
-): { path: string[]; portId: string } | null {
+export function decodeCompositePortPath(ref: string | null | undefined): { path: string[]; portId: string } | null {
   if (!ref || !ref.startsWith(COMPOSITE_PREFIX)) return null;
   let rest = ref.slice(COMPOSITE_PREFIX.length);
   const path: string[] = [];
@@ -52,9 +50,7 @@ export function decodeCompositePortPath(
  * 解码组合端口引用,还原出「最外层」子节点与剩余端口引用。
  * 兼容单层组合(最常见);嵌套时 nodeId 为最外层节点,portId 可能仍为 cid: 链。
  */
-export function decodeCompositePort(
-  ref: string | null | undefined,
-): { nodeId: string; portId: string } | null {
+export function decodeCompositePort(ref: string | null | undefined): { nodeId: string; portId: string } | null {
   const p = decodeCompositePortPath(ref);
   if (!p) return null;
   return { nodeId: p.path[0], portId: p.portId };
@@ -71,10 +67,7 @@ export function isCompositePort(ref: string | null | undefined): boolean {
  * - 混杂(含 human+machine 混合,或含 hybrid)→ 人机协同(hybrid)
  * - 组合子节点取其自身继承的执行主体(递归);无子节点 → 兜底 human
  */
-export function computeCompositeActor(
-  children: FlowNode[],
-  nodesById?: Map<string, FlowNode>,
-): ActorType {
+export function computeCompositeActor(children: FlowNode[], nodesById?: Map<string, FlowNode>): ActorType {
   if (children.length === 0) return 'human';
   let hasHuman = false;
   let hasMachine = false;
@@ -128,11 +121,7 @@ export function computeCompositePorts(
 
   // 收集候选端口(嵌套组合时递归展平内层组合的聚合端口),先算出原始展示名,再处理重名
   const candidates: { kind: 'input' | 'output'; ref: string; name: string; node: FlowNode }[] = [];
-  const collectChildPorts = (
-    child: FlowNode,
-    kind: 'input' | 'output',
-    used: Set<string>,
-  ) => {
+  const collectChildPorts = (child: FlowNode, kind: 'input' | 'output', used: Set<string>) => {
     if (child.data?.composite && nodesById) {
       // 子节点是组合节点:递归计算其聚合端口,再前缀当前层 cid
       const subChildren = (child.data.composite.childIds ?? [])

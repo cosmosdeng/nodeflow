@@ -114,12 +114,20 @@ export function validateGraph(graph: GraphInput, activeCanvasNodeIds?: Set<strin
     if (src && e.sourceHandle) {
       if (isPlainHandle(e.sourceHandle)) {
         if (!hasOutputPort(src, e.sourceHandle)) {
-          issues.push({ kind: 'handle', severity: 'error', message: `Edge ${e.id} 的 sourceHandle 不存在于节点 ${src.id}: ${e.sourceHandle}` });
+          issues.push({
+            kind: 'handle',
+            severity: 'error',
+            message: `Edge ${e.id} 的 sourceHandle 不存在于节点 ${src.id}: ${e.sourceHandle}`,
+          });
         }
       } else {
         const dec = decodeCompositePortPath(e.sourceHandle);
         if (!dec || dec.path.length === 0 || !nodeIds.has(dec.path[dec.path.length - 1])) {
-          issues.push({ kind: 'handle', severity: 'error', message: `Edge ${e.id} 的 cid: sourceHandle 无法解析: ${e.sourceHandle}` });
+          issues.push({
+            kind: 'handle',
+            severity: 'error',
+            message: `Edge ${e.id} 的 cid: sourceHandle 无法解析: ${e.sourceHandle}`,
+          });
         }
       }
     }
@@ -127,12 +135,20 @@ export function validateGraph(graph: GraphInput, activeCanvasNodeIds?: Set<strin
     if (tgt && e.targetHandle) {
       if (isPlainHandle(e.targetHandle)) {
         if (!hasInputPort(tgt, e.targetHandle)) {
-          issues.push({ kind: 'handle', severity: 'error', message: `Edge ${e.id} 的 targetHandle 不存在于节点 ${tgt.id}: ${e.targetHandle}` });
+          issues.push({
+            kind: 'handle',
+            severity: 'error',
+            message: `Edge ${e.id} 的 targetHandle 不存在于节点 ${tgt.id}: ${e.targetHandle}`,
+          });
         }
       } else {
         const dec = decodeCompositePortPath(e.targetHandle);
         if (!dec || dec.path.length === 0 || !nodeIds.has(dec.path[dec.path.length - 1])) {
-          issues.push({ kind: 'handle', severity: 'error', message: `Edge ${e.id} 的 cid: targetHandle 无法解析: ${e.targetHandle}` });
+          issues.push({
+            kind: 'handle',
+            severity: 'error',
+            message: `Edge ${e.id} 的 cid: targetHandle 无法解析: ${e.targetHandle}`,
+          });
         }
       }
     }
@@ -183,12 +199,14 @@ export function validateGraph(graph: GraphInput, activeCanvasNodeIds?: Set<strin
     // 输入 / 输出端口 id 唯一
     const inIds = new Set<string>();
     for (const p of n.data.inputs) {
-      if (inIds.has(p.id)) issues.push({ kind: 'gateway', severity: 'warning', message: `节点 ${n.id} 的输入端口 id 重复: ${p.id}` });
+      if (inIds.has(p.id))
+        issues.push({ kind: 'gateway', severity: 'warning', message: `节点 ${n.id} 的输入端口 id 重复: ${p.id}` });
       inIds.add(p.id);
     }
     const outIds = new Set<string>();
     for (const p of n.data.outputs) {
-      if (outIds.has(p.id)) issues.push({ kind: 'gateway', severity: 'warning', message: `节点 ${n.id} 的输出端口 id 重复: ${p.id}` });
+      if (outIds.has(p.id))
+        issues.push({ kind: 'gateway', severity: 'warning', message: `节点 ${n.id} 的输出端口 id 重复: ${p.id}` });
       outIds.add(p.id);
     }
   }
@@ -198,12 +216,14 @@ export function validateGraph(graph: GraphInput, activeCanvasNodeIds?: Set<strin
     if (n.data.gateway) continue; // 网关已在上面检查
     const inIds = new Set<string>();
     for (const p of n.data.inputs) {
-      if (inIds.has(p.id)) issues.push({ kind: 'node', severity: 'warning', message: `节点 ${n.id} 的输入端口 id 重复: ${p.id}` });
+      if (inIds.has(p.id))
+        issues.push({ kind: 'node', severity: 'warning', message: `节点 ${n.id} 的输入端口 id 重复: ${p.id}` });
       inIds.add(p.id);
     }
     const outIds = new Set<string>();
     for (const p of n.data.outputs) {
-      if (outIds.has(p.id)) issues.push({ kind: 'node', severity: 'warning', message: `节点 ${n.id} 的输出端口 id 重复: ${p.id}` });
+      if (outIds.has(p.id))
+        issues.push({ kind: 'node', severity: 'warning', message: `节点 ${n.id} 的输出端口 id 重复: ${p.id}` });
       outIds.add(p.id);
     }
   }

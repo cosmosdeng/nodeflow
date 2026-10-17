@@ -72,9 +72,7 @@ function overlaps(a: { top: number; h: number }, o: Occupy): boolean {
   return a.top < o.bottom && a.top + a.h > o.top;
 }
 
-export function computeStageOnlyColumnAnchors(
-  input: StageOnlyAnchorColumnInput,
-): StageOnlyAnchorResult {
+export function computeStageOnlyColumnAnchors(input: StageOnlyAnchorColumnInput): StageOnlyAnchorResult {
   const gap = input.gap;
   const occupied: Occupy[] = input.assigned.map((a) => ({ top: a.top, bottom: a.top + a.h }));
   const byId = new Map<string, { top?: number; h: number; kind: 'assigned' | 'stageOnly' }>();
@@ -111,9 +109,7 @@ export function computeStageOnlyColumnAnchors(
         return t === undefined ? undefined : t + byId.get(id)!.h;
       })
       .filter((v): v is number => v !== undefined);
-    const succTops = (succsOf.get(s.id) ?? [])
-      .map(settledTop)
-      .filter((v): v is number => v !== undefined);
+    const succTops = (succsOf.get(s.id) ?? []).map(settledTop).filter((v): v is number => v !== undefined);
     let preference: StageOnlyAnchorDiagnostic['preference'] = 'primary';
     let candidate: number;
     if (predBottoms.length > 0) {

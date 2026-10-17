@@ -24,13 +24,7 @@ export interface Rect {
   h: number;
 }
 
-export type PlacementLevel =
-  | 'anchor'
-  | 'band'
-  | 'original'
-  | 'local'
-  | 'component'
-  | 'peripheral';
+export type PlacementLevel = 'anchor' | 'band' | 'original' | 'local' | 'component' | 'peripheral';
 
 export interface FreeNodePlacementInput {
   /** 已最终布局的非 free 矩形(assigned / rowOnly / stageOnly 落位后) */
@@ -135,9 +129,7 @@ const sortedCandidates = (c: { dx: number; dy: number; axis: string }[]) =>
   c
     .map((x) => ({ ...x, dist: Math.abs(x.dx) + Math.abs(x.dy) }))
     .sort(
-      (a, b) =>
-        a.dist - b.dist ||
-        DIRS.findIndex((d) => d.axis === a.axis) - DIRS.findIndex((d) => d.axis === b.axis),
+      (a, b) => a.dist - b.dist || DIRS.findIndex((d) => d.axis === a.axis) - DIRS.findIndex((d) => d.axis === b.axis),
     );
 
 /**
@@ -202,11 +194,7 @@ function anchorRect(
  * - 起点压带 → 返回各禁入区间左右两侧的候选 + 整体放到全部区间之前/之后,按与原点的位移升序。
  * 纯函数,确定性。
  */
-function axisCandidates(
-  v: number,
-  len: number,
-  intervals: readonly (readonly [number, number])[],
-): number[] {
+function axisCandidates(v: number, len: number, intervals: readonly (readonly [number, number])[]): number[] {
   if (intervals.length === 0) return [v];
   if (intervals.every(([a, b]) => v + len <= a || v >= b)) return [v];
 
@@ -297,10 +285,7 @@ export function computeFreeNodePlacements(input: FreeNodePlacementInput): FreeNo
   const settledById = new Map<string, Rect>();
   for (const o of input.occupied) settledById.set(o.id, o.rect);
 
-  const comps = componentsOf(
-    [...input.occupied.map((o) => o.id), ...input.free.map((f) => f.id)],
-    edges,
-  );
+  const comps = componentsOf([...input.occupied.map((o) => o.id), ...input.free.map((f) => f.id)], edges);
 
   // 禁入带(轴独立):行带 Y 区间 / 列带 X 区间。两者都为空 = 无带约束(行为同 P4 之前)
   const rowIntervals = (input.rowBands ?? []).map((b) => [b.top, b.bottom] as const);
@@ -312,11 +297,7 @@ export function computeFreeNodePlacements(input: FreeNodePlacementInput): FreeNo
   // 处理顺序:先「有已落位邻居」的 free(可一次锚定),再处理其余(可能依赖前者先落位)。
   // 这样 free → free → assigned 这类链接也能逐段贴到流程上;完全无连边时两者都退回输入序。
   const hasSettledNeighbor = (id: string) =>
-    edges.some(
-      (e) =>
-        (e.target === id && settledById.has(e.source)) ||
-        (e.source === id && settledById.has(e.target)),
-    );
+    edges.some((e) => (e.target === id && settledById.has(e.source)) || (e.source === id && settledById.has(e.target)));
   const ordered = [
     ...input.free.filter((f) => hasSettledNeighbor(f.id)),
     ...input.free.filter((f) => !hasSettledNeighbor(f.id)),
@@ -353,10 +334,7 @@ export function computeFreeNodePlacements(input: FreeNodePlacementInput): FreeNo
         sortedLocal.find((c) => {
           const r = { x: rect.x + c.dx, y: rect.y + c.dy, w: rect.w, h: rect.h };
           return clearAt(r, settled) && clearsBands(r);
-        }) ??
-        sortedLocal.find((c) =>
-          clearAt({ ...rect, x: rect.x + c.dx, y: rect.y + c.dy }, settled),
-        );
+        }) ?? sortedLocal.find((c) => clearAt({ ...rect, x: rect.x + c.dx, y: rect.y + c.dy }, settled));
       if (hit) {
         rect.x += hit.dx;
         rect.y += hit.dy;

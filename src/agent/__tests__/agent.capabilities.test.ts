@@ -3,7 +3,10 @@ import { executeAgentRequest } from '../executor';
 import { AGENT_PROTOCOL_VERSION, type AgentRequest } from '../types';
 import { setAgentTestCommandsEnabled } from '../capabilities';
 
-async function exec(type: string, payload?: unknown): Promise<{ success: boolean; data?: unknown; error?: { code?: string } }> {
+async function exec(
+  type: string,
+  payload?: unknown,
+): Promise<{ success: boolean; data?: unknown; error?: { code?: string } }> {
   const req = { protocolVersion: AGENT_PROTOCOL_VERSION, requestId: 'cap', type, payload } as unknown as AgentRequest;
   const r = await executeAgentRequest(req);
   return { success: r.success, data: r.data, error: r.error };

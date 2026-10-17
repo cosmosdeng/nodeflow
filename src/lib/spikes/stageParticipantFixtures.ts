@@ -289,7 +289,15 @@ export const fixtures: Fixture[] = [
       const seed1 = nd('seed_1', { x: -668, y: 454, w: 230, h: 186, label: '需求收集' });
       const seed2 = nd('seed_2', { x: 0, y: 0, w: 230, h: 211, label: '脚本撰写' });
       const seed3 = nd('seed_3', { x: 490, y: 0, w: 230, h: 186, label: '素材渲染' });
-      const composite = nd('composite', { pid: 'pA', x: 104, y: 80, w: 230, h: 180, comp: ['seed_2', 'seed_3'], label: '人机协同协作流程(2)' });
+      const composite = nd('composite', {
+        pid: 'pA',
+        x: 104,
+        y: 80,
+        w: 230,
+        h: 180,
+        comp: ['seed_2', 'seed_3'],
+        label: '人机协同协作流程(2)',
+      });
       const seed4 = nd('seed_4', { x: 2045, y: 580, w: 230, h: 211, label: '人工质检' });
       const seed5 = nd('seed_5', { x: 3795, y: 420, w: 230, h: 218, label: '发布上架' });
       const chvx9j = nd('chvx9j', { x: 530, y: 722, w: 230, h: 168, label: '新节点' });
@@ -306,7 +314,22 @@ export const fixtures: Fixture[] = [
         participantOrder: ['pA', 'pB'],
         stages: [qc, g1],
         stageOrder: ['qc', 'g1'],
-        nodes: [seed1, seed2, seed3, composite, seed4, seed5, chvx9j, y7onq, g60uoi, para, lwmlyn, node5dd, incl, trz240],
+        nodes: [
+          seed1,
+          seed2,
+          seed3,
+          composite,
+          seed4,
+          seed5,
+          chvx9j,
+          y7onq,
+          g60uoi,
+          para,
+          lwmlyn,
+          node5dd,
+          incl,
+          trz240,
+        ],
         edges: [
           edge('seed_1', 'composite'),
           edge('composite', 'seed_4'),

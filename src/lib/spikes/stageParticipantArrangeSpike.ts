@@ -385,8 +385,7 @@ function placeFree(
       { dx: grid.colR + CLEAR - x, dy: 0, axis: 'right' },
       { dx: grid.colL - CLEAR - (x + w), dy: 0, axis: 'left' },
     ];
-    const clearAt = (c: { dx: number; dy: number }) =>
-      !zoneHit({ x: x + c.dx, y: y + c.dy, w, h }, grid);
+    const clearAt = (c: { dx: number; dy: number }) => !zoneHit({ x: x + c.dx, y: y + c.dy, w, h }, grid);
     const distOf = (c: { dx: number; dy: number }) => Math.abs(c.dx) + Math.abs(c.dy);
     const score = (c: { dx: number; dy: number; axis: string }) => {
       let d = distOf(c);
@@ -399,13 +398,8 @@ function placeFree(
 
     const singles = cands
       .filter((c) => clearAt(c))
-      .sort(
-        (a, b) =>
-          score(a) - score(b) ||
-          distOf(a) - distOf(b) ||
-          AXIS_PRIORITY[a.axis] - AXIS_PRIORITY[b.axis],
-      );
-    let pick: { dx: number; dy: number } | null = null;
+      .sort((a, b) => score(a) - score(b) || distOf(a) - distOf(b) || AXIS_PRIORITY[a.axis] - AXIS_PRIORITY[b.axis]);
+    let pick: { dx: number; dy: number };
     if (singles.length > 0) {
       pick = { dx: singles[0].dx, dy: singles[0].dy };
     } else {
@@ -415,11 +409,7 @@ function placeFree(
         { dx: grid.colR + CLEAR - x, dy: grid.rowT - CLEAR - h - y, axis: 'tr' },
         { dx: grid.colR + CLEAR - x, dy: grid.rowB + CLEAR - y, axis: 'br' },
       ];
-      corners.sort(
-        (a, b) =>
-          distOf(a) - distOf(b) ||
-          AXIS_PRIORITY[a.axis] - AXIS_PRIORITY[b.axis],
-      );
+      corners.sort((a, b) => distOf(a) - distOf(b) || AXIS_PRIORITY[a.axis] - AXIS_PRIORITY[b.axis]);
       pick = corners[0];
     }
     const nx = Math.round(x + pick.dx);

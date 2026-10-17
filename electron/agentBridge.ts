@@ -18,12 +18,7 @@ import http from 'node:http';
 import os from 'node:os';
 import path from 'node:path';
 import { BrowserWindow, ipcMain } from 'electron';
-import {
-  extractBearerToken,
-  isAllowedHost,
-  isForbiddenOrigin,
-  timingSafeEqual,
-} from './bridgeAuth';
+import { extractBearerToken, isAllowedHost, isForbiddenOrigin, timingSafeEqual } from './bridgeAuth';
 
 export interface AgentEnvelope {
   protocolVersion: string;
@@ -95,7 +90,12 @@ function forward(req: AgentEnvelope, cb: (resp: AgentBridgeResponse) => void): v
     return;
   }
   if (PENDING.has(req.requestId)) {
-    cb(makeResponse(req.requestId, false, undefined, { code: 'INVALID_REQUEST', message: `requestId 冲突: ${req.requestId}` }));
+    cb(
+      makeResponse(req.requestId, false, undefined, {
+        code: 'INVALID_REQUEST',
+        message: `requestId 冲突: ${req.requestId}`,
+      }),
+    );
     return;
   }
   PENDING.set(req.requestId, cb);
@@ -161,11 +161,9 @@ function extractToken(req: http.IncomingMessage): string | null {
 function writeTokenFile(token: string, port: number): void {
   const dir = path.dirname(AGENT_TOKEN_FILE);
   fs.mkdirSync(dir, { recursive: true, mode: 0o700 });
-  fs.writeFileSync(
-    AGENT_TOKEN_FILE,
-    JSON.stringify({ token, port, pid: process.pid, at: Date.now() }, null, 2),
-    { mode: 0o600 },
-  );
+  fs.writeFileSync(AGENT_TOKEN_FILE, JSON.stringify({ token, port, pid: process.pid, at: Date.now() }, null, 2), {
+    mode: 0o600,
+  });
 }
 
 /** 解析共享密钥:env 优先,其次 token 文件,最后生成新 token */
@@ -198,7 +196,7 @@ export function registerBridgeIpcHandlers(): void {
         height: size.height,
       };
     } catch (e) {
-      throw new Error(`窗口截图失败: ${e instanceof Error ? e.message : String(e)}`);
+      throw new Error(`窗口截图失败: ${e instanceof Error ? e.message : String(e)}`, { cause: e });
     }
   });
   ipcMain.on('agent:bridge:response', (event, resp: AgentBridgeResponse) => {
@@ -276,10 +274,8 @@ export function startAgentBridge(options: AgentBridgeOptions = {}): AgentBridgeH
         void parseBody(req)
           .then((body) => {
             const o = (typeof body === 'object' && body !== null ? body : {}) as Record<string, unknown>;
-            const protocolVersion =
-              typeof o.protocolVersion === 'string' ? o.protocolVersion : AGENT_PROTOCOL_VERSION;
-            const requestId =
-              typeof o.requestId === 'string' && o.requestId ? o.requestId : `http_${Date.now()}`;
+            const protocolVersion = typeof o.protocolVersion === 'string' ? o.protocolVersion : AGENT_PROTOCOL_VERSION;
+            const requestId = typeof o.requestId === 'string' && o.requestId ? o.requestId : `http_${Date.now()}`;
             const rawType = typeof o.type === 'string' ? o.type : '';
             const type = pathName === '/agent/v1/assert' ? 'assert' : rawType;
             const payload =
@@ -288,10 +284,7 @@ export function startAgentBridge(options: AgentBridgeOptions = {}): AgentBridgeH
                   ? o.payload
                   : { type: rawType, ...o }
                 : o.payload;
-            runInRenderer(
-              { protocolVersion, requestId, type: type || 'unknown', payload },
-              res,
-            );
+            runInRenderer({ protocolVersion, requestId, type: type || 'unknown', payload }, res);
           })
           .catch((e) => {
             reject(400, 'INVALID_REQUEST', e instanceof Error ? e.message : String(e));

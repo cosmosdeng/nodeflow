@@ -19,39 +19,91 @@ const DEFAULTS: Record<LayoutDirection, Required<LayoutOptions>> = {
 /**
  * 计算每个节点的拓扑层级(最长路径):
  * level[node] = max(依赖该节点的前驱的 level) + 1;无依赖为 0。
- * 环内节点通过 DFS 着色避免死循环,环内视为同一层。
+ *
+ * - 无环部分:Kahn 拓扑序 BFS 求最长路径,天然迭代无爆栈。
+ * - 环:Kahn 处理完后剩余节点必在环中;按弱连通分量分组,组内同层
+ *   (层级 = max(组外已完成前驱 level) + 1),与流程图「环上节点同列/行」一致。
  */
-export function computeLevels(
-  nodes: FlowNode[],
-  edges: FlowEdge[],
-): Map<string, number> {
+export function computeLevels(nodes: FlowNode[], edges: FlowEdge[]): Map<string, number> {
   const byId = new Map(nodes.map((n) => [n.id, n]));
-  // 邻接:node → 它的前驱(source 连到它)
-  const indeg: Record<string, string[]> = {};
-  for (const n of nodes) indeg[n.id] = [];
+  const preds: Record<string, string[]> = {};
+  const succs: Record<string, string[]> = {};
+  for (const n of nodes) {
+    preds[n.id] = [];
+    succs[n.id] = [];
+  }
   for (const e of edges) {
-    if (byId.has(e.source) && byId.has(e.target)) {
-      if (e.source !== e.target) indeg[e.target] = [...(indeg[e.target] ?? []), e.source];
+    if (byId.has(e.source) && byId.has(e.target) && e.source !== e.target) {
+      preds[e.target].push(e.source);
+      succs[e.source].push(e.target);
     }
   }
-  const level = new Map<string, number>();
-  const visiting = new Set<string>();
-  const done = new Set<string>();
 
-  const dfs = (id: string): number => {
-    if (done.has(id)) return level.get(id) ?? 0;
-    if (visiting.has(id)) return level.get(id) ?? 0; // 环:用当前层
-    visiting.add(id);
-    let max = 0;
-    for (const pre of indeg[id] ?? []) {
-      max = Math.max(max, dfs(pre) + 1);
+  const level = new Map<string, number>();
+  const inDeg = new Map<string, number>();
+  for (const n of nodes) inDeg.set(n.id, preds[n.id].length);
+
+  // Kahn BFS:从入度 0 的节点出发,逐层推进
+  const queue: string[] = [];
+  for (const n of nodes) {
+    if (inDeg.get(n.id) === 0) {
+      queue.push(n.id);
+      level.set(n.id, 0);
     }
-    visiting.delete(id);
+  }
+
+  const done = new Set<string>();
+  while (queue.length > 0) {
+    const id = queue.shift()!;
     done.add(id);
-    level.set(id, max);
-    return max;
-  };
-  for (const n of nodes) dfs(n.id);
+    const lv = level.get(id)!;
+    for (const succ of succs[id]) {
+      const nl = Math.max(level.get(succ) ?? 0, lv + 1);
+      level.set(succ, nl);
+      const rem = inDeg.get(succ)! - 1;
+      inDeg.set(succ, rem);
+      if (rem === 0) queue.push(succ);
+    }
+  }
+
+  // 剩余节点在环中:按弱连通分量分组,组内同层
+  const remainingIds = new Set(nodes.filter((n) => !done.has(n.id)).map((n) => n.id));
+  if (remainingIds.size > 0) {
+    const visited = new Set<string>();
+    for (const n of nodes) {
+      if (!remainingIds.has(n.id) || visited.has(n.id)) continue;
+      // BFS 找弱连通分量(忽略边方向)
+      const component: string[] = [];
+      const compQueue = [n.id];
+      visited.add(n.id);
+      while (compQueue.length > 0) {
+        const id = compQueue.shift()!;
+        component.push(id);
+        for (const p of preds[id]) {
+          if (remainingIds.has(p) && !visited.has(p)) {
+            visited.add(p);
+            compQueue.push(p);
+          }
+        }
+        for (const s of succs[id]) {
+          if (remainingIds.has(s) && !visited.has(s)) {
+            visited.add(s);
+            compQueue.push(s);
+          }
+        }
+      }
+      // 组层级 = max(已完成前驱 level) + 1
+      let maxDonePred = -1;
+      for (const id of component) {
+        for (const p of preds[id]) {
+          if (done.has(p)) maxDonePred = Math.max(maxDonePred, level.get(p)!);
+        }
+      }
+      const compLevel = maxDonePred + 1;
+      for (const id of component) level.set(id, compLevel);
+    }
+  }
+
   return level;
 }
 

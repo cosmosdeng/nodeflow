@@ -33,7 +33,15 @@ function node(id: string, data: Partial<FlowNode['data']>, extra?: Partial<FlowN
 }
 
 function edge(id: string, source: string, sourceHandle: string, target: string, targetHandle: string): FlowEdge {
-  return { id, source, sourceHandle, target, targetHandle, type: 'flow', data: { label: '', artifact: null } } as FlowEdge;
+  return {
+    id,
+    source,
+    sourceHandle,
+    target,
+    targetHandle,
+    type: 'flow',
+    data: { label: '', artifact: null },
+  } as FlowEdge;
 }
 
 describe('端口引用编码 / 解码', () => {
@@ -79,34 +87,22 @@ describe('端口引用编码 / 解码', () => {
 
 describe('computeCompositeActor 执行主体继承', () => {
   it('全部 human → human', () => {
-    const children = [
-      node('1', { actor: 'human' }),
-      node('2', { actor: 'human' }),
-    ];
+    const children = [node('1', { actor: 'human' }), node('2', { actor: 'human' })];
     expect(computeCompositeActor(children)).toBe('human');
   });
 
   it('全部 machine → machine', () => {
-    const children = [
-      node('1', { actor: 'machine' }),
-      node('2', { actor: 'machine' }),
-    ];
+    const children = [node('1', { actor: 'machine' }), node('2', { actor: 'machine' })];
     expect(computeCompositeActor(children)).toBe('machine');
   });
 
   it('human 与 machine 混杂 → hybrid', () => {
-    const children = [
-      node('1', { actor: 'human' }),
-      node('2', { actor: 'machine' }),
-    ];
+    const children = [node('1', { actor: 'human' }), node('2', { actor: 'machine' })];
     expect(computeCompositeActor(children)).toBe('hybrid');
   });
 
   it('含 hybrid → hybrid', () => {
-    const children = [
-      node('1', { actor: 'human' }),
-      node('2', { actor: 'hybrid' }),
-    ];
+    const children = [node('1', { actor: 'human' }), node('2', { actor: 'hybrid' })];
     expect(computeCompositeActor(children)).toBe('hybrid');
   });
 
@@ -226,7 +222,11 @@ describe('applyCompositeBoxes 展开组合虚线框重算', () => {
 
   it('展开态组合节点虚线框包裹子节点(含内边距)', () => {
     // 组合初始位置错误,应被重算为包裹 A、B
-    const comp = node('G', { composite: { expanded: true, childIds: ['A', 'B'] } }, { position: { x: 0, y: 0 }, width: 100, height: 100 });
+    const comp = node(
+      'G',
+      { composite: { expanded: true, childIds: ['A', 'B'] } },
+      { position: { x: 0, y: 0 }, width: 100, height: 100 },
+    );
     const result = applyCompositeBoxes([childA, childB, comp]);
     const g = result.find((n) => n.id === 'G')!;
     // 包裹 A(100,100) 和 B(350,100),宽高含 COMPOSITE_PAD=36

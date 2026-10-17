@@ -4,6 +4,38 @@
 
 ---
 
+## 2026-10-17（六）路线图遗留项批量修复
+
+### 已完成
+
+接 `CODE_REVIEW.md` 路线图遗留项，完成 4 项：
+
+| 项 | 内容 | 模块 |
+|---|---|---|
+| **friendly.ts 错误码** | `BRIDGE_UNAVAILABLE` 纳入 `AgentErrorCode` 枚举，去掉 `as unknown as AgentResponse` 断言 | `src/agent/types.ts` + `mcp-server/src/friendly.ts` |
+| **ESLint + Prettier** | ESLint 9 flat config（typescript-eslint + react-hooks + prettier）；`.prettierrc` 匹配代码风格；`lint`/`format`/`format:check` 脚本；修复条件 Hook、render 期 ref 写入、`no-useless-assignment` 等 20 个 error | `eslint.config.js` + `.prettierrc` + 全仓格式化 |
+| **edgePath 多障碍绕行** | 多个障碍命中时取并集包围盒统一绕行（原来只绕第一个命中） | `src/lib/edgePath.ts` |
+| **layout 环处理 + 防爆栈** | 递归 DFS → Kahn 迭代 BFS；环上节点按弱连通分量同层；2000 节点深链不爆栈 | `src/lib/layout.ts` |
+| **syncActiveDoc 细粒度同步** | 仅镜像字段引用变化时增量写入 documents，不再每次 set 全量重写 | `src/store/graphStore.ts` |
+
+附带：`tsconfig` target/lib 升至 ES2022（`Error` cause 需要）；`agentBridge.ts` 错误保留 `cause` 链。
+
+### 验证
+
+- **单元测试**：449 用例 / 47 文件全绿（新增环层级、深链防爆栈、多障碍绕行 2 测）
+- **类型检查**：`tsc` + `tsc -p tsconfig.electron.json` 干净
+- **Lint**：0 error / 222 warning（存量 warning 可逐步清理）
+- **构建**：`bun run build` 通过
+
+### 遗留
+
+1. **键盘连线 / 移动替代**（完整 a11y）—— 需交互设计决策
+2. **npm `latest` dist-tag** 指向 stable —— 发布时修正
+3. ESLint 存量 222 warning（unused-vars / no-explicit-any 等）逐步清理
+4. `docs/UI_UX_DESIGN.md` 与实现同步
+
+---
+
 ## 2026-10-17（二）god store 拆分
 
 ### 已完成

@@ -31,13 +31,17 @@ import {
 import type { AgentCommandResult } from './types';
 
 const PARTICIPANT_TYPES: ReadonlySet<string> = new Set([
-  'person', 'role', 'organization', 'department', 'machine', 'software', 'ai-agent',
+  'person',
+  'role',
+  'organization',
+  'department',
+  'machine',
+  'software',
+  'ai-agent',
 ]);
 
 const GATEWAY_TYPES: ReadonlySet<string> = new Set(['exclusive', 'parallel', 'inclusive']);
-const ARTIFACT_KINDS: ReadonlySet<string> = new Set([
-  'document', 'image', 'video', 'audio', 'code', 'data', 'other',
-]);
+const ARTIFACT_KINDS: ReadonlySet<string> = new Set(['document', 'image', 'video', 'audio', 'code', 'data', 'other']);
 
 /**
  * A-001:revision 由 store「Graph Mutation Authority」统一推进(graph 指纹订阅)。
@@ -101,8 +105,7 @@ function annotationTargetFrom(v: unknown): AnnotationTarget {
 
 export function runCommand(type: string, payload: unknown): AgentCommandResult {
   // 无 payload 的 command(reset/seedFixture 等)视作空对象
-  const p: Record<string, unknown> =
-    payload === undefined || payload === null ? {} : asPayloadRecord(payload);
+  const p: Record<string, unknown> = payload === undefined || payload === null ? {} : asPayloadRecord(payload);
 
   switch (type) {
     // ---- 节点 ----
@@ -111,7 +114,10 @@ export function runCommand(type: string, payload: unknown): AgentCommandResult {
       const data = nodeDataFrom(p);
       const m = snapshot();
       const id = useGraphStore.getState().addNode(Object.keys(data).length ? data : undefined, pos);
-      return m.run(() => undefined, () => ({ nodeId: id }));
+      return m.run(
+        () => undefined,
+        () => ({ nodeId: id }),
+      );
     }
     case 'updateNode': {
       const nodeId = asString(p.nodeId, 'nodeId');
@@ -146,7 +152,10 @@ export function runCommand(type: string, payload: unknown): AgentCommandResult {
       const organizationId = asOptionalString(p.organizationId, 'organizationId');
       const m = snapshot();
       const id = useGraphStore.getState().addParticipant(name, type, organizationId);
-      return m.run(() => undefined, () => ({ participantId: id }));
+      return m.run(
+        () => undefined,
+        () => ({ participantId: id }),
+      );
     }
     case 'updateParticipant': {
       const id = asString(p.id, 'id');
@@ -173,7 +182,10 @@ export function runCommand(type: string, payload: unknown): AgentCommandResult {
       const height = asOptionalNumber(p.height, 'height') ?? 400;
       const m = snapshot();
       const id = useGraphStore.getState().addStage(x ?? 0, y ?? 0, width, height, name);
-      return m.run(() => undefined, () => ({ stageId: id }));
+      return m.run(
+        () => undefined,
+        () => ({ stageId: id }),
+      );
     }
     case 'updateStage': {
       const id = asString(p.id, 'id');
@@ -234,7 +246,10 @@ export function runCommand(type: string, payload: unknown): AgentCommandResult {
       };
       const m = snapshot();
       const id = useGraphStore.getState().addNode(data, pos);
-      return m.run(() => undefined, () => ({ gatewayId: id }));
+      return m.run(
+        () => undefined,
+        () => ({ gatewayId: id }),
+      );
     }
     case 'changeGatewayType': {
       const nodeId = asString(p.nodeId, 'nodeId');
@@ -245,9 +260,7 @@ export function runCommand(type: string, payload: unknown): AgentCommandResult {
       const m = snapshot();
       return m.run(
         () => {
-          useGraphStore
-            .getState()
-            .updateNode(nodeId, { gateway: { type }, label: GATEWAY_META[type].label });
+          useGraphStore.getState().updateNode(nodeId, { gateway: { type }, label: GATEWAY_META[type].label });
         },
         () => ({ gatewayId: nodeId }),
       );
@@ -427,14 +440,18 @@ function seedFixture(): void {
   };
 
   // 行主链 assigned: P1→S1, P1→S2, P2→S2, P2→S3, P3→S3
-  set(0, p1, s1); set(1, p1, s1); set(2, p1, s2);
-  set(3, p2, s2); set(4, p2, s3);
+  set(0, p1, s1);
+  set(1, p1, s1);
+  set(2, p1, s2);
+  set(3, p2, s2);
+  set(4, p2, s3);
   set(5, p3, s3);
   // rowOnly / free
   set(6, p3, null); // 只有参与方,无阶段
   // ids[7] 保持 free
   // ids[8], ids[9] assigned 用于 split/merge
-  set(8, p2, s1); set(9, p2, s2);
+  set(8, p2, s1);
+  set(9, p2, s2);
 
   // split:0 → 1 与 0 → 3;merge:4、8 → 5;以及一条跨阶段连线
   edge(0, 1);

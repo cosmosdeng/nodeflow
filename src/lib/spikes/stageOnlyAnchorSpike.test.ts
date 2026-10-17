@@ -1,10 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import {
-  runAnchorSpike,
-  formatOutcome,
-  type AnchorInput,
-  type AnchorResult,
-} from './stageOnlyAnchorSpike';
+import { runAnchorSpike, formatOutcome, type AnchorInput, type AnchorResult } from './stageOnlyAnchorSpike';
 import { anchorFixtures, realLikeQcColumn, realLikeG1Column } from './stageOnlyAnchorFixtures';
 
 /** Spike:stageOnly × assigned 同列 Y Anchor 策略验证(不修改生产代码)。 */
@@ -27,7 +22,11 @@ const yOf = (r: AnchorResult, s: string, id: string) => by(r, s).y.get(id)!;
 
 describe('Strategy 通用不变量', () => {
   it('所有策略均不创建虚拟 Participant / 不改语义(结构层保证)', () => {
-    for (const f of [...anchorFixtures, { name: 'qc', input: realLikeQcColumn }, { name: 'g1', input: realLikeG1Column }]) {
+    for (const f of [
+      ...anchorFixtures,
+      { name: 'qc', input: realLikeQcColumn },
+      { name: 'g1', input: realLikeG1Column },
+    ]) {
       const r = runAnchorSpike(f.input());
       for (const o of r.outcomes) expect(o.virtualParticipantCreated).toBe(false);
     }

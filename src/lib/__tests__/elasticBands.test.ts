@@ -1,10 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import {
-  computeElasticMatrixGeometry,
-  fitOrderedEnvelopes,
-  rectsToEnvelope,
-  type AxisBandSpec,
-} from '../elasticBands';
+import { computeElasticMatrixGeometry, fitOrderedEnvelopes, rectsToEnvelope, type AxisBandSpec } from '../elasticBands';
 
 describe('Elastic Band Arrange Spike(T21–T28)', () => {
   it('T21 Participant envelope 完整包含其节点矩形(rectangle containment)', () => {
@@ -35,9 +30,24 @@ describe('Elastic Band Arrange Spike(T21–T28)', () => {
     const PAD = 16;
     const res = fitOrderedEnvelopes(
       [
-        { id: 'S1', maxAllowedStart: rects[0].x - PAD, minRequiredEnd: rects[0].x + rects[0].w + PAD, preferredStart: 80 },
-        { id: 'S2', maxAllowedStart: rects[1].x - PAD, minRequiredEnd: rects[1].x + rects[1].w + PAD, preferredStart: rects[1].x - PAD },
-        { id: 'S3', maxAllowedStart: rects[2].x - PAD, minRequiredEnd: rects[2].x + rects[2].w + PAD, preferredStart: rects[2].x - PAD },
+        {
+          id: 'S1',
+          maxAllowedStart: rects[0].x - PAD,
+          minRequiredEnd: rects[0].x + rects[0].w + PAD,
+          preferredStart: 80,
+        },
+        {
+          id: 'S2',
+          maxAllowedStart: rects[1].x - PAD,
+          minRequiredEnd: rects[1].x + rects[1].w + PAD,
+          preferredStart: rects[1].x - PAD,
+        },
+        {
+          id: 'S3',
+          maxAllowedStart: rects[2].x - PAD,
+          minRequiredEnd: rects[2].x + rects[2].w + PAD,
+          preferredStart: rects[2].x - PAD,
+        },
       ],
       40,
     );

@@ -77,7 +77,11 @@ describe('嵌套组合解除编组:连线还原', () => {
     expect(aNode).toBeTruthy();
     // A 的输出连线应保留:A 的 sourceHandle 指向 A 的聚合端口或 P1
     const aOutEdges = s.edges.filter((e) => e.source === A || e.source === 'P1');
-    console.log('A 的输出连线数:', aOutEdges.length, JSON.stringify(aOutEdges.map((e) => ({ src: e.source, sh: e.sourceHandle, t: e.target }))));
+    console.log(
+      'A 的输出连线数:',
+      aOutEdges.length,
+      JSON.stringify(aOutEdges.map((e) => ({ src: e.source, sh: e.sourceHandle, t: e.target }))),
+    );
     expect(aOutEdges.length).toBeGreaterThan(0);
   });
 });

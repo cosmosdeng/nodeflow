@@ -51,12 +51,18 @@ describe('computeEdgePath', () => {
     expect(smooth.path).toBe(none.path);
   });
 
-  it('多个障碍只绕开第一个命中的(已知限制,锁定行为)', () => {
-    const o1: ObstacleRect = { x: 150, y: -60, width: 100, height: 120 };
-    const o2: ObstacleRect = { x: 250, y: -60, width: 100, height: 120 };
+  it('多个障碍命中时绕行并集包围盒,路径不穿任一障碍', () => {
+    // 两个上下错开的障碍,原生路径都会命中
+    const o1: ObstacleRect = { x: 120, y: -80, width: 80, height: 100 };
+    const o2: ObstacleRect = { x: 220, y: -40, width: 80, height: 140 };
     const r = computeEdgePath({ ...base, obstacles: [o1, o2], edgeStyle: 'smoothstep', padding: 24 });
-    // 至少生成了绕障路径(不崩溃、非空)
     expect(r.path).toBeTruthy();
+    expect(r.path).not.toContain('NaN');
+    // 并集: x:120~300, y:-80~100 → 绕行应避开两个障碍
+    // 验证绕行 y 偏移足够大(> max bottom + padding)
+    const ys = r.path.match(/-?\d+(\.\d+)?/g)?.map(Number) ?? [];
+    const hasDetour = ys.some((v, i) => i % 2 === 1 && Math.abs(v) > 100);
+    expect(hasDetour).toBe(true);
   });
 
   it('vertical 连线(source 在上、target 在下)也能绕障', () => {

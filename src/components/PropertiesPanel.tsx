@@ -41,11 +41,18 @@ function CommitField({
   onAutoFocusConsumed,
 }: CommitFieldProps) {
   const [draft, setDraft] = useState(value);
-  useEffect(() => setDraft(value), [value]);
+  // 派生状态:value 变化时重置草稿(避免 effect 内 setState 级联渲染)
+  const [prevValue, setPrevValue] = useState(value);
+  if (value !== prevValue) {
+    setPrevValue(value);
+    setDraft(value);
+  }
   // autoFocus 时自动聚焦并消费标记
   const autoFocusRef = useRef<HTMLInputElement | HTMLTextAreaElement>(null);
   const onAutoFocusConsumedRef = useRef(onAutoFocusConsumed);
-  onAutoFocusConsumedRef.current = onAutoFocusConsumed;
+  useEffect(() => {
+    onAutoFocusConsumedRef.current = onAutoFocusConsumed;
+  }, [onAutoFocusConsumed]);
   useEffect(() => {
     if (!autoFocus) return;
     // 等属性面板渲染完成后再聚焦(必要时多帧兜底,避免 ref 尚未就绪)
@@ -95,15 +102,7 @@ function CommitField({
   );
 }
 
-function Field({
-  label,
-  children,
-  hint,
-}: {
-  label: string;
-  children: ReactNode;
-  hint?: string;
-}) {
+function Field({ label, children, hint }: { label: string; children: ReactNode; hint?: string }) {
   return (
     <div className="field">
       <label>{label}</label>
@@ -113,15 +112,7 @@ function Field({
   );
 }
 
-function Section({
-  title,
-  children,
-  hint,
-}: {
-  title: string;
-  children: ReactNode;
-  hint?: string;
-}) {
+function Section({ title, children, hint }: { title: string; children: ReactNode; hint?: string }) {
   return (
     <div style={{ marginTop: 14 }}>
       <div
@@ -162,7 +153,9 @@ function ParticipantField({ nodeId, disabled }: { nodeId: string; disabled?: boo
         >
           <option value="">（未分配）</option>
           {participants.map((p) => (
-            <option key={p.id} value={p.id}>{p.name}</option>
+            <option key={p.id} value={p.id}>
+              {p.name}
+            </option>
           ))}
         </select>
       </div>
@@ -191,12 +184,12 @@ function StageField({ nodeId, disabled }: { nodeId: string; disabled?: boolean }
         >
           <option value="">（未分配）</option>
           {stages.map((st) => (
-            <option key={st.id} value={st.id}>{st.name || '未命名阶段'}</option>
+            <option key={st.id} value={st.id}>
+              {st.name || '未命名阶段'}
+            </option>
           ))}
         </select>
-        <span className="helper">
-          只改语义不改位置:配合工具栏「⤺ 自动排列」把节点排入对应阶段列。
-        </span>
+        <span className="helper">只改语义不改位置:配合工具栏「⤺ 自动排列」把节点排入对应阶段列。</span>
       </div>
     </Section>
   );
@@ -215,6 +208,23 @@ function NodeProperties({ nodeId }: { nodeId: string }) {
   const allLocked = useGraphStore((s) => s.allLocked);
   const setSelected = useGraphStore((s) => s.setSelected);
 
+  // 组合节点的聚合端口一律实时计算,与画布展示保持一致(单一数据源,不依赖历史快照)
+  const nodesById = useMemo(() => new Map(nodes.map((n) => [n.id, n])), [nodes]);
+  const aggPorts = useMemo(() => {
+    const composite = node?.data.composite;
+    if (!composite) return null;
+    const children = nodes.filter((c) => composite.childIds.includes(c.id));
+    return computeCompositePorts(children, edges, nodesById);
+  }, [node, edges, nodes, nodesById]);
+
+  // 组合节点的执行主体继承自内部节点(全同则同、混杂则人机协同,支持嵌套),不允许手动改
+  const compositeActor = useMemo(() => {
+    const composite = node?.data.composite;
+    if (!composite) return null;
+    const children = nodes.filter((c) => composite.childIds.includes(c.id));
+    return computeCompositeActor(children, nodesById);
+  }, [node, nodes, nodesById]);
+
   if (!node) return <MissingNotice />;
   const d = node.data;
   const locked = !!d.locked;
@@ -222,36 +232,31 @@ function NodeProperties({ nodeId }: { nodeId: string }) {
   const composite = d.composite;
   const isComposite = !!composite;
 
-  // 组合节点的聚合端口一律实时计算,与画布展示保持一致(单一数据源,不依赖历史快照)
-  const nodesById = useMemo(() => new Map(nodes.map((n) => [n.id, n])), [nodes]);
-  const aggPorts = useMemo(() => {
-    if (!composite) return null;
-    const children = nodes.filter((c) => composite.childIds.includes(c.id));
-    return computeCompositePorts(children, edges, nodesById);
-  }, [composite, edges, nodes, nodesById]);
-
-  // 组合节点的执行主体继承自内部节点(全同则同、混杂则人机协同,支持嵌套),不允许手动改
-  const compositeActor = useMemo(() => {
-    if (!composite) return null;
-    const children = nodes.filter((c) => composite.childIds.includes(c.id));
-    return computeCompositeActor(children, nodesById);
-  }, [composite, nodes, nodesById]);
-
   const setPorts = (inputs: FlowNodeData['inputs'], outputs: FlowNodeData['outputs']) =>
     updateNode(nodeId, { inputs, outputs });
 
-  const addInput = () =>
-    setPorts([...d.inputs, { id: uid('in'), name: `输入 ${d.inputs.length + 1}` }], d.outputs);
-  const addOutput = () =>
-    setPorts(d.inputs, [...d.outputs, { id: uid('out'), name: `输出 ${d.outputs.length + 1}` }]);
+  const addInput = () => setPorts([...d.inputs, { id: uid('in'), name: `输入 ${d.inputs.length + 1}` }], d.outputs);
+  const addOutput = () => setPorts(d.inputs, [...d.outputs, { id: uid('out'), name: `输出 ${d.outputs.length + 1}` }]);
   const removeInput = (pid: string) =>
-    setPorts(d.inputs.filter((p) => p.id !== pid), d.outputs);
+    setPorts(
+      d.inputs.filter((p) => p.id !== pid),
+      d.outputs,
+    );
   const removeOutput = (pid: string) =>
-    setPorts(d.inputs, d.outputs.filter((p) => p.id !== pid));
+    setPorts(
+      d.inputs,
+      d.outputs.filter((p) => p.id !== pid),
+    );
   const renameInput = (pid: string, name: string) =>
-    setPorts(d.inputs.map((p) => (p.id === pid ? { ...p, name } : p)), d.outputs);
+    setPorts(
+      d.inputs.map((p) => (p.id === pid ? { ...p, name } : p)),
+      d.outputs,
+    );
   const renameOutput = (pid: string, name: string) =>
-    setPorts(d.inputs, d.outputs.map((p) => (p.id === pid ? { ...p, name } : p)));
+    setPorts(
+      d.inputs,
+      d.outputs.map((p) => (p.id === pid ? { ...p, name } : p)),
+    );
 
   return (
     <div>
@@ -298,7 +303,12 @@ function NodeProperties({ nodeId }: { nodeId: string }) {
       )}
       <div className="field">
         <label>节点名称</label>
-        <CommitField value={d.label} onCommit={(v) => updateNode(nodeId, { label: v })} placeholder="节点名称" disabled={disabled} />
+        <CommitField
+          value={d.label}
+          onCommit={(v) => updateNode(nodeId, { label: v })}
+          placeholder="节点名称"
+          disabled={disabled}
+        />
       </div>
       <Field label="动作描述" hint="用简短文字说明该节点要完成的动作">
         <CommitField
@@ -368,9 +378,7 @@ function NodeProperties({ nodeId }: { nodeId: string }) {
           >
             <span style={{ fontSize: 24 }}>⧉</span>
             <div style={{ minWidth: 0 }}>
-              <div style={{ fontWeight: 700 }}>
-                {composite!.childIds.length} 个子节点
-              </div>
+              <div style={{ fontWeight: 700 }}>{composite!.childIds.length} 个子节点</div>
               <div style={{ fontSize: 11, color: 'var(--text-faint)' }}>
                 {composite!.expanded ? '已展开(虚线框内可编辑内部节点)' : '已塌缩(显示聚合端口)'}
               </div>
@@ -442,13 +450,23 @@ function NodeProperties({ nodeId }: { nodeId: string }) {
             {d.inputs.length === 0 && <div className="helper">暂无输入端口</div>}
             {d.inputs.map((p) => (
               <div key={p.id} className="field-row" style={{ marginBottom: 6 }}>
-                <CommitField value={p.name} onCommit={(v) => renameInput(p.id, v)} placeholder="端口名" disabled={disabled} />
+                <CommitField
+                  value={p.name}
+                  onCommit={(v) => renameInput(p.id, v)}
+                  placeholder="端口名"
+                  disabled={disabled}
+                />
                 <button className="tb-btn" title="删除该端口" disabled={disabled} onClick={() => removeInput(p.id)}>
                   ✕
                 </button>
               </div>
             ))}
-            <button className="tb-btn" style={{ width: '100%', justifyContent: 'center' }} disabled={disabled} onClick={addInput}>
+            <button
+              className="tb-btn"
+              style={{ width: '100%', justifyContent: 'center' }}
+              disabled={disabled}
+              onClick={addInput}
+            >
               + 添加输入
             </button>
           </Section>
@@ -457,13 +475,23 @@ function NodeProperties({ nodeId }: { nodeId: string }) {
             {d.outputs.length === 0 && <div className="helper">暂无输出端口</div>}
             {d.outputs.map((p) => (
               <div key={p.id} className="field-row" style={{ marginBottom: 6 }}>
-                <CommitField value={p.name} onCommit={(v) => renameOutput(p.id, v)} placeholder="端口名" disabled={disabled} />
+                <CommitField
+                  value={p.name}
+                  onCommit={(v) => renameOutput(p.id, v)}
+                  placeholder="端口名"
+                  disabled={disabled}
+                />
                 <button className="tb-btn" title="删除该端口" disabled={disabled} onClick={() => removeOutput(p.id)}>
                   ✕
                 </button>
               </div>
             ))}
-            <button className="tb-btn" style={{ width: '100%', justifyContent: 'center' }} disabled={disabled} onClick={addOutput}>
+            <button
+              className="tb-btn"
+              style={{ width: '100%', justifyContent: 'center' }}
+              disabled={disabled}
+              onClick={addOutput}
+            >
               + 添加输出
             </button>
           </Section>
@@ -638,13 +666,8 @@ function EdgeProperties({ edgeId }: { edgeId: string }) {
           lineHeight: 1.6,
         }}
       >
-        <span style={{ fontWeight: 600, color: 'var(--text)' }}>
-          {src?.data.label ?? '?'}
-        </span>{' '}
-        ⟶{' '}
-        <span style={{ fontWeight: 600, color: 'var(--text)' }}>
-          {dst?.data.label ?? '?'}
-        </span>
+        <span style={{ fontWeight: 600, color: 'var(--text)' }}>{src?.data.label ?? '?'}</span> ⟶{' '}
+        <span style={{ fontWeight: 600, color: 'var(--text)' }}>{dst?.data.label ?? '?'}</span>
       </div>
 
       <Field label="连线说明文字" hint="双击连线上的文字可在画布上直接编辑">
@@ -773,9 +796,7 @@ export default function PropertiesPanel({ onClose }: { onClose: () => void }) {
         </button>
       </div>
       <div className="panel-body">
-        {allLocked && (
-          <div className="lock-all-banner">🔒 演示模式已锁定全部内容,点击工具栏按钮解锁</div>
-        )}
+        {allLocked && <div className="lock-all-banner">🔒 演示模式已锁定全部内容,点击工具栏按钮解锁</div>}
         {body}
       </div>
     </aside>

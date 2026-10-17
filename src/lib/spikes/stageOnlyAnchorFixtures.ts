@@ -7,7 +7,12 @@
 import type { AnchorInput } from './stageOnlyAnchorSpike';
 
 const asg = (id: string, y: number, h = 150): AnchorInput['assigned'][number] => ({ id, y, h });
-const so = (id: string, h: number, origY: number, level?: number): AnchorInput['stageOnly'][number] => ({ id, h, origY, level });
+const so = (id: string, h: number, origY: number, level?: number): AnchorInput['stageOnly'][number] => ({
+  id,
+  h,
+  origY,
+  level,
+});
 
 export interface AnchorFixture {
   name: string;
@@ -88,10 +93,7 @@ export const anchorFixtures: AnchorFixture[] = [
 /** real_like 中“质检”列:无 assigned,两个 stageOnly(seed_4→g60uoi) */
 export const realLikeQcColumn = (): AnchorInput => ({
   assigned: [],
-  stageOnly: [
-    so('seed_4', 211, 580, 1),
-    so('g60uoi', 168, 798, 2),
-  ],
+  stageOnly: [so('seed_4', 211, 580, 1), so('g60uoi', 168, 798, 2)],
   edges: [{ source: 'seed_4', target: 'g60uoi' }],
 });
 

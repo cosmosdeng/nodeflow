@@ -14,18 +14,10 @@ import type {
   ParticipantOrderMode,
 } from '../../types';
 import type { FlowStore } from '../types';
-import {
-  addNodeToStage,
-  boundsToStageBox,
-  computeStageBounds,
-  computeStageMinSize,
-} from '../../lib/stage';
+import { addNodeToStage, boundsToStageBox, computeStageBounds, computeStageMinSize } from '../../lib/stage';
 
 import type { SliceDeps } from './deps';
-import {
-  refreshCompositeHidden,
-  removeChildFromComposites,
-} from '../compositeHelpers';
+import { refreshCompositeHidden, removeChildFromComposites } from '../compositeHelpers';
 import {
   encodeCompositePort,
   decodeCompositePortPath,
@@ -38,13 +30,7 @@ import { annotationTargetsEdge } from '../../lib/annotation';
 import { createFlowEdge } from '../../lib/edge';
 import { setEdgeArtifact, updateEdgeArtifact } from '../../lib/artifact';
 import { findNodeById, findEdgeById } from '../../domain/graph/queries';
-import {
-  findStageEmptySpot,
-  pushNodesAwayFromBox,
-  pushOutOfRect,
-  rectOverlaps,
-  type Rect,
-} from '../../lib/geometry';
+import { findStageEmptySpot, pushNodesAwayFromBox, pushOutOfRect, rectOverlaps, type Rect } from '../../lib/geometry';
 import { createDefaultNode, uid } from '../../types';
 
 export function createEdgesSlice({ set, get }: SliceDeps): Partial<FlowStore> {
@@ -65,12 +51,7 @@ export function createEdgesSlice({ set, get }: SliceDeps): Partial<FlowStore> {
       const tw = growBox.width;
       const th = growBox.height;
       // 若目标框已被当前框完全包裹,无需扩大
-      if (
-        tx >= stage.x &&
-        ty >= stage.y &&
-        tx + tw <= stage.x + stage.width &&
-        ty + th <= stage.y + stage.height
-      ) {
+      if (tx >= stage.x && ty >= stage.y && tx + tw <= stage.x + stage.width && ty + th <= stage.y + stage.height) {
         return;
       }
       // 需要推挤的外部元素:其他可见节点(非本域归属,含组合节点)与其他阶段域框体
@@ -106,9 +87,7 @@ export function createEdgesSlice({ set, get }: SliceDeps): Partial<FlowStore> {
             return { ...stg, x: Math.round(tx), y: Math.round(ty), width: Math.round(tw), height: Math.round(th) };
           }
           const p = stagePos.get(stg.id);
-          return p && (p.x !== stg.x || p.y !== stg.y)
-            ? { ...stg, x: Math.round(p.x), y: Math.round(p.y) }
-            : stg;
+          return p && (p.x !== stg.x || p.y !== stg.y) ? { ...stg, x: Math.round(p.x), y: Math.round(p.y) } : stg;
         }),
         nodes: st.nodes.map((n) => {
           const p = nodePos.get(n.id);
@@ -213,7 +192,14 @@ export function createEdgesSlice({ set, get }: SliceDeps): Partial<FlowStore> {
       const { label = '', artifact = null } = edge.data ?? {};
       const upstreamId = uid('edge');
       const downstreamId = uid('edge');
-      const upstream = createFlowEdge(edge.source, edge.sourceHandle, newNode.id, 'in_1', { label, artifact }, upstreamId);
+      const upstream = createFlowEdge(
+        edge.source,
+        edge.sourceHandle,
+        newNode.id,
+        'in_1',
+        { label, artifact },
+        upstreamId,
+      );
       const downstream = createFlowEdge(newNode.id, 'out_1', edge.target, edge.targetHandle, undefined, downstreamId);
       set((st) => ({
         edges: st.edges.filter((e) => e.id !== edgeId).concat(upstream, downstream),
@@ -237,9 +223,7 @@ export function createEdgesSlice({ set, get }: SliceDeps): Partial<FlowStore> {
           : st.nodes.concat(newNode),
         // 原连线的注释(连线 / 产物归属)一并转移到上游连线
         annotations: st.annotations.map((a) =>
-          annotationTargetsEdge(a, edgeId)
-            ? { ...a, target: { ...a.target, edgeId: upstreamId } }
-            : a,
+          annotationTargetsEdge(a, edgeId) ? { ...a, target: { ...a.target, edgeId: upstreamId } } : a,
         ),
       }));
       if (compId) refreshCompositeHidden(get, set);
@@ -265,6 +249,5 @@ export function createEdgesSlice({ set, get }: SliceDeps): Partial<FlowStore> {
         edges: s.edges.map((e) => (e.id === edgeId ? updateEdgeArtifact(e, patch) : e)),
       }));
     },
-
   };
 }

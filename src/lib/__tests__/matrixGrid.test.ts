@@ -1,9 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import {
-  computeMatrixGridGeometry,
-  computeMatrixGridStructure,
-  computeMatrixLayout,
-} from '../arrange';
+import { computeMatrixGridGeometry, computeMatrixGridStructure, computeMatrixLayout } from '../arrange';
 import type { FlowNode, Participant, Stage } from '../../types';
 
 /**
@@ -141,16 +137,17 @@ describe('shared matrix grid structure', () => {
   it('arrange 位置与共享序单调一致(Participant→Y、Stage→X)', () => {
     const participants = [participant('pA', 'A'), participant('pB', 'B')];
     const stages = [stage('s1', ['a1', 'b1']), stage('s2', ['a2', 'b2'])];
-    const nodes = [
-      node('a1', 'pA', 0, 0),
-      node('a2', 'pA', 0, 0),
-      node('b1', 'pB', 0, 0),
-      node('b2', 'pB', 0, 0),
-    ];
+    const nodes = [node('a1', 'pA', 0, 0), node('a2', 'pA', 0, 0), node('b1', 'pB', 0, 0), node('b2', 'pB', 0, 0)];
     const s = structure({ participants, participantOrder: ['pB', 'pA'], stages, stageOrder: ['s2', 's1'], nodes });
     expect(s.rows.map((r) => r.participantId)).toEqual(['pB', 'pA']);
     expect(s.cols).toEqual(['s2', 's1']);
-    const pos = computeMatrixLayout({ nodes, participants, participantOrder: ['pB', 'pA'], stages, stageOrder: ['s2', 's1'] });
+    const pos = computeMatrixLayout({
+      nodes,
+      participants,
+      participantOrder: ['pB', 'pA'],
+      stages,
+      stageOrder: ['s2', 's1'],
+    });
     expect(pos.get('a2')!.x).toBeLessThan(pos.get('a1')!.x);
     expect(pos.get('b2')!.x).toBeLessThan(pos.get('b1')!.x);
     expect(pos.get('b1')!.y).toBeLessThan(pos.get('a1')!.y);
@@ -222,8 +219,7 @@ describe('shared matrix grid geometry(2026-09:无尾行/尾列)', () => {
     expect(moved!.x >= 368 || moved!.x + 240 <= 80).toBe(true);
     // 与 a1 矩形不重叠
     const a1 = pos.get('a1')!;
-    const ov =
-      moved!.x < a1.x + 240 && moved!.x + 240 > a1.x && moved!.y < a1.y + 150 && moved!.y + 150 > a1.y;
+    const ov = moved!.x < a1.x + 240 && moved!.x + 240 > a1.x && moved!.y < a1.y + 150 && moved!.y + 150 > a1.y;
     expect(ov).toBe(false);
   });
 

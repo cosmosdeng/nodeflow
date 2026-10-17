@@ -17,15 +17,8 @@ import type {
 } from '../../types';
 import type { FlowStore, Selection, AutoEditTarget } from '../types';
 import type { StoreSet, StoreGet, SliceDeps } from './deps';
-import {
-  applyNodeChanges,
-  applyEdgeChanges,
-} from '@xyflow/react';
-import {
-  removeChildFromComposites,
-  refreshCompositeHidden,
-  expandComposite,
-} from '../compositeHelpers';
+import { applyNodeChanges, applyEdgeChanges } from '@xyflow/react';
+import { removeChildFromComposites, refreshCompositeHidden, expandComposite } from '../compositeHelpers';
 import { applyCompositeBoxes, decodeCompositePort } from '../../lib/composite';
 
 import { closeCompositeTabInState } from '../historyHelpers';
@@ -34,10 +27,7 @@ import { createFlowEdge } from '../../lib/edge';
 import { computeLayout } from '../../lib/layout';
 import { getNodeSize } from '../../lib/composite';
 import { savePrefs } from '../persistence';
-import {
-  getEdgeDeleteHistoryPending,
-  setEdgeDeleteHistoryPending,
-} from '../runtimeFlags';
+import { getEdgeDeleteHistoryPending, setEdgeDeleteHistoryPending } from '../runtimeFlags';
 
 export function createFlowSlice({ set, get }: SliceDeps): Partial<FlowStore> {
   return {
@@ -82,8 +72,7 @@ export function createFlowSlice({ set, get }: SliceDeps): Partial<FlowStore> {
                   decodeCompositePort(e.targetHandle)?.nodeId === rid,
               ),
           ),
-          selected:
-            s.selected?.kind === 'node' && removedIds.has(s.selected.id) ? null : s.selected,
+          selected: s.selected?.kind === 'node' && removedIds.has(s.selected.id) ? null : s.selected,
           // 被删节点从阶段域的归属中移除
           stages: s.stages.map((st) =>
             st.nodeIds.some((nid) => removedIds.has(nid))
@@ -163,8 +152,7 @@ export function createFlowSlice({ set, get }: SliceDeps): Partial<FlowStore> {
 
     setReassignHighlight: (h) =>
       set((s) => ({
-        reassignHighlight:
-          h === null ? null : { participant: null, stage: null, ...(s.reassignHighlight ?? {}), ...h },
+        reassignHighlight: h === null ? null : { participant: null, stage: null, ...(s.reassignHighlight ?? {}), ...h },
       })),
 
     bumpAgentRevision: () => set((s) => ({ agentRevision: s.agentRevision + 1 })),
@@ -192,9 +180,7 @@ export function createFlowSlice({ set, get }: SliceDeps): Partial<FlowStore> {
       }
       const targets = s.nodes.filter((n) => targetIds.has(n.id));
       if (targets.length === 0) return;
-      const layoutEdges = s.edges.filter(
-        (e) => targetIds.has(e.source) && targetIds.has(e.target),
-      );
+      const layoutEdges = s.edges.filter((e) => targetIds.has(e.source) && targetIds.has(e.target));
       get().markHistory();
 
       // 组合内部布局:不做阶段域处理,直接排列
@@ -211,18 +197,13 @@ export function createFlowSlice({ set, get }: SliceDeps): Partial<FlowStore> {
       // === 全画布布局:集成阶段域 ===
       const STAGE_PAD = 22; // 域内边距
       // 1) 每个域:内部节点横向拓扑排列,域框收敛包裹
-      const stageMeta = new Map<
-        string,
-        { w: number; h: number; x: number; y: number; inner: FlowNode[] }
-      >();
+      const stageMeta = new Map<string, { w: number; h: number; x: number; y: number; inner: FlowNode[] }>();
       let finalNodes = s.nodes;
       for (const st of s.stages) {
         const inner = targets.filter((n) => st.nodeIds.includes(n.id));
         if (!inner.length) continue;
         const innerIds = new Set(inner.map((n) => n.id));
-        const innerEdges = layoutEdges.filter(
-          (e) => innerIds.has(e.source) && innerIds.has(e.target),
-        );
+        const innerEdges = layoutEdges.filter((e) => innerIds.has(e.source) && innerIds.has(e.target));
         const positions = computeLayout(inner, innerEdges, dir);
         let minX = Infinity;
         let minY = Infinity;
@@ -317,9 +298,7 @@ export function createFlowSlice({ set, get }: SliceDeps): Partial<FlowStore> {
       finalNodes = finalNodes.map((n) => {
         if (inStage.has(n.id)) return n;
         const pos = blockPositions.get(n.id);
-        return pos
-          ? { ...n, position: { x: Math.round(pos.x), y: Math.round(pos.y) } }
-          : n;
+        return pos ? { ...n, position: { x: Math.round(pos.x), y: Math.round(pos.y) } } : n;
       });
       // 5) 更新域框到整体布局位置,内部节点随域平移
       let newStages = s.stages.map((st) => {
@@ -341,7 +320,13 @@ export function createFlowSlice({ set, get }: SliceDeps): Partial<FlowStore> {
               : n,
           );
         }
-        return { ...st, x: Math.round(pos.x), y: Math.round(pos.y), width: Math.round(meta.w), height: Math.round(meta.h) };
+        return {
+          ...st,
+          x: Math.round(pos.x),
+          y: Math.round(pos.y),
+          width: Math.round(meta.w),
+          height: Math.round(meta.h),
+        };
       });
       // ③ 所有阶段域中央水平对齐:垂直中心 y 统一
       const stageList = newStages.filter((st) => stageMeta.has(st.id));
@@ -362,6 +347,5 @@ export function createFlowSlice({ set, get }: SliceDeps): Partial<FlowStore> {
       }
       set({ nodes: applyCompositeBoxes(finalNodes), stages: newStages });
     },
-
   };
 }

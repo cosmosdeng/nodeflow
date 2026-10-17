@@ -1,6 +1,11 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { executeAgentRequest } from '../executor';
-import { AGENT_PROTOCOL_VERSION, type AgentAssertionResult, type AgentGraphState, type AgentRequestType } from '../types';
+import {
+  AGENT_PROTOCOL_VERSION,
+  type AgentAssertionResult,
+  type AgentGraphState,
+  type AgentRequestType,
+} from '../types';
 import { useGraphStore } from '../../store/graphStore';
 import { setAgentTestCommandsEnabled } from '../capabilities';
 

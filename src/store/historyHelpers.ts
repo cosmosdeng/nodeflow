@@ -13,8 +13,7 @@ export function restoreTabsFromSnapshot(
   // 仅保留仍存在的组合节点标签;对无标签字段的旧快照回退到当前标签并按节点过滤
   const compositeTabs = snapTabs.filter((t) => nodeIds.has(t));
   const snapActive = snapshot.activeTabId ?? s.activeTabId;
-  const activeTabId =
-    snapActive === 'main' || compositeTabs.includes(snapActive) ? snapActive : 'main';
+  const activeTabId = snapActive === 'main' || compositeTabs.includes(snapActive) ? snapActive : 'main';
   return { compositeTabs, activeTabId };
 }
 
@@ -98,10 +97,6 @@ export function closeCompositeTabInState(s: FlowStore, id: string) {
   return {
     compositeTabs,
     activeTabId:
-      s.activeTabId === id
-        ? compositeTabs.length
-          ? compositeTabs[compositeTabs.length - 1]
-          : 'main'
-        : s.activeTabId,
+      s.activeTabId === id ? (compositeTabs.length ? compositeTabs[compositeTabs.length - 1] : 'main') : s.activeTabId,
   };
 }

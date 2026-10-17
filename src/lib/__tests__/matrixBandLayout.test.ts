@@ -143,11 +143,7 @@ describe('Arrange Quality vNext(全局拓扑 + 固定行列 + 汇合不深陷)',
       {
         participants: [participant('p1'), participant('p2'), participant('p3')],
         participantOrder: ['p1', 'p2', 'p3'],
-        stages: [
-          stage('s1', ['A']),
-          stage('s2', ['B']),
-          stage('s3', ['C']),
-        ],
+        stages: [stage('s1', ['A']), stage('s2', ['B']), stage('s3', ['C'])],
         stageOrder: ['s1', 's2', 's3'],
         nodes: [node('A', 'p1'), node('B', 'p2'), node('C', 'p3')],
       },
@@ -234,11 +230,7 @@ describe('Arrange Quality vNext(全局拓扑 + 固定行列 + 汇合不深陷)',
       participantOrder: ['p1', 'p2'],
       stages: [stage('s1', ['A', 'B']), stage('s2', ['C'])],
       stageOrder: ['s1', 's2'],
-      nodes: [
-        node('A', 'p1', 0, 200),
-        node('B', 'p1', 0, 0),
-        node('C', 'p2', 0, 0),
-      ],
+      nodes: [node('A', 'p1', 0, 200), node('B', 'p1', 0, 0), node('C', 'p2', 0, 0)],
     };
     const edges = [mkEdge('e1', 'A', 'B'), mkEdge('e2', 'B', 'C')];
     const r1 = computeMatrixLayout(input, { edges });

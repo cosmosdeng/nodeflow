@@ -17,7 +17,14 @@ export function rectOverlaps(nx: number, ny: number, w: number, h: number, rect:
 }
 
 /** 把一个矩形从矩形 rect 中沿最小位移方向推出(带间距 gap),返回新坐标 */
-export function pushOutOfRect(nx: number, ny: number, w: number, h: number, rect: Rect, gap: number): { x: number; y: number } {
+export function pushOutOfRect(
+  nx: number,
+  ny: number,
+  w: number,
+  h: number,
+  rect: Rect,
+  gap: number,
+): { x: number; y: number } {
   const candidates = [
     { dx: rect.x + rect.width + gap - nx, dy: 0 },
     { dx: -(nx + w + gap - rect.x), dy: 0 },

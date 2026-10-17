@@ -9,11 +9,7 @@ import {
   type NodeTypes,
 } from '@xyflow/react';
 import type { FlowEdge, FlowNode } from '../types';
-import {
-  COMPOSITE_POPUP_KEY,
-  loadCompositeSnapshot,
-  type CompositeSnapshot,
-} from '../lib/compositePopup';
+import { COMPOSITE_POPUP_KEY, loadCompositeSnapshot, type CompositeSnapshot } from '../lib/compositePopup';
 import FlowNodeComponent from './FlowNodeComponent';
 import FlowEdgeComponent from './FlowEdgeComponent';
 
@@ -26,9 +22,7 @@ const edgeTypes: EdgeTypes = { flow: FlowEdgeComponent };
  * 通过监听 storage 事件实时接收主窗口对快照的更新,无需手动刷新。
  */
 export default function CompositePopupView({ id }: { id: string }) {
-  const [snapshot, setSnapshot] = useState<CompositeSnapshot | null>(() =>
-    loadCompositeSnapshot(id),
-  );
+  const [snapshot, setSnapshot] = useState<CompositeSnapshot | null>(() => loadCompositeSnapshot(id));
 
   // 主窗口更新快照时,storage 事件会广播到本独立窗口,据此实时刷新
   useEffect(() => {
@@ -98,12 +92,7 @@ export default function CompositePopupView({ id }: { id: string }) {
         >
           <Background variant={BackgroundVariant.Dots} gap={24} size={1} color="#2c2f38" />
           <Controls position="bottom-right" />
-          <MiniMap
-            position="bottom-left"
-            pannable
-            zoomable
-            nodeColor={(n) => (n.hidden ? 'transparent' : '#4ea1ff')}
-          />
+          <MiniMap position="bottom-left" pannable zoomable nodeColor={(n) => (n.hidden ? 'transparent' : '#4ea1ff')} />
         </ReactFlow>
       </div>
     </div>

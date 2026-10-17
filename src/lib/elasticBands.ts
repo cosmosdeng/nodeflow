@@ -56,10 +56,7 @@ export interface AxisFitResult {
  * start_i = clamp(preferred_i, [lowerBound, maxAllowedStart]);若下界已超过
  * 上界(顺序与包含不可兼得),优先保「顺序 + 间距」并把冲突写入 diagnostics。
  */
-export function fitOrderedEnvelopes(
-  specs: readonly AxisBandSpec[],
-  gap: number,
-): AxisFitResult {
+export function fitOrderedEnvelopes(specs: readonly AxisBandSpec[], gap: number): AxisFitResult {
   const bands: FittedBand[] = [];
   const conflicts: string[] = [];
   let displacement = 0;
@@ -189,9 +186,7 @@ export interface ElasticMatrixInput {
  * 从 Arrange 输出的 Node 矩形构造「envelope band geometry」。
  * 不修改任何 Node position / semantic;只有 Band 几何跟随 Node 移动。
  */
-export function computeElasticMatrixGeometry(
-  input: ElasticMatrixInput,
-): ElasticMatrixGeometry {
+export function computeElasticMatrixGeometry(input: ElasticMatrixInput): ElasticMatrixGeometry {
   const pad = input.pad ?? 10;
   const gap = input.gap ?? 8;
   const emptyExtent = input.emptyExtent ?? 60;
@@ -199,13 +194,9 @@ export function computeElasticMatrixGeometry(
   const emptyCross = input.emptyCross ?? 120;
 
   const participantIds = [...input.participantOrder, ...input.participants.map((p) => p.id)];
-  const pids = [...new Set(participantIds)].filter((id) =>
-    input.participants.some((p) => p.id === id),
-  );
+  const pids = [...new Set(participantIds)].filter((id) => input.participants.some((p) => p.id === id));
   const stageIds = [...input.stageOrder, ...input.stages.map((s) => s.id)];
-  const sids = [...new Set(stageIds)].filter((id) =>
-    input.stages.some((s) => s.id === id),
-  );
+  const sids = [...new Set(stageIds)].filter((id) => input.stages.some((s) => s.id === id));
 
   // 归类按轴独立(Participant/Stage 是两个正交视觉组织轴):
   // - pid 有效 且 stage 有效(assigned)  → 同时进 Participant 与 Stage
@@ -261,8 +252,8 @@ export function computeElasticMatrixGeometry(
   const pFit = fitOrderedEnvelopes(pSpecs, gap);
   const participantBands: ParticipantElasticBand[] = pFit.bands.map((fb, i) => {
     const spec = pSpecs[i];
-    let l = 0;
-    let r = 0;
+    let l: number;
+    let r: number;
     if (spec.xRects.length > 0) {
       const env = rectsToEnvelope(spec.xRects, pad);
       l = env.minX;
@@ -309,8 +300,8 @@ export function computeElasticMatrixGeometry(
   const sFit = fitOrderedEnvelopes(sSpecs, gap);
   const stageBands: StageElasticBand[] = sFit.bands.map((fb, i) => {
     const spec = sSpecs[i];
-    let t = 0;
-    let b = 0;
+    let t: number;
+    let b: number;
     if (spec.yRects.length > 0) {
       const env = rectsToEnvelope(spec.yRects, pad);
       t = env.minY;

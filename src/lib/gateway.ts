@@ -26,7 +26,10 @@ export function createGatewayNode(type: GatewayType, position: { x: number; y: n
       actor: 'hybrid',
       locked: false,
       inputs: [{ id: 'in_1', name: '输入' }],
-      outputs: [{ id: 'out_1', name: '分支1' }, { id: 'out_2', name: '分支2' }],
+      outputs: [
+        { id: 'out_1', name: '分支1' },
+        { id: 'out_2', name: '分支2' },
+      ],
       gateway: { type },
     },
   };
@@ -54,4 +57,13 @@ export function setDefaultBranch(gw: GatewayMeta, edgeId: string | null): Gatewa
 }
 
 /** 网关分支配色(连线上按分支序号取色) */
-export const GATEWAY_BRANCH_COLORS = ['#ff6b6b', '#4ecdc4', '#f7d794', '#a29bfe', '#55efc4', '#fd79a8', '#74b9ff', '#ffeaa7'];
+export const GATEWAY_BRANCH_COLORS = [
+  '#ff6b6b',
+  '#4ecdc4',
+  '#f7d794',
+  '#a29bfe',
+  '#55efc4',
+  '#fd79a8',
+  '#74b9ff',
+  '#ffeaa7',
+];

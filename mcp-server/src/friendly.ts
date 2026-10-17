@@ -15,18 +15,17 @@ export function friendlyBridgeCall(baseUrl: string, options: HttpBridgeCallOptio
       return await inner(req);
     } catch (e) {
       const detail = e instanceof Error ? e.message : String(e);
-      // code 为本地扩展(非 AgentErrorCode 枚举),绕过时以结构化错误返回
-      const errResp = {
+      const errResp: AgentResponse = {
         protocolVersion: req.protocolVersion,
         requestId: req.requestId,
-        success: false as const,
+        success: false,
         error: {
           code: 'BRIDGE_UNAVAILABLE',
           message: `NodeFlow is not running or Agent Bridge is unavailable at ${baseUrl}. Please start NodeFlow with NODEFLOW_AGENT_BRIDGE=1 and ensure the token in ~/.nodeflow/agent-bridge.json is readable.`,
           details: detail,
         },
       };
-      return errResp as unknown as AgentResponse;
+      return errResp;
     }
   };
 }

@@ -13,4 +13,3 @@ export function resolveBridgeToken(env: NodeJS.ProcessEnv = process.env): string
   const raw = env.NODEFLOW_AGENT_TOKEN ?? env.NODEFLOW_MCP_BRIDGE_TOKEN;
   return raw && raw.trim() ? raw.trim() : undefined;
 }
-

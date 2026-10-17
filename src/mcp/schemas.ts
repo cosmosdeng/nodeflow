@@ -40,18 +40,14 @@ export const toolSchemas = {
 
   create_participant: {
     name: z.string().min(1),
-    type: z
-      .enum(['person', 'role', 'organization', 'department', 'machine', 'software', 'ai-agent'])
-      .optional(),
+    type: z.enum(['person', 'role', 'organization', 'department', 'machine', 'software', 'ai-agent']).optional(),
     organizationId: z.string().min(1).nullable().optional(),
     ...expectedRevision,
   },
   update_participant: {
     id: NODE_ID,
     name: z.string().optional(),
-    type: z
-      .enum(['person', 'role', 'organization', 'department', 'machine', 'software', 'ai-agent'])
-      .optional(),
+    type: z.enum(['person', 'role', 'organization', 'department', 'machine', 'software', 'ai-agent']).optional(),
     organizationId: z.string().min(1).nullable().optional(),
     ...expectedRevision,
   },

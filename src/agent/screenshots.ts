@@ -28,8 +28,8 @@ async function pngOf(el: Element): Promise<AgentScreenshot> {
 }
 
 function windowScreenshotFromMain(): Promise<AgentScreenshot | null> {
-  const api = (window as unknown as { nodeflow?: { agentCaptureWindow?: () => Promise<AgentScreenshot> } })
-    .nodeflow?.agentCaptureWindow;
+  const api = (window as unknown as { nodeflow?: { agentCaptureWindow?: () => Promise<AgentScreenshot> } }).nodeflow
+    ?.agentCaptureWindow;
   if (typeof api !== 'function') return Promise.resolve(null);
   return api().catch(() => null);
 }

@@ -45,12 +45,7 @@ const QUERIES: Record<QueryKey, () => unknown> = {
 };
 
 /** 查询/断言/截图不推进 revision,不参与乐观并发检查 */
-const NON_MUTATING = new Set<string>([
-  ...Object.keys(QUERIES),
-  'assert',
-  'getCanvasScreenshot',
-  'getWindowScreenshot',
-]);
+const NON_MUTATING = new Set<string>([...Object.keys(QUERIES), 'assert', 'getCanvasScreenshot', 'getWindowScreenshot']);
 
 function ok(requestId: string, data: unknown): AgentResponse {
   return { protocolVersion: AGENT_PROTOCOL_VERSION, requestId, success: true, data };

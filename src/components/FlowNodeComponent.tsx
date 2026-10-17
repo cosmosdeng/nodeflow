@@ -34,9 +34,7 @@ function FlowNodeComponent({ id, data, selected }: NodeProps<FlowNode>) {
   const requestAutoEdit = useGraphStore((s) => s.requestAutoEdit);
   // 只订阅归属本节点的注释
   const nodeAnnots = useGraphStore(
-    useShallow((s) =>
-      s.annotations.filter((a) => a.target.kind === 'node' && a.target.nodeId === id),
-    ),
+    useShallow((s) => s.annotations.filter((a) => a.target.kind === 'node' && a.target.nodeId === id)),
   );
   const addAnnotation = useGraphStore((s) => s.addAnnotation);
   const updateAnnotation = useGraphStore((s) => s.updateAnnotation);
@@ -66,13 +64,8 @@ function FlowNodeComponent({ id, data, selected }: NodeProps<FlowNode>) {
 
   // 组合节点的执行主体继承自内部节点(全同则同、混杂则人机协同,支持嵌套递归),
   // 不允许用户手动选择;普通节点使用自身的 actor。
-  const nodesById = useMemo(
-    () => new Map(allNodes.map((n) => [n.id, n])),
-    [allNodes],
-  );
-  const effectiveActor = composite
-    ? computeCompositeActor(children, nodesById)
-    : (data.actor as ActorType);
+  const nodesById = useMemo(() => new Map(allNodes.map((n) => [n.id, n])), [allNodes]);
+  const effectiveActor = composite ? computeCompositeActor(children, nodesById) : (data.actor as ActorType);
   const actor = ACTOR_META[effectiveActor];
 
   // 执行主体外框颜色类名(用于节点边框按人/机器/人机协同着色)
@@ -107,13 +100,7 @@ function FlowNodeComponent({ id, data, selected }: NodeProps<FlowNode>) {
   const updateNodeInternals = useUpdateNodeInternals();
   useEffect(() => {
     if (data.gateway) updateNodeInternals(id);
-  }, [
-    id,
-    data.gateway,
-    data.inputs,
-    data.outputs,
-    updateNodeInternals,
-  ]);
+  }, [id, data.gateway, data.inputs, data.outputs, updateNodeInternals]);
 
   const addInput = (e: React.MouseEvent) => {
     e.stopPropagation();
@@ -164,11 +151,7 @@ function FlowNodeComponent({ id, data, selected }: NodeProps<FlowNode>) {
     openCompositeTab(id);
   };
 
-  const lockTitle = allLocked
-    ? '演示模式已锁定全部内容'
-    : locked
-      ? '节点已锁定,点击解锁'
-      : '节点未锁定,点击锁定';
+  const lockTitle = allLocked ? '演示模式已锁定全部内容' : locked ? '节点已锁定,点击解锁' : '节点未锁定,点击锁定';
 
   const stopDoubleClick = (e: React.MouseEvent) => {
     e.stopPropagation();
@@ -208,7 +191,9 @@ function FlowNodeComponent({ id, data, selected }: NodeProps<FlowNode>) {
                     value={p.name}
                     placeholder="输入"
                     disabled={disabled}
-                    onCommit={(v) => updateNode(id, { inputs: data.inputs.map((o) => (o.id === p.id ? { ...o, name: v } : o)) })}
+                    onCommit={(v) =>
+                      updateNode(id, { inputs: data.inputs.map((o) => (o.id === p.id ? { ...o, name: v } : o)) })
+                    }
                     onEditingChange={(editing) => setNodeDraggable(id, !editing)}
                   />
                   {!disabled && data.inputs.length > 1 && (
@@ -296,7 +281,9 @@ function FlowNodeComponent({ id, data, selected }: NodeProps<FlowNode>) {
                     value={p.name}
                     placeholder="分支"
                     disabled={disabled}
-                    onCommit={(v) => updateNode(id, { outputs: data.outputs.map((o) => (o.id === p.id ? { ...o, name: v } : o)) })}
+                    onCommit={(v) =>
+                      updateNode(id, { outputs: data.outputs.map((o) => (o.id === p.id ? { ...o, name: v } : o)) })
+                    }
                     onEditingChange={(editing) => setNodeDraggable(id, !editing)}
                   />
                 </div>
@@ -599,12 +586,7 @@ function FlowNodeComponent({ id, data, selected }: NodeProps<FlowNode>) {
             >
               ◀
             </button>
-            <button
-              className="node-ctl-btn"
-              onClick={openTab}
-              disabled={disabled}
-              title="在标签页中打开内部画布"
-            >
+            <button className="node-ctl-btn" onClick={openTab} disabled={disabled} title="在标签页中打开内部画布">
               🖼
             </button>
             <button
@@ -632,38 +614,38 @@ function FlowNodeComponent({ id, data, selected }: NodeProps<FlowNode>) {
         {/* 展开态虚线框仅为逻辑边界,不作为实际节点:无聚合端口,连线直接连到内部节点 */}
         {/* 组合节点注释 pin(操作逻辑与普通节点相同) */}
         {nodeAnnots.length === 0 ? (
-        nodeHovered && (
+          nodeHovered && (
+            <div className="node-annot-area">
+              <button
+                className="node-annot-btn pin"
+                title="添加注释"
+                onMouseEnter={enterNodeHover}
+                onMouseLeave={leaveNodeHover}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  addAnnotation({ kind: 'node', nodeId: id });
+                }}
+              >
+                📌
+              </button>
+            </div>
+          )
+        ) : !nodeAnnots[0].collapsed ? null : (
           <div className="node-annot-area">
             <button
-              className="node-annot-btn pin"
-              title="添加注释"
+              className="node-annot-btn pin has"
+              title={nodeAnnots[0].title || '注释'}
               onMouseEnter={enterNodeHover}
               onMouseLeave={leaveNodeHover}
               onClick={(e) => {
                 e.stopPropagation();
-                addAnnotation({ kind: 'node', nodeId: id });
+                toggleAnnotationCollapsed(nodeAnnots[0].id);
               }}
             >
               📌
             </button>
           </div>
-        )
-      ) : !nodeAnnots[0].collapsed ? null : (
-        <div className="node-annot-area">
-          <button
-            className="node-annot-btn pin has"
-            title={nodeAnnots[0].title || '注释'}
-            onMouseEnter={enterNodeHover}
-            onMouseLeave={leaveNodeHover}
-            onClick={(e) => {
-              e.stopPropagation();
-              toggleAnnotationCollapsed(nodeAnnots[0].id);
-            }}
-          >
-            📌
-          </button>
-        </div>
-      )}
+        )}
       </div>
     );
   }
@@ -702,12 +684,7 @@ function FlowNodeComponent({ id, data, selected }: NodeProps<FlowNode>) {
           >
             ▶
           </button>
-          <button
-            className="node-ctl-btn"
-            onClick={openTab}
-            disabled={disabled}
-            title="在标签页中打开内部画布"
-          >
+          <button className="node-ctl-btn" onClick={openTab} disabled={disabled} title="在标签页中打开内部画布">
             🖼
           </button>
           <button
@@ -736,9 +713,7 @@ function FlowNodeComponent({ id, data, selected }: NodeProps<FlowNode>) {
       <div className="node-body">
         <div className="node-ports">
           <div className="port-group-title">输入</div>
-          {(!aggPorts || aggPorts.inputs.length === 0) && (
-            <div className="port-empty">无输入</div>
-          )}
+          {(!aggPorts || aggPorts.inputs.length === 0) && <div className="port-empty">无输入</div>}
           {(aggPorts?.inputs ?? []).map((p) => (
             <div key={p.id} className="port in">
               <Handle

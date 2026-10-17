@@ -37,11 +37,31 @@ function node(id: string, data: Partial<FlowNode['data']>, extra?: Partial<FlowN
 // 构造一条链:A.out → B.in, B.out → C.in
 function buildChain() {
   const A = node('A', { actor: 'human', outputs: [{ id: 'out1', name: '出' }] }, { position: { x: 0, y: 0 } });
-  const B = node('B', { actor: 'machine', inputs: [{ id: 'in1', name: '入' }], outputs: [{ id: 'out1', name: '出' }] }, { position: { x: 300, y: 0 } });
+  const B = node(
+    'B',
+    { actor: 'machine', inputs: [{ id: 'in1', name: '入' }], outputs: [{ id: 'out1', name: '出' }] },
+    { position: { x: 300, y: 0 } },
+  );
   const C = node('C', { actor: 'human', inputs: [{ id: 'in1', name: '入' }] }, { position: { x: 600, y: 0 } });
   const edges = [
-    { id: 'e1', source: 'A', sourceHandle: 'out1', target: 'B', targetHandle: 'in1', type: 'flow' as const, data: { label: '', artifact: null } },
-    { id: 'e2', source: 'B', sourceHandle: 'out1', target: 'C', targetHandle: 'in1', type: 'flow' as const, data: { label: '', artifact: null } },
+    {
+      id: 'e1',
+      source: 'A',
+      sourceHandle: 'out1',
+      target: 'B',
+      targetHandle: 'in1',
+      type: 'flow' as const,
+      data: { label: '', artifact: null },
+    },
+    {
+      id: 'e2',
+      source: 'B',
+      sourceHandle: 'out1',
+      target: 'C',
+      targetHandle: 'in1',
+      type: 'flow' as const,
+      data: { label: '', artifact: null },
+    },
   ];
   return { A, B, C, edges };
 }
@@ -267,10 +287,7 @@ describe('流程阶段域(resizeStage / autoGrowStage)', () => {
   it('autoGrowStage 扩大时把外部重叠节点推开(保持间距)', () => {
     // 节点 A 在域内 (0,0);外部节点 B 紧贴域右边界
     useGraphStore.setState({
-      nodes: [
-        node('A', {}, { position: { x: 0, y: 0 } }),
-        node('B', {}, { position: { x: 500, y: 0 } }),
-      ],
+      nodes: [node('A', {}, { position: { x: 0, y: 0 } }), node('B', {}, { position: { x: 500, y: 0 } })],
       edges: [],
       stages: [defaultStage],
       selected: null,
@@ -288,11 +305,31 @@ describe('自动排列集成阶段域(autoLayout)', () => {
   it('全画布排列:域框收敛包裹内部节点,内部节点被域包含', () => {
     // 域 s1 含节点 A、B(连线 A→B),游离节点 C(连线 B→C)
     const A = node('A', { actor: 'human', outputs: [{ id: 'out1', name: '出' }] }, { position: { x: 0, y: 0 } });
-    const B = node('B', { actor: 'machine', inputs: [{ id: 'in1', name: '入' }], outputs: [{ id: 'out1', name: '出' }] }, { position: { x: 300, y: 0 } });
+    const B = node(
+      'B',
+      { actor: 'machine', inputs: [{ id: 'in1', name: '入' }], outputs: [{ id: 'out1', name: '出' }] },
+      { position: { x: 300, y: 0 } },
+    );
     const C = node('C', { actor: 'human', inputs: [{ id: 'in1', name: '入' }] }, { position: { x: 600, y: 0 } });
     const edges = [
-      { id: 'e1', source: 'A', sourceHandle: 'out1', target: 'B', targetHandle: 'in1', type: 'flow' as const, data: { label: '', artifact: null } },
-      { id: 'e2', source: 'B', sourceHandle: 'out1', target: 'C', targetHandle: 'in1', type: 'flow' as const, data: { label: '', artifact: null } },
+      {
+        id: 'e1',
+        source: 'A',
+        sourceHandle: 'out1',
+        target: 'B',
+        targetHandle: 'in1',
+        type: 'flow' as const,
+        data: { label: '', artifact: null },
+      },
+      {
+        id: 'e2',
+        source: 'B',
+        sourceHandle: 'out1',
+        target: 'C',
+        targetHandle: 'in1',
+        type: 'flow' as const,
+        data: { label: '', artifact: null },
+      },
     ];
     useGraphStore.setState({
       nodes: [A, B, C],
@@ -412,7 +449,15 @@ describe('BPMN 网关节点(createGatewayNode)', () => {
     // 下游节点 B 连到网关 out_1 分支
     const B = node('B', { inputs: [{ id: 'in1', name: '入' }] }, { position: { x: 400, y: 0 } });
     const edges = [
-      { id: 'e1', source: gw.id, sourceHandle: 'out_1', target: 'B', targetHandle: 'in1', type: 'flow' as const, data: { label: '', artifact: null } },
+      {
+        id: 'e1',
+        source: gw.id,
+        sourceHandle: 'out_1',
+        target: 'B',
+        targetHandle: 'in1',
+        type: 'flow' as const,
+        data: { label: '', artifact: null },
+      },
     ];
     useGraphStore.setState({
       nodes: [gw, B],
@@ -435,8 +480,24 @@ describe('BPMN 网关节点(createGatewayNode)', () => {
     const B = node('B', { inputs: [{ id: 'in1', name: '入' }] }, { position: { x: 400, y: 0 } });
     const C = node('C', { inputs: [{ id: 'in1', name: '入' }] }, { position: { x: 600, y: 0 } });
     const edges = [
-      { id: 'e1', source: gw.id, sourceHandle: 'out_1', target: 'B', targetHandle: 'in1', type: 'flow' as const, data: { label: '', artifact: null } },
-      { id: 'e2', source: gw.id, sourceHandle: 'out_2', target: 'C', targetHandle: 'in1', type: 'flow' as const, data: { label: '', artifact: null } },
+      {
+        id: 'e1',
+        source: gw.id,
+        sourceHandle: 'out_1',
+        target: 'B',
+        targetHandle: 'in1',
+        type: 'flow' as const,
+        data: { label: '', artifact: null },
+      },
+      {
+        id: 'e2',
+        source: gw.id,
+        sourceHandle: 'out_2',
+        target: 'C',
+        targetHandle: 'in1',
+        type: 'flow' as const,
+        data: { label: '', artifact: null },
+      },
     ];
     useGraphStore.setState({
       nodes: [gw, B, C],

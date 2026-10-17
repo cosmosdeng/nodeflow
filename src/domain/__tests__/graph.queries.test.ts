@@ -11,7 +11,12 @@ import {
 } from '../graph/queries';
 
 function node(id: string): FlowNode {
-  return { id, type: 'flow', position: { x: 0, y: 0 }, data: { label: id, description: '', actor: 'machine', locked: false, inputs: [], outputs: [] } } as FlowNode;
+  return {
+    id,
+    type: 'flow',
+    position: { x: 0, y: 0 },
+    data: { label: id, description: '', actor: 'machine', locked: false, inputs: [], outputs: [] },
+  } as FlowNode;
 }
 
 function edge(id: string, source: string, target: string): FlowEdge {

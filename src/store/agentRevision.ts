@@ -44,22 +44,10 @@ export function graphObservableFingerprint(s: FlowStore): string {
         e.sourceHandle ?? null,
         e.targetHandle ?? null,
         typeof e.data?.label === 'string' ? e.data.label : '',
-        art
-          ? [
-              art.id,
-              art.kind,
-              art.label,
-              art.description,
-            ]
-          : null,
+        art ? [art.id, art.kind, art.label, art.description] : null,
       ];
     }),
-    participants: s.participants.map((p) => [
-      p.id,
-      p.name,
-      p.type,
-      p.organizationId ?? null,
-    ]),
+    participants: s.participants.map((p) => [p.id, p.name, p.type, p.organizationId ?? null]),
     stages: s.stages.map((st) => [st.id, st.name, st.nodeIds.slice()]),
     annotations: s.annotations.map((a) => [
       a.id,

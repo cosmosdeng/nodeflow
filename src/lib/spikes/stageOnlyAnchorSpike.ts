@@ -76,9 +76,12 @@ function placedRects(
   stageOnly: StageOnlyItem[],
   ys: Map<string, number>,
 ): { id: string; y: number; h: number; kind: 'assigned' | 'stageOnly' }[] {
-  const out: { id: string; y: number; h: number; kind: 'assigned' | 'stageOnly' }[] = assigned.map(
-    (a) => ({ id: a.id, y: a.y, h: a.h, kind: 'assigned' as const }),
-  );
+  const out: { id: string; y: number; h: number; kind: 'assigned' | 'stageOnly' }[] = assigned.map((a) => ({
+    id: a.id,
+    y: a.y,
+    h: a.h,
+    kind: 'assigned' as const,
+  }));
   for (const s of stageOnly) {
     const y = ys.get(s.id);
     if (y === undefined) continue;
@@ -130,10 +133,7 @@ function countTopologyViolations(
 }
 
 function sortStageOnly(items: StageOnlyItem[]): StageOnlyItem[] {
-  return [...items].sort(
-    (a, b) =>
-      (a.level ?? 0) - (b.level ?? 0) || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0),
-  );
+  return [...items].sort((a, b) => (a.level ?? 0) - (b.level ?? 0) || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
 }
 
 function buildOutcome(
@@ -273,17 +273,12 @@ function strategyD(input: AnchorInput): Map<string, number> {
     const pRects = (pred ?? []).map((id) => byId.get(id)).filter((x): x is KnownRect => x !== undefined);
     const sRects = (succ ?? []).map((id) => byId.get(id)).filter((x): x is KnownRect => x !== undefined);
     const yOfKnown = (r: KnownRect): number =>
-      r.kind === 'assigned' ? r.y : placedY.get(r.id) ?? Number.MAX_SAFE_INTEGER;
+      r.kind === 'assigned' ? r.y : (placedY.get(r.id) ?? Number.MAX_SAFE_INTEGER);
     // 仅用“已就位”的邻居(assigned 恒就位;stageOnly 需已放置)做锚定
     const settled = (r: KnownRect): boolean => r.kind === 'assigned' || placedY.has(r.id);
     const predBottom =
-      pRects.length > 0
-        ? Math.max(...pRects.filter(settled).map((r) => yOfKnown(r) + r.h))
-        : undefined;
-    const succTop =
-      sRects.length > 0
-        ? Math.min(...sRects.filter(settled).map((r) => yOfKnown(r)))
-        : undefined;
+      pRects.length > 0 ? Math.max(...pRects.filter(settled).map((r) => yOfKnown(r) + r.h)) : undefined;
+    const succTop = sRects.length > 0 ? Math.min(...sRects.filter(settled).map((r) => yOfKnown(r))) : undefined;
 
     // 期望锚点(不含占位冲突处理)
     let desire: number;

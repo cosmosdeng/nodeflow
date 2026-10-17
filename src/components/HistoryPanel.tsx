@@ -40,10 +40,20 @@ export default function HistoryPanel({ onClose }: Props) {
             marginBottom: 12,
           }}
         >
-          <button className="tb-btn" style={{ flex: 1, justifyContent: 'center' }} disabled={allLocked || past.length === 0} onClick={undo}>
+          <button
+            className="tb-btn"
+            style={{ flex: 1, justifyContent: 'center' }}
+            disabled={allLocked || past.length === 0}
+            onClick={undo}
+          >
             ↩ 撤销
           </button>
-          <button className="tb-btn" style={{ flex: 1, justifyContent: 'center' }} disabled={allLocked || future.length === 0} onClick={redo}>
+          <button
+            className="tb-btn"
+            style={{ flex: 1, justifyContent: 'center' }}
+            disabled={allLocked || future.length === 0}
+            onClick={redo}
+          >
             ↪ 重做
           </button>
         </div>

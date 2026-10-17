@@ -18,12 +18,7 @@
 
 export type ReassignmentAxis = 'participant' | 'stage';
 export type ReassignmentPhase =
-  | 'idle'
-  | 'dragging'
-  | 'hover_candidate'
-  | 'target_confirmed'
-  | 'cancelled'
-  | 'reassigned';
+  'idle' | 'dragging' | 'hover_candidate' | 'target_confirmed' | 'cancelled' | 'reassigned';
 
 export interface ReassignmentCandidate {
   axis: ReassignmentAxis;
@@ -80,10 +75,7 @@ export function confirmCandidate(candidate: ReassignmentCandidate): Reassignment
  * 计算「确认后」的语义(不修改输入)。
  * participant 轴不会碰 stage;stage 轴不会碰 participant(两者独立)。
  */
-export function applyIntentToSemantics(
-  semantics: NodeSemantics,
-  intent: ReassignmentIntent,
-): NodeSemantics {
+export function applyIntentToSemantics(semantics: NodeSemantics, intent: ReassignmentIntent): NodeSemantics {
   if (intent.axis === 'participant') {
     return { ...semantics, participantId: intent.toId ?? undefined };
   }

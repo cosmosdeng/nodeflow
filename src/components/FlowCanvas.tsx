@@ -36,8 +36,7 @@ export default function FlowCanvas() {
   const [hintOpen, setHintOpen] = useState(true);
 
   // mac/触控板与 Windows/鼠标在平移缩放方式及快捷键符号上不同,提示内容按平台区分
-  const isMac =
-    typeof navigator !== 'undefined' && /Mac|iPhone|iPad|iPod/i.test(navigator.platform || '');
+  const isMac = typeof navigator !== 'undefined' && /Mac|iPhone|iPad|iPod/i.test(navigator.platform || '');
 
   const nodes = useGraphStore((s) => s.nodes);
   const edges = useGraphStore((s) => s.edges);
@@ -180,27 +179,20 @@ export default function FlowCanvas() {
 
   /** 根据当前标签页过滤出实际渲染的节点与连线;全部锁定时强制所有节点不可拖(覆盖 per-node draggable) */
   const { displayNodes, displayEdges } = useMemo(() => {
-    const applyLock = (ns: FlowNode[]) =>
-      allLocked ? ns.map((n) => ({ ...n, draggable: false })) : ns;
+    const applyLock = (ns: FlowNode[]) => (allLocked ? ns.map((n) => ({ ...n, draggable: false })) : ns);
     if (activeTabId === 'main') {
       // 展开组合的子节点提升 zIndex,使其渲染在组合虚线框之上,保证可被拖拽 / 连线 / 选中。
       // 不能用 :has() 让组合框 pointer-events:none 穿透(部分环境不生效),改由 z-index 层叠解决。
       const childIds = new Set(
-        nodes
-          .filter((n) => n.data?.composite?.expanded)
-          .flatMap((n) => n.data!.composite!.childIds),
+        nodes.filter((n) => n.data?.composite?.expanded).flatMap((n) => n.data!.composite!.childIds),
       );
-      const lifted = nodes.map((n) =>
-        childIds.has(n.id) ? { ...n, zIndex: 1 } : n,
-      );
+      const lifted = nodes.map((n) => (childIds.has(n.id) ? { ...n, zIndex: 1 } : n));
       return { displayNodes: applyLock(lifted), displayEdges: edges };
     }
     const comp = nodes.find((n) => n.id === activeTabId);
     const childSet = new Set(comp?.data?.composite?.childIds ?? []);
     return {
-      displayNodes: applyLock(
-        nodes.filter((n) => childSet.has(n.id)).map((n) => ({ ...n, hidden: false })),
-      ),
+      displayNodes: applyLock(nodes.filter((n) => childSet.has(n.id)).map((n) => ({ ...n, hidden: false }))),
       displayEdges: edges
         .filter((e) => childSet.has(e.source) && childSet.has(e.target))
         .map((e) => ({ ...e, hidden: false })),
@@ -237,11 +229,7 @@ export default function FlowCanvas() {
   const setStageFlash = useCallback((stageId: string, nodeId: string) => {
     useGraphStore.setState({ stageFlashId: stageId });
     useGraphStore.setState((s) => ({
-      nodes: s.nodes.map((n) =>
-        n.id === nodeId
-          ? { ...n, className: `${n.className ?? ''} nf-flash`.trim() }
-          : n,
-      ),
+      nodes: s.nodes.map((n) => (n.id === nodeId ? { ...n, className: `${n.className ?? ''} nf-flash`.trim() } : n)),
     }));
     window.setTimeout(() => {
       useGraphStore.setState({ stageFlashId: null });
@@ -414,9 +402,7 @@ export default function FlowCanvas() {
       clearAllDwell();
       const st = useGraphStore.getState();
       // 拖拽结束:对归属域节点再收敛一次域框(可能缩小回节点包围盒)
-      const owned = st.stages.filter((sg) =>
-        sg.nodeIds.some((nid) => st.nodes.find((n) => n.id === nid && !n.hidden)),
-      );
+      const owned = st.stages.filter((sg) => sg.nodeIds.some((nid) => st.nodes.find((n) => n.id === nid && !n.hidden)));
       owned.forEach((sg) => st.autoGrowStage(sg.id));
       // 仅在“停留形成候选 + 释放在同一带内”时弹出确认;否则保持语义不变
       // 参与方 / 阶段两轴独立判定:交叉格内可同时出现两个选项,各自确认只改对应轴
@@ -487,8 +473,8 @@ export default function FlowCanvas() {
       const fromHandle = connectionState.fromHandle;
       if (!fromNode || !fromHandle) return;
       // 支持鼠标与触摸事件;触摸用 changedTouches 取坐标
-      let clientX = 0;
-      let clientY = 0;
+      let clientX: number;
+      let clientY: number;
       if ('clientX' in event) {
         clientX = event.clientX;
         clientY = event.clientY;
@@ -500,8 +486,7 @@ export default function FlowCanvas() {
       const pos = screenToFlowPosition({ x: clientX, y: clientY });
       const st = useGraphStore.getState();
       // 内部画布中新建节点时加入所属组合,主画布直接新建
-      const comp =
-        st.activeTabId !== 'main' ? st.nodes.find((n) => n.id === st.activeTabId) : null;
+      const comp = st.activeTabId !== 'main' ? st.nodes.find((n) => n.id === st.activeTabId) : null;
       const newId = comp?.data?.composite
         ? addNodeToComposite(comp.id, { x: pos.x - 115, y: pos.y - 60 })
         : addNode(undefined, { x: pos.x - 115, y: pos.y - 60 });
@@ -546,13 +531,8 @@ export default function FlowCanvas() {
             onClick: () => {
               const pos = screenToFlowPosition({ x: clientX, y: clientY });
               const st = useGraphStore.getState();
-              const comp =
-                st.activeTabId !== 'main'
-                  ? st.nodes.find((n) => n.id === st.activeTabId)
-                  : null;
-              const id = comp?.data?.composite
-                ? addNodeToComposite(comp.id, pos)
-                : addNode(undefined, pos);
+              const comp = st.activeTabId !== 'main' ? st.nodes.find((n) => n.id === st.activeTabId) : null;
+              const id = comp?.data?.composite ? addNodeToComposite(comp.id, pos) : addNode(undefined, pos);
               if (id) setSelected({ kind: 'node', id });
             },
           },
@@ -567,10 +547,7 @@ export default function FlowCanvas() {
             onClick: () => {
               const pos = screenToFlowPosition({ x: clientX, y: clientY });
               const st = useGraphStore.getState();
-              const comp =
-                st.activeTabId !== 'main'
-                  ? st.nodes.find((n) => n.id === st.activeTabId)
-                  : null;
+              const comp = st.activeTabId !== 'main' ? st.nodes.find((n) => n.id === st.activeTabId) : null;
               const gw = createGatewayNode(gt, { x: pos.x - 65, y: pos.y - 48 });
               const st2 = useGraphStore.getState();
               let id: string;
@@ -607,10 +584,7 @@ export default function FlowCanvas() {
               const url = URL.createObjectURL(blob);
               const a = document.createElement('a');
               a.href = url;
-              a.download = `nodeflow-${new Date()
-                .toISOString()
-                .slice(0, 19)
-                .replace(/[:T]/g, '-')}.json`;
+              a.download = `nodeflow-${new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-')}.json`;
               a.click();
               URL.revokeObjectURL(url);
             },
@@ -640,16 +614,12 @@ export default function FlowCanvas() {
       const st = useGraphStore.getState();
       const selectedNodes = st.nodes.filter((n) => n.selected);
       // 右键的节点不在选中集时,临时视为仅该节点
-      const targets = selectedNodes.some((n) => n.id === node.id)
-        ? selectedNodes
-        : [node];
+      const targets = selectedNodes.some((n) => n.id === node.id) ? selectedNodes : [node];
       const isComposite = !!node.data.composite;
       const isGateway = !!node.data.gateway;
       const multi = targets.length > 1;
       // 是否有任一目标节点属于阶段域
-      const anyInStage = st.stages.some((sg) =>
-        sg.nodeIds.some((nid) => targets.some((t) => t.id === nid)),
-      );
+      const anyInStage = st.stages.some((sg) => sg.nodeIds.some((nid) => targets.some((t) => t.id === nid)));
 
       setContextMenu({
         x: e.clientX,
@@ -764,7 +734,16 @@ export default function FlowCanvas() {
         ],
       });
     },
-    [deleteNode, groupSelected, setSelected, setConfirmDialog, ungroup, toggleComposite, detachNodesFromStages, allLocked],
+    [
+      deleteNode,
+      groupSelected,
+      setSelected,
+      setConfirmDialog,
+      ungroup,
+      toggleComposite,
+      detachNodesFromStages,
+      allLocked,
+    ],
   );
 
   /** 连线上右键:弹出连线菜单(在连线中间插入新节点 / 删除连线) */
@@ -807,14 +786,7 @@ export default function FlowCanvas() {
         ],
       });
     },
-    [
-      allLocked,
-      screenToFlowPosition,
-      setSelected,
-      insertNodeOnEdge,
-      setConfirmDialog,
-      deleteEdge,
-    ],
+    [allLocked, screenToFlowPosition, setSelected, insertNodeOnEdge, setConfirmDialog, deleteEdge],
   );
 
   /** 节点拖拽中:连线提升/降级等画布状态(略) */
@@ -856,9 +828,7 @@ export default function FlowCanvas() {
       }
       const edgeEl = el?.closest?.('.react-flow__edge');
       if (edgeEl) {
-        const edgeId =
-          edgeEl.getAttribute('data-id') ||
-          edgeEl.getAttribute('data-edgeid');
+        const edgeId = edgeEl.getAttribute('data-id') || edgeEl.getAttribute('data-edgeid');
         const edge = useGraphStore.getState().edges.find((n) => n.id === edgeId);
         if (edge) {
           const ev = {
@@ -1013,9 +983,7 @@ export default function FlowCanvas() {
         return;
       }
       // 排除 Matrix label 及贴边守卫(双击进入名称编辑),避免误建节点
-      if (
-        t?.closest?.('.matrix-label, .matrix-label-layer, .matrix-gutter-guard')
-      ) {
+      if (t?.closest?.('.matrix-label, .matrix-label-layer, .matrix-gutter-guard')) {
         last = 0;
         return;
       }
@@ -1028,11 +996,8 @@ export default function FlowCanvas() {
         if (allLocked) return;
         const pos = screenToFlowPosition({ x: e.clientX, y: e.clientY });
         const st = useGraphStore.getState();
-        const comp =
-          st.activeTabId !== 'main' ? st.nodes.find((n) => n.id === st.activeTabId) : null;
-        const id = comp?.data?.composite
-          ? addNodeToComposite(comp.id, pos)
-          : addNode(undefined, pos);
+        const comp = st.activeTabId !== 'main' ? st.nodes.find((n) => n.id === st.activeTabId) : null;
+        const id = comp?.data?.composite ? addNodeToComposite(comp.id, pos) : addNode(undefined, pos);
         if (id) setSelected({ kind: 'node', id });
       } else {
         last = now;
@@ -1096,12 +1061,7 @@ export default function FlowCanvas() {
         // 编辑态通过 store 将节点 draggable 置 false + EditableText 原生捕获拦截阻止拖拽。
         proOptions={{ hideAttribution: true }}
       >
-        <Background
-          variant={BackgroundVariant.Dots}
-          gap={24}
-          size={1}
-          color={isDark ? '#2c2f38' : '#c9cdd6'}
-        />
+        <Background variant={BackgroundVariant.Dots} gap={24} size={1} color={isDark ? '#2c2f38' : '#c9cdd6'} />
         <Controls position="bottom-right" />
         <MiniMap
           position="bottom-left"
@@ -1125,27 +1085,33 @@ export default function FlowCanvas() {
             <div className="nf-hint">
               <div className="nf-hint-head">
                 <span className="nf-hint-title">基本操作</span>
-                <button
-                  className="nf-hint-btn"
-                  title="缩小"
-                  onClick={() => setHintOpen(false)}
-                >
+                <button className="nf-hint-btn" title="缩小" onClick={() => setHintOpen(false)}>
                   ―
                 </button>
               </div>
               <ul className="nf-hint-list">
-                <li><b>拖拽节点</b> · 左键按住节点移动</li>
-                <li><b>框选</b> · 左键画布空白拖拽选中多个节点</li>
+                <li>
+                  <b>拖拽节点</b> · 左键按住节点移动
+                </li>
+                <li>
+                  <b>框选</b> · 左键画布空白拖拽选中多个节点
+                </li>
                 <li>
                   <b>平移画布</b>
-                  {isMac
-                    ? ' · 触控板两指滑动 / 鼠标右键按住拖动'
-                    : ' · 鼠标右键按住拖动'}
+                  {isMac ? ' · 触控板两指滑动 / 鼠标右键按住拖动' : ' · 鼠标右键按住拖动'}
                 </li>
-                <li><b>缩放</b> · 鼠标滚轮 / 两指捏合 / 右下角控件</li>
-                <li><b>编辑文字</b> · 双击节点标题 / 描述 / 端口名</li>
-                <li><b>连线</b> · 从端口拖出到另一节点端口</li>
-                <li><b>新建节点</b> · 双击画布空白处</li>
+                <li>
+                  <b>缩放</b> · 鼠标滚轮 / 两指捏合 / 右下角控件
+                </li>
+                <li>
+                  <b>编辑文字</b> · 双击节点标题 / 描述 / 端口名
+                </li>
+                <li>
+                  <b>连线</b> · 从端口拖出到另一节点端口
+                </li>
+                <li>
+                  <b>新建节点</b> · 双击画布空白处
+                </li>
                 <li>
                   <b>撤销 / 重做</b> · {isMac ? '⌘Z / ⇧⌘Z' : 'Ctrl+Z / Ctrl+Shift+Z'}
                 </li>
@@ -1155,11 +1121,7 @@ export default function FlowCanvas() {
               </ul>
             </div>
           ) : (
-            <button
-              className="nf-hint-trigger"
-              title="展开操作提示"
-              onClick={() => setHintOpen(true)}
-            >
+            <button className="nf-hint-trigger" title="展开操作提示" onClick={() => setHintOpen(true)}>
               ?
             </button>
           )}
@@ -1238,12 +1200,7 @@ export default function FlowCanvas() {
       {/* Phase C:拖放候选后的最小确认(仅 runtime;确认 = reassignNode 原子事务) */}
       {reassignRequest && (
         <div className="nf-modal-mask" onMouseDown={cancelReassign}>
-          <div
-            className="nf-modal"
-            onMouseDown={(e) => e.stopPropagation()}
-            role="dialog"
-            aria-modal="true"
-          >
+          <div className="nf-modal" onMouseDown={(e) => e.stopPropagation()} role="dialog" aria-modal="true">
             <div className="nf-modal-title">语义重分配</div>
             <div className="nf-modal-message">
               将节点「{reassignRequest.nodeLabel}」重新分配?可分别确认参与方或阶段;取消则不改变归属。

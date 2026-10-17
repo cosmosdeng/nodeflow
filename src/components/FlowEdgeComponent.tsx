@@ -40,9 +40,7 @@ function FlowEdgeComponent({
     useShallow((s) => s.annotations.filter((a) => a.target.kind === 'edge' && a.target.edgeId === id)),
   );
   const artifactAnnots = useGraphStore(
-    useShallow((s) =>
-      s.annotations.filter((a) => a.target.kind === 'artifact' && a.target.edgeId === id),
-    ),
+    useShallow((s) => s.annotations.filter((a) => a.target.kind === 'artifact' && a.target.edgeId === id)),
   );
   // 画布上连线说明是否处于内联编辑态(用于编辑时允许换行/扩展)
   const [labelEditing, setLabelEditing] = useState(false);
@@ -93,23 +91,12 @@ function FlowEdgeComponent({
         obstacles: obstacles.length ? obstacles : EMPTY_OBSTACLES,
         edgeStyle,
       }),
-    [
-      sourceX,
-      sourceY,
-      sourcePosition,
-      targetX,
-      targetY,
-      targetPosition,
-      obstacles,
-      edgeStyle,
-    ],
+    [sourceX, sourceY, sourcePosition, targetX, targetY, targetPosition, obstacles, edgeStyle],
   );
 
   const label = data?.label ?? '';
   const isEdgeActive = selected;
-  const isArtifactActive = useGraphStore(
-    (s) => s.selected?.kind === 'artifact' && s.selected.edgeId === id,
-  );
+  const isArtifactActive = useGraphStore((s) => s.selected?.kind === 'artifact' && s.selected.edgeId === id);
 
   // 网关分支连线配色:若 source 是网关,按 sourceHandle 的分支序号从调色板取色
   const edgeColor = useGraphStore((s) => {

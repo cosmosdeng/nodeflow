@@ -59,7 +59,9 @@ function MainApp() {
           useGraphStore.getState().fitGraph?.();
         }, 120);
       } else {
-        void alertDialogAsync(useGraphStore.getState().loadError ?? '无法打开该项目文件,请确认是 NodeFlow 保存的项目。');
+        void alertDialogAsync(
+          useGraphStore.getState().loadError ?? '无法打开该项目文件,请确认是 NodeFlow 保存的项目。',
+        );
       }
     });
     return off;

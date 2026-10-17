@@ -51,7 +51,10 @@ beforeEach(() => {
 });
 
 function nodeIds(): string[] {
-  return useGraphStore.getState().nodes.map((n) => n.id).sort();
+  return useGraphStore
+    .getState()
+    .nodes.map((n) => n.id)
+    .sort();
 }
 
 describe('P4-05 Undo / Redo', () => {
@@ -82,7 +85,17 @@ describe('P4-05 Undo / Redo', () => {
     const B = node('B', { inputs: [{ id: 'in1', name: 'i' }] });
     useGraphStore.setState({
       nodes: [A, B],
-      edges: [{ id: 'e1', source: 'A', sourceHandle: 'out1', target: 'B', targetHandle: 'in1', type: 'flow', data: { label: '', artifact: null } }],
+      edges: [
+        {
+          id: 'e1',
+          source: 'A',
+          sourceHandle: 'out1',
+          target: 'B',
+          targetHandle: 'in1',
+          type: 'flow',
+          data: { label: '', artifact: null },
+        },
+      ],
     });
     const st = useGraphStore.getState();
     st.markHistory(); // S0 含 A、B、e1

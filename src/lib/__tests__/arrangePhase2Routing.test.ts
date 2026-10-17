@@ -55,10 +55,18 @@ describe('四类 routing(computeMatrixLayout)', () => {
 
   it('assigned → Matrix cell;rowOnly → participant 行延伸;stageOnly → 其 Stage 列;free → 现处理', () => {
     const pos = computeMatrixLayout(input);
-    expect(classifyMatrixNode(input.nodes[0], { participants: input.participants, stages: input.stages }).classification).toBe('assigned');
-    expect(classifyMatrixNode(input.nodes[1], { participants: input.participants, stages: input.stages }).classification).toBe('rowOnly');
-    expect(classifyMatrixNode(input.nodes[2], { participants: input.participants, stages: input.stages }).classification).toBe('stageOnly');
-    expect(classifyMatrixNode(input.nodes[3], { participants: input.participants, stages: input.stages }).classification).toBe('free');
+    expect(
+      classifyMatrixNode(input.nodes[0], { participants: input.participants, stages: input.stages }).classification,
+    ).toBe('assigned');
+    expect(
+      classifyMatrixNode(input.nodes[1], { participants: input.participants, stages: input.stages }).classification,
+    ).toBe('rowOnly');
+    expect(
+      classifyMatrixNode(input.nodes[2], { participants: input.participants, stages: input.stages }).classification,
+    ).toBe('stageOnly');
+    expect(
+      classifyMatrixNode(input.nodes[3], { participants: input.participants, stages: input.stages }).classification,
+    ).toBe('free');
 
     const geo = computeMatrixGridGeometry(input);
     const colXs = geo.colXs; // s1 列宽含 assigned/stageOnly
@@ -135,7 +143,10 @@ describe('real_like:stageOnly 进入其 Stage 列(classification!==free)', () =>
   it('non-stageOnly 节点语义不变;free 仍走现有处理', () => {
     const clsMap = new Map<string, MatrixNodeClassification>();
     for (const n of input.nodes) {
-      clsMap.set(n.id, classifyMatrixNode(n, { participants: input.participants, stages: input.stages }).classification);
+      clsMap.set(
+        n.id,
+        classifyMatrixNode(n, { participants: input.participants, stages: input.stages }).classification,
+      );
     }
     // composite assigned 仍在其 cell;seed_1/seed_5 等真 free 不误入列
     expect(clsMap.get('composite')).toBe('assigned');

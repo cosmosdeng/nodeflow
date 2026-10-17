@@ -2,11 +2,7 @@
  * 组合节点纯/半纯 helper:塌缩/展开/隐藏刷新/端口重映射。
  * 不直接依赖 store 实例,由 slice 传入 set/get。
  */
-import {
-  type FlowNode,
-  type FlowEdge,
-  type Annotation,
-} from '../types';
+import { type FlowNode, type FlowEdge, type Annotation } from '../types';
 import {
   COMPOSITE_PAD,
   COMPOSITE_PREFIX,
@@ -91,12 +87,7 @@ export function collectAllDescendants(nodes: FlowNode[], compId: string): Set<st
  * 例:外层 B,直接子节点 A(组合,聚合端口 id 为 'cid:aSub:in1'),则
  * 指向 A 的线 handle='cid:aSub:in1' → 'cid:A:cid:aSub:in1'(即 B 的聚合端口 id)。
  */
-export function wrapRefToOuter(
-  nodes: FlowNode[],
-  targetNodeId: string,
-  handle: string,
-  outerId: string,
-): string {
+export function wrapRefToOuter(nodes: FlowNode[], targetNodeId: string, handle: string, outerId: string): string {
   // 1. 先编码 targetNodeId 自身,再向上逐层包装祖先组合,直到 outerId 的直接子节点为止(不含 outerId)
   let ref = encodeCompositePort(targetNodeId, handle);
   let cur = targetNodeId;
@@ -155,11 +146,7 @@ export function unwrapToVisible(
  * - 外部连线改写为指向组合节点(端口引用 cid: 编码,可逆)
  * - 组合节点端口更新为聚合端口
  */
-export function collapseComposite(
-  get: () => FlowStore,
-  set: (partial: Partial<FlowStore>) => void,
-  id: string,
-) {
+export function collapseComposite(get: () => FlowStore, set: (partial: Partial<FlowStore>) => void, id: string) {
   const s = get();
   const comp = findNodeById(s.nodes, id);
   if (!comp?.data?.composite) return;
@@ -229,11 +216,7 @@ export function collapseComposite(
  * - 外部连线从组合端口还原回子节点端口
  * - 组合节点变为虚线框,包裹全部子节点
  */
-export function expandComposite(
-  get: () => FlowStore,
-  set: (partial: Partial<FlowStore>) => void,
-  id: string,
-) {
+export function expandComposite(get: () => FlowStore, set: (partial: Partial<FlowStore>) => void, id: string) {
   const s = get();
   const comp = findNodeById(s.nodes, id);
   if (!comp?.data?.composite) return;
@@ -338,10 +321,7 @@ export function expandComposite(
  * 同步塌缩组合的子节点/内部连线隐藏状态。
  * 用于内部画布中新增内部连线、或编辑子节点后,保证主画布展示一致。
  */
-export function refreshCompositeHidden(
-  get: () => FlowStore,
-  set: (partial: Partial<FlowStore>) => void,
-) {
+export function refreshCompositeHidden(get: () => FlowStore, set: (partial: Partial<FlowStore>) => void) {
   const s = get();
   const comps = s.nodes.filter((n) => n.data?.composite);
   if (!comps.length) return;

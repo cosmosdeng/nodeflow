@@ -8,12 +8,7 @@
  *   3) 把 AgentResponse 转成 MCP 可消费的 content。
  */
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
-import {
-  AGENT_PROTOCOL_VERSION,
-  type AgentCommandResult,
-  type AgentRequest,
-  type AgentResponse,
-} from '../agent/types';
+import { AGENT_PROTOCOL_VERSION, type AgentCommandResult, type AgentRequest, type AgentResponse } from '../agent/types';
 import { toolSchemas, type ToolName } from './schemas';
 import type { AgentCall } from './bridge';
 
@@ -118,7 +113,11 @@ export function createNodeFlowMcpServer(opts: NodeFlowMcpServerOptions): McpServ
     return out.data;
   };
 
-  register('get_graph_state', '获取 NodeFlow 完整 Graph State(含 revision/nodes/edges/participants/stages/viewport/selection)', observe('getGraphState'));
+  register(
+    'get_graph_state',
+    '获取 NodeFlow 完整 Graph State(含 revision/nodes/edges/participants/stages/viewport/selection)',
+    observe('getGraphState'),
+  );
   register('get_document', '获取当前文档信息', observe('getDocument'));
   register('get_nodes', '获取节点 DTO 列表', observe('getNodes'));
   register('get_edges', '获取连线 DTO 列表', observe('getEdges'));
@@ -171,12 +170,8 @@ export function createNodeFlowMcpServer(opts: NodeFlowMcpServerOptions): McpServ
       expectedRevision: a.expectedRevision,
     }),
   );
-  register('assign_participant', '把节点分配给参与方(语义,不自动重排)', (a) =>
-    mutation('assignParticipant', a),
-  );
-  register('assign_stage', '把节点归入阶段(语义,不自动重排)', (a) =>
-    mutation('assignStage', a),
-  );
+  register('assign_participant', '把节点分配给参与方(语义,不自动重排)', (a) => mutation('assignParticipant', a));
+  register('assign_stage', '把节点归入阶段(语义,不自动重排)', (a) => mutation('assignStage', a));
   register('arrange', '执行与工具栏一致的 Smart Arrange', (a) => mutation('arrange', a));
   register('undo', '撤销一次(与 GUI 同一 history)', (a) => mutation('undo', a));
   register('redo', '重做一次', (a) => mutation('redo', a));
@@ -218,9 +213,10 @@ export function createNodeFlowMcpServer(opts: NodeFlowMcpServerOptions): McpServ
     const out = await guarded('assert', a);
     if (!out.success) {
       // 断言失败是结构化业务结果:保留 passed/actual/expected,同时标 isError 与其它失败一致
-      const details = out.error?.details && typeof out.error.details === 'object'
-        ? (out.error.details as { result?: unknown }).result
-        : null;
+      const details =
+        out.error?.details && typeof out.error.details === 'object'
+          ? (out.error.details as { result?: unknown }).result
+          : null;
       const body = { passed: false, assertion: a.type, result: details ?? out.error };
       return {
         content: [{ type: 'text', text: JSON.stringify(body) }],
@@ -244,7 +240,9 @@ export function createNodeFlowMcpServer(opts: NodeFlowMcpServerOptions): McpServ
   // ---- test.fixture(仅显式开启) ----
   if (testFixture) {
     register('reset', '重置测试图(空文档,test-only)', () => mutation('reset', {}));
-    register('seed_fixture', '加载确定性测试图(3 参与方/3 阶段/10 节点/边,test-only)', () => mutation('seedFixture', {}));
+    register('seed_fixture', '加载确定性测试图(3 参与方/3 阶段/10 节点/边,test-only)', () =>
+      mutation('seedFixture', {}),
+    );
   }
 
   return server;

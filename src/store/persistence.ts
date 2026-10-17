@@ -50,7 +50,10 @@ export function buildSeedGraph(): GraphSnapshot {
     actor: 'hybrid',
     locked: false,
     inputs: [{ id: 'in_1', name: '需求' }],
-    outputs: [{ id: 'out_1', name: '脚本' }, { id: 'out_2', name: '分镜表' }],
+    outputs: [
+      { id: 'out_1', name: '脚本' },
+      { id: 'out_2', name: '分镜表' },
+    ],
   };
 
   const n3 = createDefaultNode({ x: 720, y: 0 });
@@ -273,7 +276,9 @@ export function persistDocument(
 }
 
 /** 加载单个文档数据,返回不含历史/脏标记的图数据(缺省返回空图) */
-export function loadPersistedDocument(id: string): Pick<
+export function loadPersistedDocument(
+  id: string,
+): Pick<
   GraphDocument,
   | 'nodes'
   | 'edges'
@@ -288,21 +293,21 @@ export function loadPersistedDocument(id: string): Pick<
   | 'arrangePending'
   | 'compositeTabs'
   | 'activeTabId'
-  > {
+> {
   const emptyOrder = {
-  nodes: [],
-  edges: [],
-  viewport: { x: 0, y: 0, zoom: 1 },
-  annotations: [],
-  stages: [],
-  participants: [],
-  organizations: [],
-  participantOrder: [],
-  participantOrderMode: 'auto' as const,
-  stageOrder: [],
-  arrangePending: false,
-  compositeTabs: [],
-  activeTabId: 'main',
+    nodes: [],
+    edges: [],
+    viewport: { x: 0, y: 0, zoom: 1 },
+    annotations: [],
+    stages: [],
+    participants: [],
+    organizations: [],
+    participantOrder: [],
+    participantOrderMode: 'auto' as const,
+    stageOrder: [],
+    arrangePending: false,
+    compositeTabs: [],
+    activeTabId: 'main',
   };
   try {
     const raw = localStorage.getItem(docKey(id));
@@ -322,9 +327,7 @@ export function loadPersistedDocument(id: string): Pick<
       participants,
       organizations: Array.isArray(data.organizations) ? data.organizations : [],
       // legacy localStorage 无 order:按参与方/stage 数组顺序补默认(auto)
-      participantOrder: Array.isArray(data.participantOrder)
-        ? data.participantOrder
-        : participants.map((p) => p.id),
+      participantOrder: Array.isArray(data.participantOrder) ? data.participantOrder : participants.map((p) => p.id),
       participantOrderMode:
         data.participantOrderMode === 'user' || data.participantOrderMode === 'auto'
           ? data.participantOrderMode
@@ -348,7 +351,7 @@ export function loadDocsIndex(): DocsIndex | null {
     if (!Array.isArray(data.docs)) return null;
     return {
       docs: data.docs as DocMeta[],
-      activeId: typeof data.activeId === 'string' ? data.activeId : data.docs[0]?.id ?? '',
+      activeId: typeof data.activeId === 'string' ? data.activeId : (data.docs[0]?.id ?? ''),
     };
   } catch {
     return null;
@@ -398,9 +401,7 @@ export function buildInitialDocuments(): { docs: GraphDocument[]; activeId: stri
         dirty: false,
       } satisfies GraphDocument;
     });
-    const activeId = index.docs.some((d) => d.id === index.activeId)
-      ? index.activeId
-      : index.docs[0].id;
+    const activeId = index.docs.some((d) => d.id === index.activeId) ? index.activeId : index.docs[0].id;
     return { docs, activeId };
   }
   // 迁移旧单文档
@@ -427,11 +428,13 @@ export function buildInitialDocuments(): { docs: GraphDocument[]; activeId: stri
     dirty: false,
   };
   persistDocument(legacyDoc);
-  persistDocsIndex({ docs: [{ id: legacyDoc.id, name: legacyDoc.name, color: legacyDoc.color, lastSavedAt: legacyDoc.lastSavedAt }], activeId: legacyDoc.id });
+  persistDocsIndex({
+    docs: [{ id: legacyDoc.id, name: legacyDoc.name, color: legacyDoc.color, lastSavedAt: legacyDoc.lastSavedAt }],
+    activeId: legacyDoc.id,
+  });
   return { docs: [legacyDoc], activeId: legacyDoc.id };
 }
 
-let saveTimer: ReturnType<typeof setTimeout> | null = null;
 export const seedGraph = buildSeedGraph();
 export const prefs = loadPrefs();
 // 启动时构建文档列表(迁移旧单文档或按注册表加载)

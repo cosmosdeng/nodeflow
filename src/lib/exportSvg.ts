@@ -166,8 +166,12 @@ export function buildSvg(
     const srcLayout = layoutById.get(e.source);
     const tgtLayout = layoutById.get(e.target);
     if (!srcLayout || !tgtLayout) continue;
-    const srcPort = srcLayout.ports.find((p) => p.side === 'out' && p.id === e.sourceHandle) ?? srcLayout.ports.find((p) => p.side === 'out');
-    const tgtPort = tgtLayout.ports.find((p) => p.side === 'in' && p.id === e.targetHandle) ?? tgtLayout.ports.find((p) => p.side === 'in');
+    const srcPort =
+      srcLayout.ports.find((p) => p.side === 'out' && p.id === e.sourceHandle) ??
+      srcLayout.ports.find((p) => p.side === 'out');
+    const tgtPort =
+      tgtLayout.ports.find((p) => p.side === 'in' && p.id === e.targetHandle) ??
+      tgtLayout.ports.find((p) => p.side === 'in');
     if (!srcPort || !tgtPort) continue;
     const sX = srcLayout.x + srcLayout.w;
     const sY = srcLayout.y + srcPort.y;
@@ -223,7 +227,9 @@ export function buildSvg(
     );
     // header 分隔线
     const headerY = y + HEADER_H * scale;
-    nodeParts.push(`<line x1="${x + 11 * scale}" y1="${headerY}" x2="${x + w - 11 * scale}" y2="${headerY}" stroke="${pal.border}" stroke-width="${scale}" />`);
+    nodeParts.push(
+      `<line x1="${x + 11 * scale}" y1="${headerY}" x2="${x + w - 11 * scale}" y2="${headerY}" stroke="${pal.border}" stroke-width="${scale}" />`,
+    );
     // 标题
     nodeParts.push(
       `<text x="${x + 11 * scale}" y="${y + 14 * scale}" font-size="${13 * scale}" font-weight="700" fill="${pal.text}" font-family="system-ui,sans-serif">${esc(n.data.label || '未命名节点')}</text>`,

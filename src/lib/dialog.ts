@@ -63,10 +63,7 @@ export function confirmDialogAsync(
   });
 }
 
-export function alertDialogAsync(
-  message: string,
-  opts: Omit<DialogRequest, 'kind' | 'message'> = {},
-): Promise<void> {
+export function alertDialogAsync(message: string, opts: Omit<DialogRequest, 'kind' | 'message'> = {}): Promise<void> {
   return new Promise((resolve) => {
     current = {
       request: { kind: 'alert', message, confirmLabel: opts.confirmLabel ?? '知道了', ...opts },

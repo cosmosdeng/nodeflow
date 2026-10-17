@@ -124,13 +124,21 @@ describe('real_like(复用 Spike fixture)', () => {
   });
 
   it('composite(pid+stage)= assigned', () => {
-    const r = classifyMatrixNode(input.nodes.find((x) => x.id === 'composite')!, c);
+    const r = classifyMatrixNode(
+      input.nodes.find((x) => x.id === 'composite')!,
+      c,
+    );
     expect(r.classification).toBe('assigned');
   });
 
   it('真实主链无归属节点(seed_1/seed_5/网关等)= free', () => {
     for (const id of ['seed_1', 'seed_5', 'para', 'incl', 'node5dd']) {
-      expect(classifyMatrixNode(input.nodes.find((x) => x.id === id)!, c).classification).toBe('free');
+      expect(
+        classifyMatrixNode(
+          input.nodes.find((x) => x.id === id)!,
+          c,
+        ).classification,
+      ).toBe('free');
     }
   });
 });
@@ -159,7 +167,9 @@ describe('Gateway:按普通 Node 处理', () => {
     const gwStageOnly = node('gwOnly', { extra: { gateway: { type: 'inclusive' as const } } });
     expect(classifyMatrixNode(gwAssigned, ctx(P, S)).classification).toBe('assigned');
     expect(classifyMatrixNode(gwStageOnly, ctx(P, S)).classification).toBe('free'); // 无 stage 无 pid
-    expect(classifyMatrixNode(node('gwIn2', { pid: 'p1' }), ctx(P, [stg('s2', ['gwIn2'])])).classification).toBe('assigned');
+    expect(classifyMatrixNode(node('gwIn2', { pid: 'p1' }), ctx(P, [stg('s2', ['gwIn2'])])).classification).toBe(
+      'assigned',
+    );
   });
 });
 
@@ -199,7 +209,9 @@ describe('与既有消费者语义的等价性', () => {
       !!n.data?.participantId && input.participants.some((p) => p.id === n.data!.participantId);
     const stageMember = (n: FlowNode) => input.stages.some((s) => s.nodeIds.includes(n.id));
 
-    const helperAssigned = new Set(topNodes.filter((n) => classifyMatrixNode(n, c).classification === 'assigned').map((n) => n.id));
+    const helperAssigned = new Set(
+      topNodes.filter((n) => classifyMatrixNode(n, c).classification === 'assigned').map((n) => n.id),
+    );
     const oldAssigned = new Set(topNodes.filter((n) => pidValid(n) && stageMember(n)).map((n) => n.id));
     expect(helperAssigned).toEqual(oldAssigned);
 

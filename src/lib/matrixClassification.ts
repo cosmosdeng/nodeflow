@@ -50,10 +50,7 @@ export function hasValidStage(node: FlowNode, stages: readonly Stage[]): boolean
 }
 
 /** 由两个正交轴的布尔值推导四类(供已解析轴引用的低层消费者使用) */
-export function classificationFromAxes(
-  hasValidParticipant: boolean,
-  hasValidStage: boolean,
-): MatrixNodeClassification {
+export function classificationFromAxes(hasValidParticipant: boolean, hasValidStage: boolean): MatrixNodeClassification {
   if (hasValidParticipant && hasValidStage) return 'assigned';
   if (hasValidParticipant && !hasValidStage) return 'rowOnly';
   if (!hasValidParticipant && hasValidStage) return 'stageOnly';
@@ -61,10 +58,7 @@ export function classificationFromAxes(
 }
 
 /** 唯一入口:node + document 上下文 → 分类与轴命中 */
-export function classifyMatrixNode(
-  node: FlowNode,
-  context: MatrixClassificationContext,
-): MatrixClassificationResult {
+export function classifyMatrixNode(node: FlowNode, context: MatrixClassificationContext): MatrixClassificationResult {
   const hasValidParticipantAxis = hasValidParticipant(node, context.participants);
   const hasValidStageAxis = hasValidStage(node, context.stages);
   return {

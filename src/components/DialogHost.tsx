@@ -1,11 +1,5 @@
 import { useEffect, useState } from 'react';
-import {
-  acceptDialog,
-  cancelDialog,
-  getDialogState,
-  subscribeDialog,
-  type DialogRequest,
-} from '../lib/dialog';
+import { acceptDialog, cancelDialog, getDialogState, subscribeDialog, type DialogRequest } from '../lib/dialog';
 
 /**
  * 全局对话框宿主:挂在 App 根节点,替代原生 alert/confirm。
@@ -24,7 +18,9 @@ export default function DialogHost() {
       if (e.key === 'Tab') {
         const modal = document.querySelector('.nf-modal');
         if (!modal) return;
-        const focusables = modal.querySelectorAll<HTMLElement>('button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])');
+        const focusables = modal.querySelectorAll<HTMLElement>(
+          'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])',
+        );
         if (!focusables.length) return;
         const first = focusables[0];
         const last = focusables[focusables.length - 1];
@@ -54,12 +50,7 @@ export default function DialogHost() {
 
   return (
     <div className="nf-modal-mask" onMouseDown={() => cancelDialog()}>
-      <div
-        className="nf-modal"
-        onMouseDown={(e) => e.stopPropagation()}
-        role="dialog"
-        aria-modal="true"
-      >
+      <div className="nf-modal" onMouseDown={(e) => e.stopPropagation()} role="dialog" aria-modal="true">
         {req.title && <div className="nf-modal-title">{req.title}</div>}
         <div className="nf-modal-message">{req.message}</div>
         <div className="nf-modal-actions">
@@ -68,10 +59,7 @@ export default function DialogHost() {
               {req.cancelLabel ?? '取消'}
             </button>
           )}
-          <button
-            className={`nf-btn primary ${req.danger ? 'danger' : ''}`}
-            onClick={() => acceptDialog()}
-          >
+          <button className={`nf-btn primary ${req.danger ? 'danger' : ''}`} onClick={() => acceptDialog()}>
             {req.confirmLabel ?? (isAlert ? '知道了' : '确定')}
           </button>
         </div>

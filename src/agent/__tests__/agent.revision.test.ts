@@ -6,7 +6,10 @@ import { setAgentTestCommandsEnabled } from '../capabilities';
 
 const rev = () => useGraphStore.getState().agentRevision;
 
-async function exec(type: string, payload?: unknown): Promise<{ success: boolean; data?: unknown; error?: { code?: string } }> {
+async function exec(
+  type: string,
+  payload?: unknown,
+): Promise<{ success: boolean; data?: unknown; error?: { code?: string } }> {
   const req = { protocolVersion: AGENT_PROTOCOL_VERSION, requestId: 'rev', type, payload } as unknown as AgentRequest;
   const r = await executeAgentRequest(req);
   return { success: r.success, data: r.data, error: r.error };

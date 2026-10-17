@@ -37,9 +37,7 @@ export function computeSwimlaneBounds(
 ): SwimlaneBounds[] {
   // 确定 lane 顺序:order 中的有效参与方;未在 order 的参与方追加
   const orderedIds = order.filter((id) => participants.some((p) => p.id === id));
-  const restIds = participants
-    .filter((p) => !orderedIds.includes(p.id))
-    .map((p) => p.id);
+  const restIds = participants.filter((p) => !orderedIds.includes(p.id)).map((p) => p.id);
   const laneIds = [...orderedIds, ...restIds];
 
   const visible = nodes.filter((n) => !n.hidden);
@@ -294,10 +292,7 @@ export interface MatrixGridInput {
  *   但同一输入确定不变(deterministic);有环时残余节点按 baseIndex 追加。
  * 用途:格内/带内节点按依赖方向稳定排序,避免来回交叉,使节点树沿连线方向可读。
  */
-export function computeFlowRank(
-  nodes: readonly FlowNode[],
-  edges: readonly FlowEdge[],
-): Map<string, number> {
+export function computeFlowRank(nodes: readonly FlowNode[], edges: readonly FlowEdge[]): Map<string, number> {
   const rank = new Map<string, number>();
   const baseIndex = new Map<string, number>();
   nodes.forEach((n, i) => baseIndex.set(n.id, i));
@@ -344,11 +339,7 @@ export function computeFlowRank(
 }
 
 /** rank 优先、稳定回退 position→id 的确定性比较 */
-const rankThenPosCompare = (
-  a: FlowNode,
-  b: FlowNode,
-  rankOf?: ReadonlyMap<string, number>,
-): number => {
+const rankThenPosCompare = (a: FlowNode, b: FlowNode, rankOf?: ReadonlyMap<string, number>): number => {
   if (rankOf) {
     const ra = rankOf.get(a.id);
     const rb = rankOf.get(b.id);
@@ -356,11 +347,7 @@ const rankThenPosCompare = (
     if (ra !== undefined && rb === undefined) return -1;
     if (ra === undefined && rb !== undefined) return 1;
   }
-  return (
-    a.position.y - b.position.y ||
-    a.position.x - b.position.x ||
-    (a.id < b.id ? -1 : a.id > b.id ? 1 : 0)
-  );
+  return a.position.y - b.position.y || a.position.x - b.position.x || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0);
 };
 
 export interface MatrixGridLayoutOptions {
@@ -370,10 +357,7 @@ export interface MatrixGridLayoutOptions {
   edges?: readonly FlowEdge[];
 }
 
-export function computeMatrixGridGeometry(
-  input: MatrixGridInput,
-  opts?: MatrixGridLayoutOptions,
-): MatrixGridGeometry {
+export function computeMatrixGridGeometry(input: MatrixGridInput, opts?: MatrixGridLayoutOptions): MatrixGridGeometry {
   const { stages } = input;
   const rankOf = opts?.rankOf;
   const stageById = new Map(stages.map((st) => [st.id, st]));
@@ -385,8 +369,7 @@ export function computeMatrixGridGeometry(
   const clsOf = new Map(
     topNodes.map((n) => [n.id, classifyMatrixNode(n, { participants: input.participants, stages }).classification]),
   );
-  const ofClass = (c: 'assigned' | 'rowOnly' | 'stageOnly' | 'free') =>
-    topNodes.filter((n) => clsOf.get(n.id) === c);
+  const ofClass = (c: 'assigned' | 'rowOnly' | 'stageOnly' | 'free') => topNodes.filter((n) => clsOf.get(n.id) === c);
   const assignedNodes = ofClass('assigned');
   const rowOnlyNodes = ofClass('rowOnly');
   const stageOnlyNodes = ofClass('stageOnly');
@@ -419,13 +402,9 @@ export function computeMatrixGridGeometry(
   // ---- 列内拓扑层槽位(X = 拓扑层;Stage 决定列区域与列区域顺序) ----
   const colCount = cols.length;
   const assignedIdSet = new Set(assignedNodes.map((n) => n.id));
-  const assignedEdges = (opts?.edges ?? []).filter(
-    (e) => assignedIdSet.has(e.source) && assignedIdSet.has(e.target),
-  );
+  const assignedEdges = (opts?.edges ?? []).filter((e) => assignedIdSet.has(e.source) && assignedIdSet.has(e.target));
   const globalLevels =
-    assignedNodes.length > 0
-      ? computeLevels(assignedNodes as FlowNode[], assignedEdges)
-      : new Map<string, number>();
+    assignedNodes.length > 0 ? computeLevels(assignedNodes as FlowNode[], assignedEdges) : new Map<string, number>();
   const levelOf = (id: string) => globalLevels.get(id) ?? 0;
 
   const colMaxAssignedW = new Array<number>(colCount).fill(0);
@@ -472,8 +451,7 @@ export function computeMatrixGridGeometry(
   const colWidths = new Array<number>(colCount).fill(0);
   for (let c = 0; c < colCount; c++) {
     const n = colLayerCount[c];
-    const extent =
-      n > 0 ? (n - 1) * (colMaxAssignedW[c] + MATRIX_LAYER_GAP) + colMaxAssignedW[c] : 0;
+    const extent = n > 0 ? (n - 1) * (colMaxAssignedW[c] + MATRIX_LAYER_GAP) + colMaxAssignedW[c] : 0;
     colWidths[c] = Math.max(extent, colMaxStageOnlyW[c]);
   }
   const colXs = new Array<number>(colCount).fill(0);
@@ -603,10 +581,7 @@ export function computeMatrixLayout(
         });
       if (members.length === 0) continue;
       const assignedRects = colAssigned.get(c) ?? [];
-      const colIdSet = new Set<string>([
-        ...assignedRects.map((a) => a.id),
-        ...members.map((m) => m.id),
-      ]);
+      const colIdSet = new Set<string>([...assignedRects.map((a) => a.id), ...members.map((m) => m.id)]);
       const colEdges = topEdges.filter((e) => colIdSet.has(e.source) && colIdSet.has(e.target));
       const anchored = computeStageOnlyColumnAnchors({
         assigned: assignedRects,

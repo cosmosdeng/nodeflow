@@ -23,7 +23,10 @@ export function validateParticipants(
   // participant.organizationId 指向存在组织(缺失则视为无组织,不报错)
   for (const p of participants) {
     if (p.organizationId && !oids.has(p.organizationId)) {
-      issues.push({ field: `participants[${p.id}].organizationId`, reason: `references missing organization ${p.organizationId}` });
+      issues.push({
+        field: `participants[${p.id}].organizationId`,
+        reason: `references missing organization ${p.organizationId}`,
+      });
     }
   }
   return issues;
@@ -32,7 +35,11 @@ export function validateParticipants(
 /**
  * 解析节点归属的参与方。participantId 缺失或指向不存在者 → 返回 undefined(视为未分配)。
  */
-export function resolveParticipant(nodes: readonly FlowNode[], participants: readonly Participant[], nodeId: string): Participant | undefined {
+export function resolveParticipant(
+  nodes: readonly FlowNode[],
+  participants: readonly Participant[],
+  nodeId: string,
+): Participant | undefined {
   const node = nodes.find((n) => n.id === nodeId);
   const pid = node?.data?.participantId;
   if (!pid) return undefined;
@@ -45,9 +52,7 @@ export function resolveParticipant(nodes: readonly FlowNode[], participants: rea
  */
 export function detachParticipantFromNodes(nodes: readonly FlowNode[], participantId: string): FlowNode[] {
   return nodes.map((n) =>
-    n.data?.participantId === participantId
-      ? { ...n, data: { ...n.data, participantId: undefined } }
-      : n,
+    n.data?.participantId === participantId ? { ...n, data: { ...n.data, participantId: undefined } } : n,
   );
 }
 
@@ -59,13 +64,14 @@ export function detachOrganizationFromParticipants(
   participants: readonly Participant[],
   organizationId: string,
 ): Participant[] {
-  return participants.map((p) =>
-    p.organizationId === organizationId ? { ...p, organizationId: undefined } : p,
-  );
+  return participants.map((p) => (p.organizationId === organizationId ? { ...p, organizationId: undefined } : p));
 }
 
 /** 获取某参与方所属的组织 */
-export function organizationOf(participant: Participant, organizations: readonly Organization[]): Organization | undefined {
+export function organizationOf(
+  participant: Participant,
+  organizations: readonly Organization[],
+): Organization | undefined {
   if (!participant.organizationId) return undefined;
   return organizations.find((o) => o.id === participant.organizationId);
 }

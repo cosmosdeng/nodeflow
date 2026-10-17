@@ -24,7 +24,16 @@ import type {
   ParticipantOrderMode,
 } from '../types';
 import type { FlowStore, Selection, AutoEditTarget } from './types';
-import { seedGraph, prefs, initialDocs, initialActiveDoc, savePrefs, persistDocument, loadDocsIndex, persistDocsIndex } from './persistence';
+import {
+  seedGraph,
+  prefs,
+  initialDocs,
+  initialActiveDoc,
+  savePrefs,
+  persistDocument,
+  loadDocsIndex,
+  persistDocsIndex,
+} from './persistence';
 import { graphObservableFingerprint } from './agentRevision';
 import { createFlowSlice } from './slices/flow';
 import { createHistorySlice } from './slices/history';
@@ -38,35 +47,50 @@ export type { Selection, AutoEditTarget, FlowStore };
 
 const SAVE_DELAY = 600;
 
-/** 把活动文档镜像字段(nodes/edges/...)同步回 documents 中的活动文档 */
+/** 活动文档镜像字段:这些顶层字段始终与 documents[activeDocumentId] 保持一致 */
+const MIRROR_FIELDS = [
+  'nodes',
+  'edges',
+  'viewport',
+  'annotations',
+  'stages',
+  'participants',
+  'organizations',
+  'participantOrder',
+  'participantOrderMode',
+  'stageOrder',
+  'arrangePending',
+  'compositeTabs',
+  'activeTabId',
+  'past',
+  'future',
+  'lastSavedAt',
+  'dirty',
+] as const;
+
+/**
+ * 把活动文档镜像字段同步回 documents 中的活动文档。
+ * 仅在字段引用实际变化时写入,避免每次 set 全量重写 documents。
+ */
 function syncActiveDoc(get: () => FlowStore, rawSet: (p: unknown) => void) {
   const s = get();
   const docId = s.activeDocumentId;
+  const doc = s.documents.find((d) => d.id === docId);
+  if (!doc) return;
+
+  // 仅收集引用变化的字段
+  const updates: Record<string, unknown> = {};
+  let changed = false;
+  for (const field of MIRROR_FIELDS) {
+    if (doc[field] !== s[field]) {
+      updates[field] = s[field];
+      changed = true;
+    }
+  }
+  if (!changed) return;
+
   (rawSet as (fn: (state: FlowStore) => Partial<FlowStore>) => void)((state: FlowStore) => ({
-    documents: state.documents.map((d) =>
-      d.id === docId
-        ? {
-            ...d,
-            nodes: state.nodes,
-            edges: state.edges,
-            viewport: state.viewport,
-            annotations: state.annotations,
-            stages: state.stages,
-            participants: state.participants,
-            organizations: state.organizations,
-            participantOrder: state.participantOrder,
-            participantOrderMode: state.participantOrderMode,
-            stageOrder: state.stageOrder,
-            arrangePending: state.arrangePending,
-            compositeTabs: state.compositeTabs,
-            activeTabId: state.activeTabId,
-            past: state.past,
-            future: state.future,
-            lastSavedAt: state.lastSavedAt,
-            dirty: state.dirty,
-          }
-        : d,
-    ),
+    documents: state.documents.map((d) => (d.id === docId ? { ...d, ...updates } : d)),
   }));
 }
 
@@ -79,45 +103,45 @@ export const useGraphStore = create<FlowStore>()(
     };
     const deps = { set, get };
     return {
-    documents: initialDocs.docs,
-    activeDocumentId: initialDocs.activeId,
-    nodes: initialActiveDoc?.nodes ?? seedGraph.nodes,
-    edges: initialActiveDoc?.edges ?? seedGraph.edges,
-    viewport: initialActiveDoc?.viewport ?? seedGraph.viewport,
-    annotations: initialActiveDoc?.annotations ?? [],
-    stages: initialActiveDoc?.stages ?? [],
-    participants: initialActiveDoc?.participants ?? [],
-    organizations: initialActiveDoc?.organizations ?? [],
-    participantOrder:
-      initialActiveDoc?.participantOrder ??
-      (initialActiveDoc?.participants ? initialActiveDoc.participants.map((p) => p.id) : []),
-    participantOrderMode: initialActiveDoc?.participantOrderMode ?? 'auto',
-    stageOrder:
-      initialActiveDoc?.stageOrder ?? (initialActiveDoc?.stages ? initialActiveDoc.stages.map((st) => st.id) : []),
-    arrangePending: initialActiveDoc?.arrangePending ?? false,
-    arrangePendingKind: undefined,
-    showStageBands: true,
-    showParticipantBands: true,
-    reassignHighlight: null,
-    agentRevision: 0,
-    swimlaneEnabled: false,
-    swimlaneOrder: [],
-    stageFlashId: null,
-    loadError: null,
-    annotAutoEditId: null,
-    past: initialActiveDoc?.past ?? [],
-    future: initialActiveDoc?.future ?? [],
-    selected: null,
-    pendingAutoEdit: null,
-    clipboard: null,
-    lastSavedAt: initialActiveDoc?.lastSavedAt ?? null,
-    dirty: false,
-    edgeStyle: prefs?.edgeStyle ?? 'smoothstep',
-    theme: prefs?.theme ?? 'dark',
-    layoutDirection: 'horizontal',
-    compositeTabs: initialActiveDoc?.compositeTabs ?? [],
-    activeTabId: initialActiveDoc?.activeTabId ?? 'main',
-    allLocked: false,
+      documents: initialDocs.docs,
+      activeDocumentId: initialDocs.activeId,
+      nodes: initialActiveDoc?.nodes ?? seedGraph.nodes,
+      edges: initialActiveDoc?.edges ?? seedGraph.edges,
+      viewport: initialActiveDoc?.viewport ?? seedGraph.viewport,
+      annotations: initialActiveDoc?.annotations ?? [],
+      stages: initialActiveDoc?.stages ?? [],
+      participants: initialActiveDoc?.participants ?? [],
+      organizations: initialActiveDoc?.organizations ?? [],
+      participantOrder:
+        initialActiveDoc?.participantOrder ??
+        (initialActiveDoc?.participants ? initialActiveDoc.participants.map((p) => p.id) : []),
+      participantOrderMode: initialActiveDoc?.participantOrderMode ?? 'auto',
+      stageOrder:
+        initialActiveDoc?.stageOrder ?? (initialActiveDoc?.stages ? initialActiveDoc.stages.map((st) => st.id) : []),
+      arrangePending: initialActiveDoc?.arrangePending ?? false,
+      arrangePendingKind: undefined,
+      showStageBands: true,
+      showParticipantBands: true,
+      reassignHighlight: null,
+      agentRevision: 0,
+      swimlaneEnabled: false,
+      swimlaneOrder: [],
+      stageFlashId: null,
+      loadError: null,
+      annotAutoEditId: null,
+      past: initialActiveDoc?.past ?? [],
+      future: initialActiveDoc?.future ?? [],
+      selected: null,
+      pendingAutoEdit: null,
+      clipboard: null,
+      lastSavedAt: initialActiveDoc?.lastSavedAt ?? null,
+      dirty: false,
+      edgeStyle: prefs?.edgeStyle ?? 'smoothstep',
+      theme: prefs?.theme ?? 'dark',
+      layoutDirection: 'horizontal',
+      compositeTabs: initialActiveDoc?.compositeTabs ?? [],
+      activeTabId: initialActiveDoc?.activeTabId ?? 'main',
+      allLocked: false,
 
       ...createFlowSlice(deps),
       ...createHistorySlice(deps),
@@ -139,9 +163,7 @@ useGraphStore.subscribe(
   () => {
     useGraphStore.setState((s) => ({
       dirty: true,
-      documents: s.documents.map((d) =>
-        d.id === s.activeDocumentId ? { ...d, dirty: true } : d,
-      ),
+      documents: s.documents.map((d) => (d.id === s.activeDocumentId ? { ...d, dirty: true } : d)),
     }));
     if (saveTimer) clearTimeout(saveTimer);
     saveTimer = setTimeout(() => {

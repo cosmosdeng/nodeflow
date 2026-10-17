@@ -48,12 +48,7 @@ function downloadDataUrl(dataUrl: string, filename: string) {
 }
 
 /** 计算使内容(bounds)按 scale 缩放后在画布内上下左右居中的 transform */
-function fitTransform(
-  bounds: NodesBounds,
-  scale: number,
-  canvasW: number,
-  canvasH: number,
-) {
+function fitTransform(bounds: NodesBounds, scale: number, canvasW: number, canvasH: number) {
   const cx = canvasW / 2 - (bounds.left + bounds.width / 2) * scale;
   const cy = canvasH / 2 - (bounds.top + bounds.height / 2) * scale;
   return `translate(${cx}px, ${cy}px) scale(${scale})`;

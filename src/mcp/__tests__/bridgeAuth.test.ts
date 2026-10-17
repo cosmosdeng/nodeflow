@@ -1,10 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import {
-  extractBearerToken,
-  isAllowedHost,
-  isForbiddenOrigin,
-  timingSafeEqual,
-} from '../../../electron/bridgeAuth';
+import { extractBearerToken, isAllowedHost, isForbiddenOrigin, timingSafeEqual } from '../../../electron/bridgeAuth';
 
 describe('Agent Bridge 鉴权', () => {
   describe('isAllowedHost (DNS rebinding 防护)', () => {

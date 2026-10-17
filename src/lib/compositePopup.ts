@@ -22,9 +22,7 @@ export function openCompositePopup(id: string) {
   const childSet = new Set(comp.data.composite.childIds);
   const snapshot: CompositeSnapshot = {
     label: comp.data.label || '未命名组合',
-    nodes: st.nodes
-      .filter((n) => childSet.has(n.id))
-      .map((n) => ({ ...n, hidden: false, selected: false })),
+    nodes: st.nodes.filter((n) => childSet.has(n.id)).map((n) => ({ ...n, hidden: false, selected: false })),
     edges: st.edges
       .filter((e) => childSet.has(e.source) && childSet.has(e.target))
       .map((e) => ({ ...e, hidden: false, selected: false })),

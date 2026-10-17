@@ -14,7 +14,11 @@ import {
   type ParticipantOrderInfo,
 } from '../document';
 
-const stage = (id: string, x: number, nodeIds: string[] = []): { id: string; name: string; x: number; y: number; width: number; height: number; nodeIds: string[] } => ({
+const stage = (
+  id: string,
+  x: number,
+  nodeIds: string[] = [],
+): { id: string; name: string; x: number; y: number; width: number; height: number; nodeIds: string[] } => ({
   id,
   name: id,
   x,
@@ -96,7 +100,16 @@ describe('lib/document 文档兼容层', () => {
         project: {
           name: '项目A',
           color: '#ff0000',
-          nodes: [{ id: 'A', data: { composite: undefined }, selected: true, measured: { width: 10, height: 10 }, hidden: false, draggable: false }],
+          nodes: [
+            {
+              id: 'A',
+              data: { composite: undefined },
+              selected: true,
+              measured: { width: 10, height: 10 },
+              hidden: false,
+              draggable: false,
+            },
+          ],
           edges: [{ id: 'e1', source: 'A', target: 'B', selected: true }],
           viewport: { x: 1, y: 2, zoom: 0.5 },
           annotations: [{ id: 'a1' }],
@@ -130,7 +143,11 @@ describe('lib/document 文档兼容层', () => {
     });
 
     it('缺失可选字段使用安全默认值', () => {
-      const doc = migrateProjectV2ToDocument({ type: 'nodeflow-project', version: 2, project: { nodes: [], edges: [] } });
+      const doc = migrateProjectV2ToDocument({
+        type: 'nodeflow-project',
+        version: 2,
+        project: { nodes: [], edges: [] },
+      });
       expect(doc.viewport).toEqual({ x: 0, y: 0, zoom: 1 });
       expect(doc.activeTabId).toBe('main');
       expect(doc.compositeTabs).toEqual([]);
@@ -139,7 +156,14 @@ describe('lib/document 文档兼容层', () => {
 
   describe('importLegacyExportToDocument', () => {
     it('把 v1 export 导入为当前文档', () => {
-      const v1 = { version: 1, nodes: [{ id: 'A' }], edges: [], viewport: { x: 3, y: 4, zoom: 2 }, annotations: [], stages: [] };
+      const v1 = {
+        version: 1,
+        nodes: [{ id: 'A' }],
+        edges: [],
+        viewport: { x: 3, y: 4, zoom: 2 },
+        annotations: [],
+        stages: [],
+      };
       const doc = importLegacyExportToDocument(v1);
       expect(doc.nodes.map((n) => n.id)).toEqual(['A']);
       expect(doc.viewport).toEqual({ x: 3, y: 4, zoom: 2 });
@@ -149,19 +173,33 @@ describe('lib/document 文档兼容层', () => {
 
   describe('validateDocumentData', () => {
     it('合法文档无问题', () => {
-      const doc = migrateProjectV2ToDocument({ type: 'nodeflow-project', version: 2, project: { nodes: [], edges: [] } });
+      const doc = migrateProjectV2ToDocument({
+        type: 'nodeflow-project',
+        version: 2,
+        project: { nodes: [], edges: [] },
+      });
       expect(validateDocumentData(doc)).toEqual([]);
     });
 
     it('nodes/edges/annotations/stages 均为数组时通过', () => {
       const ok: Parameters<typeof validateDocumentData>[0] = {
-        nodes: [], edges: [], viewport: { x: 0, y: 0, zoom: 1 }, annotations: [], stages: [], compositeTabs: [], activeTabId: 'main',
+        nodes: [],
+        edges: [],
+        viewport: { x: 0, y: 0, zoom: 1 },
+        annotations: [],
+        stages: [],
+        compositeTabs: [],
+        activeTabId: 'main',
       };
       expect(validateDocumentData(ok)).toEqual([]);
     });
 
     it('viewport 非法时报错', () => {
-      const doc = migrateProjectV2ToDocument({ type: 'nodeflow-project', version: 2, project: { nodes: [], edges: [] } });
+      const doc = migrateProjectV2ToDocument({
+        type: 'nodeflow-project',
+        version: 2,
+        project: { nodes: [], edges: [] },
+      });
       const bad = validateDocumentData({ ...doc, viewport: { x: 0, y: 0, zoom: 'x' as unknown as number } });
       expect(bad.some((i) => i.field === 'viewport')).toBe(true);
     });
@@ -200,12 +238,27 @@ describe('lib/document 文档兼容层', () => {
 
     it('buildProjectDocumentV5:剥离 React Flow 运行时字段,保留 participantId,含 order', () => {
       const doc = buildProjectDocumentV5({
-        name: 'P', color: '#ff0000', nodes: [{ id: 'A', type: 'flow', position: { x: 0, y: 0 }, data: { participantId: 'p1' } as never }], edges: [], viewport: { x: 0, y: 0, zoom: 1 },
-        annotations: [], stages: [], participants: [{ id: 'p1', name: 'A', type: 'person' }], organizations: [],
-        participantOrder: ['p1'], participantOrderMode: 'user', stageOrder: ['s1'],
-        arrangePending: true, compositeTabs: [], activeTabId: 'main',
+        name: 'P',
+        color: '#ff0000',
+        nodes: [{ id: 'A', type: 'flow', position: { x: 0, y: 0 }, data: { participantId: 'p1' } as never }],
+        edges: [],
+        viewport: { x: 0, y: 0, zoom: 1 },
+        annotations: [],
+        stages: [],
+        participants: [{ id: 'p1', name: 'A', type: 'person' }],
+        organizations: [],
+        participantOrder: ['p1'],
+        participantOrderMode: 'user',
+        stageOrder: ['s1'],
+        arrangePending: true,
+        compositeTabs: [],
+        activeTabId: 'main',
       });
-      const graph = doc.graph as { nodes: { data: { participantId: string } }[]; edges: unknown[]; stageOrder: string[] };
+      const graph = doc.graph as {
+        nodes: { data: { participantId: string } }[];
+        edges: unknown[];
+        stageOrder: string[];
+      };
       expect(graph.nodes[0].data.participantId).toBe('p1');
       expect(doc.participantOrderMode).toBe('user');
       expect(graph.stageOrder).toEqual(['s1']);

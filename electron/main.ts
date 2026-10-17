@@ -151,14 +151,10 @@ function createWindow(): void {
 
 function buildMenu(): void {
   const template: Electron.MenuItemConstructorOptions[] = [
-    ...(process.platform === 'darwin'
-      ? [{ role: 'appMenu' as const }]
-      : []),
+    ...(process.platform === 'darwin' ? [{ role: 'appMenu' as const }] : []),
     {
       label: '文件',
-      submenu: [
-        { role: 'quit', label: '退出' },
-      ],
+      submenu: [{ role: 'quit', label: '退出' }],
     },
     {
       label: '编辑',

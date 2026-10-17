@@ -6,7 +6,15 @@
 import { useGraphStore } from '../store/graphStore';
 import { getAnnotationsDto, getNodesDto, getParticipantsDto, getStagesDto } from './queries';
 import { isNodeInsideParticipantBand, isNodeInsideStageBand, nodeRect, rectsOverlap, zonesOf } from './geometry';
-import { asOptionalString, asPayloadRecord, asString, asStringArray, asNumber, asOptionalNumber, asBoolean } from './validation';
+import {
+  asOptionalString,
+  asPayloadRecord,
+  asString,
+  asStringArray,
+  asNumber,
+  asOptionalNumber,
+  asBoolean,
+} from './validation';
 import type { AgentAssertionResult, AgentAssertionType } from './types';
 
 function fail(
@@ -37,8 +45,7 @@ function requireNode(nodeId: string, assertion: AgentAssertionType): AgentAssert
 
 export function assertNodeExists(p: Record<string, unknown>): AgentAssertionResult {
   const nodeId = asString(p.nodeId, 'nodeId');
-  return requireNode(nodeId, 'assertNodeExists')
-    ?? pass('assertNodeExists', { id: nodeId }, nodeId);
+  return requireNode(nodeId, 'assertNodeExists') ?? pass('assertNodeExists', { id: nodeId }, nodeId);
 }
 
 export function assertEdgeExists(p: Record<string, unknown>): AgentAssertionResult {
@@ -168,7 +175,12 @@ export function assertBandVisible(p: Record<string, unknown>): AgentAssertionRes
   const visible = show && exists;
   return visible === expected
     ? pass('assertBandVisible', { axis, bandId, visible }, { visible: expected })
-    : fail('assertBandVisible', 'band 可见性与预期不符', { axis, bandId, visible, show, exists }, { visible: expected });
+    : fail(
+        'assertBandVisible',
+        'band 可见性与预期不符',
+        { axis, bandId, visible, show, exists },
+        { visible: expected },
+      );
 }
 
 export function assertBandOrder(p: Record<string, unknown>): AgentAssertionResult {
@@ -229,7 +241,12 @@ export function assertNodeParent(p: Record<string, unknown>): AgentAssertionResu
   const actual = getNodesDto().find((n) => n.id === nodeId)!.parentCompositeId;
   return actual === expected
     ? pass('assertNodeParent', { nodeId, parentCompositeId: actual }, { compositeId: expected })
-    : fail('assertNodeParent', '节点所属 composite 不匹配', { nodeId, parentCompositeId: actual }, { compositeId: expected });
+    : fail(
+        'assertNodeParent',
+        '节点所属 composite 不匹配',
+        { nodeId, parentCompositeId: actual },
+        { compositeId: expected },
+      );
 }
 
 export function assertGatewayType(p: Record<string, unknown>): AgentAssertionResult {
@@ -240,7 +257,12 @@ export function assertGatewayType(p: Record<string, unknown>): AgentAssertionRes
   const dto = getNodesDto().find((n) => n.id === nodeId)!;
   return dto.isGateway && dto.gatewayType === type
     ? pass('assertGatewayType', { nodeId, gatewayType: dto.gatewayType }, { type })
-    : fail('assertGatewayType', '网关类型不匹配', { nodeId, isGateway: dto.isGateway, gatewayType: dto.gatewayType }, { type });
+    : fail(
+        'assertGatewayType',
+        '网关类型不匹配',
+        { nodeId, isGateway: dto.isGateway, gatewayType: dto.gatewayType },
+        { type },
+      );
 }
 
 export function assertEdgeArtifact(p: Record<string, unknown>): AgentAssertionResult {
@@ -311,7 +333,7 @@ export type { AgentAssertionResult };
 export function runAssertion(payload: unknown): AgentAssertionResult {
   const o = asPayloadRecord(payload);
   const type = asString(o.type, 'type') as AgentAssertionType;
-  const inner = (o.payload && typeof o.payload === 'object' ? (o.payload as Record<string, unknown>) : o);
+  const inner = o.payload && typeof o.payload === 'object' ? (o.payload as Record<string, unknown>) : o;
   const fn = ASSERTIONS[type];
   if (!fn) {
     return fail(type ?? 'assertNodeExists', `不支持的断言类型: ${type}`, type, Object.keys(ASSERTIONS));

@@ -210,9 +210,7 @@ describe('runSmartArrange(语义轴存在 → unified matrix core,与 band visib
       past: [],
       future: [],
     });
-    const before = new Map(
-      useGraphStore.getState().nodes.map((n) => [n.id, { ...n.position }]),
-    );
+    const before = new Map(useGraphStore.getState().nodes.map((n) => [n.id, { ...n.position }]));
     useGraphStore.getState().runSmartArrange();
     const st = useGraphStore.getState();
     // 确实发生了位置变化,而不是 no-op

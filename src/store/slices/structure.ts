@@ -24,13 +24,7 @@ import {
   computeStageMinSize,
   detachNodeIdsFromStages,
 } from '../../lib/stage';
-import {
-  findStageEmptySpot,
-  pushNodesAwayFromBox,
-  pushOutOfRect,
-  rectOverlaps,
-  type Rect,
-} from '../../lib/geometry';
+import { findStageEmptySpot, pushNodesAwayFromBox, pushOutOfRect, rectOverlaps, type Rect } from '../../lib/geometry';
 import { detachOrganizationFromParticipants, detachParticipantFromNodes } from '../../lib/participant';
 import { arrangeSwimlanes, computeMatrixLayout } from '../../lib/arrange';
 import { computeLayout } from '../../lib/layout';
@@ -67,9 +61,7 @@ export function createStructureSlice({ set, get }: SliceDeps): Partial<FlowStore
       if (get().allLocked) return;
       get().markHistory();
       set((s) => ({
-        stages: s.stages.map((st) =>
-          st.id === id ? { ...st, ...patch, id } : st,
-        ),
+        stages: s.stages.map((st) => (st.id === id ? { ...st, ...patch, id } : st)),
       }));
     },
     setStageNodes: (id, nodeIds) => {
@@ -98,9 +90,7 @@ export function createStructureSlice({ set, get }: SliceDeps): Partial<FlowStore
     detachNodeFromStages: (nodeId) => {
       set((s) => ({
         stages: s.stages.map((st) =>
-          st.nodeIds.includes(nodeId)
-            ? { ...st, nodeIds: st.nodeIds.filter((n) => n !== nodeId) }
-            : st,
+          st.nodeIds.includes(nodeId) ? { ...st, nodeIds: st.nodeIds.filter((n) => n !== nodeId) } : st,
         ),
       }));
     },
@@ -128,14 +118,10 @@ export function createStructureSlice({ set, get }: SliceDeps): Partial<FlowStore
       const rx = Math.round(dx);
       const ry = Math.round(dy);
       set((st) => ({
-        stages: st.stages.map((stg) =>
-          stg.id === id ? { ...stg, x: stg.x + rx, y: stg.y + ry } : stg,
-        ),
+        stages: st.stages.map((stg) => (stg.id === id ? { ...stg, x: stg.x + rx, y: stg.y + ry } : stg)),
         nodes: moveNodes
           ? st.nodes.map((n) =>
-              stage.nodeIds.includes(n.id)
-                ? { ...n, position: { x: n.position.x + rx, y: n.position.y + ry } }
-                : n,
+              stage.nodeIds.includes(n.id) ? { ...n, position: { x: n.position.x + rx, y: n.position.y + ry } } : n,
             )
           : st.nodes,
       }));
@@ -235,13 +221,16 @@ export function createStructureSlice({ set, get }: SliceDeps): Partial<FlowStore
       if (!get().arrangePending) return;
       const s = get();
       // Unified Matrix Arrange:读取 semantic,计算 node.position 目标(world-space)
-      const positions = computeMatrixLayout({
-        nodes: s.nodes,
-        participants: s.participants,
-        participantOrder: s.participantOrder,
-        stages: s.stages,
-        stageOrder: s.stageOrder,
-      }, { edges: s.edges });
+      const positions = computeMatrixLayout(
+        {
+          nodes: s.nodes,
+          participants: s.participants,
+          participantOrder: s.participantOrder,
+          stages: s.stages,
+          stageOrder: s.stageOrder,
+        },
+        { edges: s.edges },
+      );
       if (positions.size === 0) {
         // 当前无可排顶层节点(如全部节点都是组合 child 或 hidden):不消费 pending,等待后续节点
         return;
@@ -402,9 +391,7 @@ export function createStructureSlice({ set, get }: SliceDeps): Partial<FlowStore
       get().markHistory();
       set((s) => ({
         nodes: s.nodes.map((n) =>
-          n.id === nodeId
-            ? { ...n, data: { ...n.data, participantId: participantId ?? undefined } }
-            : n,
+          n.id === nodeId ? { ...n, data: { ...n.data, participantId: participantId ?? undefined } } : n,
         ),
       }));
     },
@@ -415,9 +402,7 @@ export function createStructureSlice({ set, get }: SliceDeps): Partial<FlowStore
       if (!s.nodes.some((n) => n.id === nodeId)) return;
       get().markHistory();
       set((st) => ({
-        stages: stageId
-          ? addNodeToStage(st.stages, stageId, nodeId)
-          : detachNodeIdsFromStages(st.stages, [nodeId]),
+        stages: stageId ? addNodeToStage(st.stages, stageId, nodeId) : detachNodeIdsFromStages(st.stages, [nodeId]),
       }));
     },
     reassignNode: (nodeId, patch, opts) => {

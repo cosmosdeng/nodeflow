@@ -96,9 +96,7 @@ export function createNodesSlice({ set, get }: SliceDeps): Partial<FlowStore> {
       if (get().allLocked) return;
       get().markHistory();
       set((s) => ({
-        nodes: s.nodes.map((n) =>
-          n.id === id ? { ...n, data: { ...n.data, ...patch } } : n,
-        ),
+        nodes: s.nodes.map((n) => (n.id === id ? { ...n, data: { ...n.data, ...patch } } : n)),
       }));
     },
     setNodeDraggable: (id, draggable) => {
@@ -183,9 +181,7 @@ export function createNodesSlice({ set, get }: SliceDeps): Partial<FlowStore> {
         ids.add(n.id);
         for (const d of collectAllDescendants(s.nodes, n.id)) ids.add(d);
       }
-      const subNodes = s.nodes
-        .filter((n) => ids.has(n.id))
-        .map((n) => JSON.parse(JSON.stringify(n)) as FlowNode);
+      const subNodes = s.nodes.filter((n) => ids.has(n.id)).map((n) => JSON.parse(JSON.stringify(n)) as FlowNode);
       const subEdges = s.edges
         .filter((e) => ids.has(e.source) && ids.has(e.target))
         .map((e) => JSON.parse(JSON.stringify(e)) as FlowEdge);
@@ -258,9 +254,7 @@ export function createNodesSlice({ set, get }: SliceDeps): Partial<FlowStore> {
       } else if (get().activeTabId === 'main') {
         // 主画布:取当前视口中心对应的流坐标作为粘贴点
         const vp = get().viewport;
-        const container = typeof document !== 'undefined'
-          ? document.querySelector('.react-flow')
-          : null;
+        const container = typeof document !== 'undefined' ? document.querySelector('.react-flow') : null;
         const cw = container?.clientWidth ?? 800;
         const ch = container?.clientHeight ?? 600;
         const cx_screen = cw / 2;
@@ -305,9 +299,7 @@ export function createNodesSlice({ set, get }: SliceDeps): Partial<FlowStore> {
       if (get().allLocked) return '';
       // 一个主体最多只能有一个注释
       const s = get();
-      const already = s.annotations.some((a) =>
-        annotationTargetMatches(a.target, target),
-      );
+      const already = s.annotations.some((a) => annotationTargetMatches(a.target, target));
       if (already) return '';
       get().markHistory();
       const id = uid('annot');
@@ -337,9 +329,7 @@ export function createNodesSlice({ set, get }: SliceDeps): Partial<FlowStore> {
       // 拖拽过程不写历史,结束时(commitHistory=true)记录一次
       if (commitHistory) get().markHistory();
       set((s) => ({
-        annotations: s.annotations.map((a) =>
-          a.id === id ? { ...a, position } : a,
-        ),
+        annotations: s.annotations.map((a) => (a.id === id ? { ...a, position } : a)),
       }));
     },
     toggleAllAnnotations: () => {
@@ -351,7 +341,5 @@ export function createNodesSlice({ set, get }: SliceDeps): Partial<FlowStore> {
       }));
       return nextCollapsed;
     },
-
-
   };
 }

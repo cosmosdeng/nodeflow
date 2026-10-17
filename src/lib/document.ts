@@ -193,13 +193,8 @@ export interface ParticipantOrderInfo {
  * - 旧格式(v4 及更早,无显式用户排序)返回默认:participantOrder=现有参与方 id, mode='auto'。
  * 纯函数 / deterministic / 不修改输入。
  */
-export function resolveParticipantOrder(
-  input: unknown,
-  participants: readonly Participant[],
-): ParticipantOrderInfo {
-  const doc = ((input as Record<string, unknown> | undefined)?.document ??
-    input ??
-    {}) as Record<string, unknown>;
+export function resolveParticipantOrder(input: unknown, participants: readonly Participant[]): ParticipantOrderInfo {
+  const doc = ((input as Record<string, unknown> | undefined)?.document ?? input ?? {}) as Record<string, unknown>;
   const rawOrder = doc.participantOrder;
   const rawMode = doc.participantOrderMode;
   if (Array.isArray(rawOrder) && (rawMode === 'auto' || rawMode === 'user')) {
@@ -214,9 +209,7 @@ export function resolveParticipantOrder(
  * 纯函数 / deterministic / 不修改输入。
  */
 export function resolveArrangePending(input: unknown): boolean {
-  const doc = ((input as Record<string, unknown> | undefined)?.document ??
-    input ??
-    {}) as Record<string, unknown>;
+  const doc = ((input as Record<string, unknown> | undefined)?.document ?? input ?? {}) as Record<string, unknown>;
   return doc.arrangePending === true;
 }
 
@@ -227,9 +220,7 @@ export function resolveArrangePending(input: unknown): boolean {
  * 纯函数 / deterministic / 不修改输入。
  */
 export function resolveStageOrder(input: unknown, stages: readonly Stage[]): string[] {
-  const doc = ((input as Record<string, unknown> | undefined)?.document ??
-    input ??
-    {}) as Record<string, unknown>;
+  const doc = ((input as Record<string, unknown> | undefined)?.document ?? input ?? {}) as Record<string, unknown>;
   const graph = (doc.graph ?? {}) as Record<string, unknown>;
   const rawOrder = graph.stageOrder;
   if (Array.isArray(rawOrder)) {
@@ -365,9 +356,7 @@ export function buildProjectDocumentV5(input: {
  * 纯函数 / deterministic / 不修改输入。
  */
 export function migrateProjectV3ToDocument(input: unknown): NormalizedDocument {
-  const document = ((input as Record<string, unknown> | undefined)?.document ??
-    input ??
-    {}) as Record<string, unknown>;
+  const document = ((input as Record<string, unknown> | undefined)?.document ?? input ?? {}) as Record<string, unknown>;
   const graph = (document.graph ?? {}) as Record<string, unknown>;
   const editor = (document.editor ?? {}) as Record<string, unknown>;
   const { nodes, edges } = pickNodesEdges(graph);
@@ -390,9 +379,7 @@ export function migrateProjectV3ToDocument(input: unknown): NormalizedDocument {
  * 纯函数 / deterministic / 不修改输入。
  */
 export function migrateProjectV4ToDocument(input: unknown): NormalizedDocument {
-  const document = ((input as Record<string, unknown> | undefined)?.document ??
-    input ??
-    {}) as Record<string, unknown>;
+  const document = ((input as Record<string, unknown> | undefined)?.document ?? input ?? {}) as Record<string, unknown>;
   const graph = (document.graph ?? {}) as Record<string, unknown>;
   const editor = (document.editor ?? {}) as Record<string, unknown>;
   const { nodes, edges } = pickGraphNodesEdges(graph);

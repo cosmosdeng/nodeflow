@@ -79,6 +79,7 @@ export type AgentErrorCode =
   | 'ASSERT_NOT_PASSED'
   | 'CAPABILITY_NOT_ENABLED'
   | 'REVISION_CONFLICT'
+  | 'BRIDGE_UNAVAILABLE'
   | 'INTERNAL';
 
 export interface AgentError {

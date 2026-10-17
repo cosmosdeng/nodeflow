@@ -51,8 +51,10 @@ const layoutOf = (o: {
     stageOrder: o.stageOrder ?? [],
   });
 
-const overlap = (a: { x: number; y: number; w: number; h: number }, b: { x: number; y: number; w: number; h: number }) =>
-  a.x < b.x + b.w && a.x + a.w > b.x && a.y < b.y + b.h && a.y + a.h > b.y;
+const overlap = (
+  a: { x: number; y: number; w: number; h: number },
+  b: { x: number; y: number; w: number; h: number },
+) => a.x < b.x + b.w && a.x + a.w > b.x && a.y < b.y + b.h && a.y + a.h > b.y;
 
 describe('Case 1/2/3:原位、local 最小位移、矩阵级 free 不穿越', () => {
   it('free 原位无碰撞 → 位置不变', () => {
@@ -156,9 +158,7 @@ describe('Case 6:多 free(矩阵级)彼此避让', () => {
     });
     for (const id of ['F1', 'F2']) expect(pos.get(id)).toBeDefined();
     const [f1, f2] = [pos.get('F1')!, pos.get('F2')!];
-    expect(
-      overlap({ x: f1.x, y: f1.y, w: 240, h: 150 }, { x: f2.x, y: f2.y, w: 240, h: 150 }),
-    ).toBe(false);
+    expect(overlap({ x: f1.x, y: f1.y, w: 240, h: 150 }, { x: f2.x, y: f2.y, w: 240, h: 150 })).toBe(false);
   });
 });
 
@@ -193,9 +193,7 @@ describe('Case 7/8:stageOnly / rowOnly obstacle(矩阵级不穿越)', () => {
     const r = pos.get('R')!;
     expect(pos.get('R')).toBeDefined();
     const f = pos.get('F')!;
-    expect(
-      overlap({ x: f.x, y: f.y, w: 240, h: 150 }, { x: r.x, y: r.y, w: 240, h: 150 }),
-    ).toBe(false);
+    expect(overlap({ x: f.x, y: f.y, w: 240, h: 150 }, { x: r.x, y: r.y, w: 240, h: 150 })).toBe(false);
   });
 });
 
@@ -335,7 +333,7 @@ describe('real_like:新策略 vs 旧四角策略指标', () => {
     const frees = input.nodes.filter(
       (n) =>
         !childIds.has(n.id) &&
-        !(input.stages.some((s) => s.nodeIds.includes(n.id))) &&
+        !input.stages.some((s) => s.nodeIds.includes(n.id)) &&
         !(!!n.data?.participantId && input.participants.some((p) => p.id === n.data!.participantId)),
     );
     // 旧四角策略(replica,基于行列带投影)
@@ -357,10 +355,7 @@ describe('real_like:新策略 vs 旧四角策略指标', () => {
         { dx: zone.r + 16 - x, dy: zone.t - 16 - h - y },
         { dx: zone.r + 16 - x, dy: zone.b + 16 - y },
       ];
-      const pick = corners.sort(
-        (a, b) =>
-          Math.abs(a.dx) + Math.abs(a.dy) - (Math.abs(b.dx) + Math.abs(b.dy)),
-      )[0];
+      const pick = corners.sort((a, b) => Math.abs(a.dx) + Math.abs(a.dy) - (Math.abs(b.dx) + Math.abs(b.dy)))[0];
       return { id: n.id, d: Math.abs(pick.dx) + Math.abs(pick.dy) };
     });
     const newMoves = frees.map((n) => {
@@ -418,8 +413,7 @@ describe('P4B 绝对保证:free 节点绝不压带', () => {
         if (childIds.has(n.id) || n.hidden) continue;
         const p = pos.get(n.id);
         if (!p) continue;
-        const hasPid =
-          !!n.data?.participantId && input.participants.some((x) => x.id === n.data!.participantId);
+        const hasPid = !!n.data?.participantId && input.participants.some((x) => x.id === n.data!.participantId);
         const hasStage = input.stages.some((st) => st.nodeIds.includes(n.id));
         if (hasPid || hasStage) continue; // 只校验 free
         const w = n.width ?? 240;

@@ -102,9 +102,7 @@ function OrderRowList({
                 {it.name}
               </span>
             )}
-            {!isEditing && typeof it.count === 'number' && (
-              <span className="mx-order-count">{it.count}</span>
-            )}
+            {!isEditing && typeof it.count === 'number' && <span className="mx-order-count">{it.count}</span>}
           </div>
         );
       })}
@@ -135,9 +133,7 @@ export default function OutlinePanel({ onClose }: Props) {
     const kw = keyword.trim().toLowerCase();
     if (!kw) return nodes;
     return nodes.filter(
-      (n) =>
-        n.data.label.toLowerCase().includes(kw) ||
-        n.data.description.toLowerCase().includes(kw),
+      (n) => n.data.label.toLowerCase().includes(kw) || n.data.description.toLowerCase().includes(kw),
     );
   }, [nodes, keyword]);
 
@@ -159,13 +155,11 @@ export default function OutlinePanel({ onClose }: Props) {
       title: `${ACTOR_META[a].label}节点`,
       items: filtered.filter((n) => n.data.actor === a && !n.data.composite),
     })).filter((g) => g.items.length > 0);
-    if (comps.length)
-      actorGroups.unshift({ key: 'composite', title: '⧉ 组合节点', items: comps });
+    if (comps.length) actorGroups.unshift({ key: 'composite', title: '⧉ 组合节点', items: comps });
     return actorGroups;
   }, [filtered, groupBy]);
 
-  const edgeCountOf = (nodeId: string) =>
-    edges.filter((e) => e.source === nodeId || e.target === nodeId).length;
+  const edgeCountOf = (nodeId: string) => edges.filter((e) => e.source === nodeId || e.target === nodeId).length;
 
   const handleSelect = (nodeId: string) => {
     const node = nodes.find((n) => n.id === nodeId);
@@ -251,23 +245,14 @@ export default function OutlinePanel({ onClose }: Props) {
           </div>
         )}
 
-        {(participantItems.length > 0 || stageItems.length > 0) && (
-          <div className="mx-sec-divider" />
-        )}
+        {(participantItems.length > 0 || stageItems.length > 0) && <div className="mx-sec-divider" />}
 
         <div className="mx-sec-title">节点</div>
         <div className="field">
-          <input
-            placeholder="搜索节点…"
-            value={keyword}
-            onChange={(e) => setKeyword(e.target.value)}
-          />
+          <input placeholder="搜索节点…" value={keyword} onChange={(e) => setKeyword(e.target.value)} />
         </div>
         <div className="field" style={{ marginTop: -4 }}>
-          <select
-            value={groupBy}
-            onChange={(e) => setGroupBy(e.target.value as 'actor' | 'flat')}
-          >
+          <select value={groupBy} onChange={(e) => setGroupBy(e.target.value as 'actor' | 'flat')}>
             <option value="flat">平铺显示</option>
             <option value="actor">按执行主体分组</option>
           </select>
@@ -322,17 +307,14 @@ export default function OutlinePanel({ onClose }: Props) {
                     <span className="li-sub">
                       {composite ? (
                         <>
-                          {composite.childIds.length} 个子节点 ·{' '}
-                          {composite.expanded ? '已展开' : '已塌缩'} · {edgeCountOf(n.id)} 连线
+                          {composite.childIds.length} 个子节点 · {composite.expanded ? '已展开' : '已塌缩'} ·{' '}
+                          {edgeCountOf(n.id)} 连线
                         </>
                       ) : foldedChild ? (
-                        <>
-                          ⧉ {owner?.data.label} 内 · 已塌缩
-                        </>
+                        <>⧉ {owner?.data.label} 内 · 已塌缩</>
                       ) : (
                         <>
-                          {n.data.inputs.length} 入 · {n.data.outputs.length} 出 · {edgeCountOf(n.id)}{' '}
-                          连线
+                          {n.data.inputs.length} 入 · {n.data.outputs.length} 出 · {edgeCountOf(n.id)} 连线
                         </>
                       )}
                     </span>

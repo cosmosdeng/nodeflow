@@ -20,7 +20,15 @@ function node(id: string, data: Partial<FlowNode['data']> = {}, extra?: Partial<
 }
 
 function edge(id: string, source: string, sourceHandle: string, target: string, targetHandle: string): FlowEdge {
-  return { id, source, sourceHandle, target, targetHandle, type: 'flow', data: { label: '', artifact: null } } as FlowEdge;
+  return {
+    id,
+    source,
+    sourceHandle,
+    target,
+    targetHandle,
+    type: 'flow',
+    data: { label: '', artifact: null },
+  } as FlowEdge;
 }
 
 function stage(id: string, nodeIds: string[]): Stage {
@@ -122,7 +130,10 @@ describe('P4-03 Graph Invariant Tests', () => {
     const r = validateGraph({
       nodes: [node('A')],
       edges: [],
-      annotations: [annot('an1', { kind: 'canvas', tabId: 'main' }), annot('an2', { kind: 'canvas', tabId: 'GHOST_COMP' })],
+      annotations: [
+        annot('an1', { kind: 'canvas', tabId: 'main' }),
+        annot('an2', { kind: 'canvas', tabId: 'GHOST_COMP' }),
+      ],
     });
     // main 合法;GHOST_COMP 是 warning,不阻断
     expect(r.valid).toBe(true);
@@ -154,7 +165,12 @@ describe('P4-03 Graph Invariant Tests', () => {
   });
 
   it('普通节点端口 id 重复发出 warning', () => {
-    const A = node('A', { inputs: [{ id: 'in1', name: 'a' }, { id: 'in1', name: 'b' }] });
+    const A = node('A', {
+      inputs: [
+        { id: 'in1', name: 'a' },
+        { id: 'in1', name: 'b' },
+      ],
+    });
     const r = validateGraph({ nodes: [A], edges: [] });
     expect(r.issues.some((i) => i.kind === 'node' && i.severity === 'warning')).toBe(true);
     expect(r.valid).toBe(true);

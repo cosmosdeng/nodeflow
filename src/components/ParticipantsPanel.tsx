@@ -6,7 +6,15 @@ interface Props {
   onClose: () => void;
 }
 
-const TYPE_ORDER: ParticipantType[] = ['person', 'role', 'organization', 'department', 'machine', 'software', 'ai-agent'];
+const TYPE_ORDER: ParticipantType[] = [
+  'person',
+  'role',
+  'organization',
+  'department',
+  'machine',
+  'software',
+  'ai-agent',
+];
 
 /** 组织树 + 参与方管理 Outliner(语义管理入口,不直接等于画布泳道) */
 export default function ParticipantsPanel({ onClose }: Props) {
@@ -72,25 +80,47 @@ export default function ParticipantsPanel({ onClose }: Props) {
     setEditingOrg(null);
   }
 
-  function renderParticipant(p: { id: string; name: string; type: ParticipantType; organizationId?: string }): ReactNode {
+  function renderParticipant(p: {
+    id: string;
+    name: string;
+    type: ParticipantType;
+    organizationId?: string;
+  }): ReactNode {
     const typeLabel = PARTICIPANT_TYPE_LABELS[p.type] ?? p.type;
     if (editingPart === p.id) {
       return (
         <div key={p.id} className="pp-edit-row">
-          <input className="pp-input" value={editingPartName} onChange={(e) => setEditingPartName(e.target.value)} autoFocus />
-          <select className="pp-input" value={editingPartType} onChange={(e) => setEditingPartType(e.target.value as ParticipantType)}>
+          <input
+            className="pp-input"
+            value={editingPartName}
+            onChange={(e) => setEditingPartName(e.target.value)}
+            autoFocus
+          />
+          <select
+            className="pp-input"
+            value={editingPartType}
+            onChange={(e) => setEditingPartType(e.target.value as ParticipantType)}
+          >
             {TYPE_ORDER.map((t) => (
-              <option key={t} value={t}>{PARTICIPANT_TYPE_LABELS[t]}</option>
+              <option key={t} value={t}>
+                {PARTICIPANT_TYPE_LABELS[t]}
+              </option>
             ))}
           </select>
           <select className="pp-input" value={editingPartOrg} onChange={(e) => setEditingPartOrg(e.target.value)}>
             <option value="">（无组织）</option>
             {organizations.map((o) => (
-              <option key={o.id} value={o.id}>{o.name}</option>
+              <option key={o.id} value={o.id}>
+                {o.name}
+              </option>
             ))}
           </select>
-          <button className="pp-btn" onClick={() => commitEditPart(p.id)}>✓</button>
-          <button className="pp-btn" onClick={() => setEditingPart(null)}>✕</button>
+          <button className="pp-btn" onClick={() => commitEditPart(p.id)}>
+            ✓
+          </button>
+          <button className="pp-btn" onClick={() => setEditingPart(null)}>
+            ✕
+          </button>
         </div>
       );
     }
@@ -99,8 +129,12 @@ export default function ParticipantsPanel({ onClose }: Props) {
         <span className="pp-participant-name">{p.name}</span>
         <span className="pp-participant-type">{typeLabel}</span>
         <span className="pp-row-actions">
-          <button className="pp-link" onClick={() => startEditPart(p)}>编辑</button>
-          <button className="pp-link pp-danger" onClick={() => deleteParticipant(p.id)}>删除</button>
+          <button className="pp-link" onClick={() => startEditPart(p)}>
+            编辑
+          </button>
+          <button className="pp-link pp-danger" onClick={() => deleteParticipant(p.id)}>
+            删除
+          </button>
         </span>
       </div>
     );
@@ -110,33 +144,57 @@ export default function ParticipantsPanel({ onClose }: Props) {
     <div className="panel participants-panel">
       <div className="panel-header">
         <span>参与方与组织</span>
-        <button className="pp-close" onClick={onClose}>✕</button>
+        <button className="pp-close" onClick={onClose}>
+          ✕
+        </button>
       </div>
       <div className="panel-body">
         <div className="pp-section">
           <div className="pp-section-title">新增组织</div>
           <div className="pp-add-row">
-            <input className="pp-input" placeholder="组织名称" value={newOrgName} onChange={(e) => setNewOrgName(e.target.value)} />
-            <button className="pp-btn" onClick={handleAddOrganization} disabled={!newOrgName.trim()}>添加</button>
+            <input
+              className="pp-input"
+              placeholder="组织名称"
+              value={newOrgName}
+              onChange={(e) => setNewOrgName(e.target.value)}
+            />
+            <button className="pp-btn" onClick={handleAddOrganization} disabled={!newOrgName.trim()}>
+              添加
+            </button>
           </div>
         </div>
 
         <div className="pp-section">
           <div className="pp-section-title">新增参与方</div>
           <div className="pp-add-row">
-            <input className="pp-input" placeholder="名称" value={newPartName} onChange={(e) => setNewPartName(e.target.value)} />
-            <select className="pp-input pp-type" value={newPartType} onChange={(e) => setNewPartType(e.target.value as ParticipantType)}>
+            <input
+              className="pp-input"
+              placeholder="名称"
+              value={newPartName}
+              onChange={(e) => setNewPartName(e.target.value)}
+            />
+            <select
+              className="pp-input pp-type"
+              value={newPartType}
+              onChange={(e) => setNewPartType(e.target.value as ParticipantType)}
+            >
               {TYPE_ORDER.map((t) => (
-                <option key={t} value={t}>{PARTICIPANT_TYPE_LABELS[t]}</option>
+                <option key={t} value={t}>
+                  {PARTICIPANT_TYPE_LABELS[t]}
+                </option>
               ))}
             </select>
             <select className="pp-input" value={newPartOrg} onChange={(e) => setNewPartOrg(e.target.value)}>
               <option value="">（无组织）</option>
               {organizations.map((o) => (
-                <option key={o.id} value={o.id}>{o.name}</option>
+                <option key={o.id} value={o.id}>
+                  {o.name}
+                </option>
               ))}
             </select>
-            <button className="pp-btn" onClick={handleAddParticipant} disabled={!newPartName.trim()}>添加</button>
+            <button className="pp-btn" onClick={handleAddParticipant} disabled={!newPartName.trim()}>
+              添加
+            </button>
           </div>
         </div>
 
@@ -148,16 +206,29 @@ export default function ParticipantsPanel({ onClose }: Props) {
               <div key={org.id} className="pp-org-group">
                 {editingOrg === org.id ? (
                   <div className="pp-edit-row pp-org-edit">
-                    <input className="pp-input" value={editingOrgName} onChange={(e) => setEditingOrgName(e.target.value)} autoFocus />
-                    <button className="pp-btn" onClick={() => commitEditOrg(org.id)}>✓</button>
-                    <button className="pp-btn" onClick={() => setEditingOrg(null)}>✕</button>
+                    <input
+                      className="pp-input"
+                      value={editingOrgName}
+                      onChange={(e) => setEditingOrgName(e.target.value)}
+                      autoFocus
+                    />
+                    <button className="pp-btn" onClick={() => commitEditOrg(org.id)}>
+                      ✓
+                    </button>
+                    <button className="pp-btn" onClick={() => setEditingOrg(null)}>
+                      ✕
+                    </button>
                   </div>
                 ) : (
                   <div className="pp-org-header">
                     <span className="pp-org-name">{org.name}</span>
                     <span className="pp-row-actions">
-                      <button className="pp-link" onClick={() => startEditOrg(org)}>编辑</button>
-                      <button className="pp-link pp-danger" onClick={() => deleteOrganization(org.id)}>删除</button>
+                      <button className="pp-link" onClick={() => startEditOrg(org)}>
+                        编辑
+                      </button>
+                      <button className="pp-link pp-danger" onClick={() => deleteOrganization(org.id)}>
+                        删除
+                      </button>
                     </span>
                   </div>
                 )}
@@ -168,11 +239,15 @@ export default function ParticipantsPanel({ onClose }: Props) {
           })}
           {unassigned.length > 0 && (
             <div className="pp-org-group">
-              <div className="pp-org-header"><span className="pp-org-name">未分配</span></div>
+              <div className="pp-org-header">
+                <span className="pp-org-name">未分配</span>
+              </div>
               {unassigned.map(renderParticipant)}
             </div>
           )}
-          {participants.length === 0 && <div className="pp-empty">还没有参与方。在上方添加一个参与方,表示流程中的责任主体。</div>}
+          {participants.length === 0 && (
+            <div className="pp-empty">还没有参与方。在上方添加一个参与方,表示流程中的责任主体。</div>
+          )}
         </div>
       </div>
     </div>

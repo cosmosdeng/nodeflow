@@ -15,11 +15,7 @@ import type {
 } from '../../types';
 import type { FlowStore } from '../types';
 import type { SliceDeps } from './deps';
-import {
-  buildNodesById,
-  collapseComposite,
-  expandComposite,
-} from '../compositeHelpers';
+import { buildNodesById, collapseComposite, expandComposite } from '../compositeHelpers';
 import { closeCompositeTabInState } from '../historyHelpers';
 import { computeCompositeActor, computeCompositeBounds, applyCompositeBoxes } from '../../lib/composite';
 import { createDefaultNode, uid, DOCUMENT_COLORS } from '../../types';
@@ -71,17 +67,13 @@ export function createCompositeSlice({ set, get }: SliceDeps): Partial<FlowStore
       if (!node?.data?.composite) return;
       const firstChildId = node.data.composite.childIds[0];
       // 组合节点的注释:解除编组后合并到第一个子节点
-      const compAnnot = get().annotations.find(
-        (a) => a.target.kind === 'node' && a.target.nodeId === id,
-      );
+      const compAnnot = get().annotations.find((a) => a.target.kind === 'node' && a.target.nodeId === id);
       get().markHistory();
       expandComposite(get, set, id);
       set((s) => {
         let annotations = s.annotations;
         if (compAnnot && firstChildId) {
-          const existing = s.annotations.find(
-            (a) => a.target.kind === 'node' && a.target.nodeId === firstChildId,
-          );
+          const existing = s.annotations.find((a) => a.target.kind === 'node' && a.target.nodeId === firstChildId);
           // 先移除组合节点自身的注释
           annotations = annotations.filter((a) => a.id !== compAnnot.id);
           if (existing) {
@@ -90,15 +82,10 @@ export function createCompositeSlice({ set, get }: SliceDeps): Partial<FlowStore
             if (compAnnot.title && !existing.title) merged.title = compAnnot.title;
             const combinedContent = [existing.content, compAnnot.content].filter(Boolean).join('\n');
             if (combinedContent) merged.content = combinedContent;
-            annotations = annotations.map((a) =>
-              a.id === existing.id ? { ...a, ...merged } : a,
-            );
+            annotations = annotations.map((a) => (a.id === existing.id ? { ...a, ...merged } : a));
           } else {
             // 第一个子节点无注释 → 把组合注释转移给它
-            annotations = [
-              ...annotations,
-              { ...compAnnot, target: { kind: 'node', nodeId: firstChildId } },
-            ];
+            annotations = [...annotations, { ...compAnnot, target: { kind: 'node', nodeId: firstChildId } }];
           }
         }
         return {
@@ -128,6 +115,5 @@ export function createCompositeSlice({ set, get }: SliceDeps): Partial<FlowStore
       ),
     closeCompositeTab: (id) => set((s) => closeCompositeTabInState(s, id)),
     setActiveTab: (id) => set({ activeTabId: id }),
-
   };
 }

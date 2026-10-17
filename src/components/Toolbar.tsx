@@ -1,19 +1,8 @@
 import { useRef, useState } from 'react';
 import { useReactFlow } from '@xyflow/react';
 import { useGraphStore } from '../store/graphStore';
-import {
-  EDGE_STYLE_LABELS,
-  THEME_LABELS,
-  type EdgeStyle,
-  type GraphSnapshot,
-  type ThemeMode,
-} from '../types';
-import {
-  PAPER_SIZES,
-  exportCanvasImage,
-  type ExportImageFormat,
-  type PaperSize,
-} from '../lib/exportImage';
+import { EDGE_STYLE_LABELS, THEME_LABELS, type EdgeStyle, type GraphSnapshot, type ThemeMode } from '../types';
+import { PAPER_SIZES, exportCanvasImage, type ExportImageFormat, type PaperSize } from '../lib/exportImage';
 import { buildSvg, downloadSvg } from '../lib/exportSvg';
 import { confirmAndCloseDocument } from '../lib/closeProject';
 import { alertDialogAsync, confirmDialogAsync } from '../lib/dialog';
@@ -172,7 +161,9 @@ export default function Toolbar({
       if (ok) {
         setTimeout(() => fitView({ padding: 0.2, duration: 400 }), 80);
       } else {
-        void alertDialogAsync(useGraphStore.getState().loadError ?? '无法解析项目文件,请确认是 NodeFlow 保存的项目文件。');
+        void alertDialogAsync(
+          useGraphStore.getState().loadError ?? '无法解析项目文件,请确认是 NodeFlow 保存的项目文件。',
+        );
       }
     };
     reader.readAsText(file);
@@ -208,12 +199,7 @@ export default function Toolbar({
         const baseName = `nodeflow-${new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-')}`;
         downloadSvg(svg, `${baseName}.svg`);
       } else {
-        await exportCanvasImage(
-          { getViewport, setViewport, fitView },
-          format,
-          exportPaper,
-          bounds,
-        );
+        await exportCanvasImage({ getViewport, setViewport, fitView }, format, exportPaper, bounds);
       }
     } catch (e) {
       console.error(e);
@@ -221,12 +207,9 @@ export default function Toolbar({
     }
   };
 
-  const projectName =
-    useGraphStore((s) => s.documents.find((d) => d.id === s.activeDocumentId)?.name) ?? '未命名项目';
+  const projectName = useGraphStore((s) => s.documents.find((d) => d.id === s.activeDocumentId)?.name) ?? '未命名项目';
 
-  const saveTime = lastSavedAt
-    ? new Date(lastSavedAt).toLocaleTimeString('zh-CN', { hour12: false })
-    : '';
+  const saveTime = lastSavedAt ? new Date(lastSavedAt).toLocaleTimeString('zh-CN', { hour12: false }) : '';
 
   return (
     <header className="toolbar">
@@ -263,7 +246,12 @@ export default function Toolbar({
             >
               📂 打开项目…
             </button>
-            <button onClick={() => { handleSaveProject(); setFileOpen(false); }}>
+            <button
+              onClick={() => {
+                handleSaveProject();
+                setFileOpen(false);
+              }}
+            >
               💾 保存项目
             </button>
             <button
@@ -315,7 +303,12 @@ export default function Toolbar({
               </button>
               {exportOpen && (
                 <div className="file-submenu-panel export-panel">
-                  <button onClick={() => { handleExport(); setFileOpen(false); }}>
+                  <button
+                    onClick={() => {
+                      handleExport();
+                      setFileOpen(false);
+                    }}
+                  >
                     📄 导出 JSON…
                   </button>
                   <div className="submenu-divider" />
@@ -331,17 +324,32 @@ export default function Toolbar({
                     </button>
                   ))}
                   <div className="submenu-divider" />
-                  <button disabled={allLocked} onClick={() => { handleExportImage('jpeg'); setFileOpen(false); }}>
+                  <button
+                    disabled={allLocked}
+                    onClick={() => {
+                      handleExportImage('jpeg');
+                      setFileOpen(false);
+                    }}
+                  >
                     🖼 导出 JPG…
                   </button>
-                  <button disabled={allLocked} onClick={() => { handleExportImage('pdf'); setFileOpen(false); }}>
+                  <button
+                    disabled={allLocked}
+                    onClick={() => {
+                      handleExportImage('pdf');
+                      setFileOpen(false);
+                    }}
+                  >
                     📑 导出 PDF…
                   </button>
                   {/* SVG 导出暂不可用(数据驱动重绘尚未完善),先置灰;将来恢复时去掉 disabled 即可 */}
                   <button
                     disabled
                     title="SVG 导出暂不可用,后续版本开放"
-                    onClick={() => { handleExportImage('svg'); setFileOpen(false); }}
+                    onClick={() => {
+                      handleExportImage('svg');
+                      setFileOpen(false);
+                    }}
                   >
                     📐 导出 SVG…
                   </button>
@@ -397,12 +405,7 @@ export default function Toolbar({
       <button className="tb-btn" title="撤销 (Ctrl+Z)" disabled={allLocked || pastLen === 0} onClick={undo}>
         ↩ 撤销
       </button>
-      <button
-        className="tb-btn"
-        title="重做 (Ctrl+Shift+Z)"
-        disabled={allLocked || futureLen === 0}
-        onClick={redo}
-      >
+      <button className="tb-btn" title="重做 (Ctrl+Shift+Z)" disabled={allLocked || futureLen === 0} onClick={redo}>
         ↪ 重做
       </button>
 
@@ -421,9 +424,7 @@ export default function Toolbar({
       </button>
       <button
         className="tb-btn"
-        disabled={
-          allLocked || nodes.filter((n) => n.selected).length < 2
-        }
+        disabled={allLocked || nodes.filter((n) => n.selected).length < 2}
         title="将选中的 2 个以上节点组合为一个组合节点,支持把已有组合节点编入新组合"
         onClick={() => {
           const id = groupSelected();
@@ -475,11 +476,7 @@ export default function Toolbar({
 
       <button
         className={`tb-btn ${allLocked ? 'active' : ''}`}
-        style={
-          allLocked
-            ? { borderColor: 'rgba(232,176,40,.6)', color: '#ffc53d', fontWeight: 600 }
-            : undefined
-        }
+        style={allLocked ? { borderColor: 'rgba(232,176,40,.6)', color: '#ffc53d', fontWeight: 600 } : undefined}
         title={allLocked ? '演示模式已锁定,点击解锁全部内容' : '演示模式:一键锁定所有节点与连线,防止误编辑'}
         onClick={toggleLockAll}
       >
@@ -503,11 +500,7 @@ export default function Toolbar({
 
       <span className="sep" />
 
-      <button
-        className="tb-btn"
-        title="切换连线风格(直角/弧线)"
-        onClick={cycleEdgeStyle}
-      >
+      <button className="tb-btn" title="切换连线风格(直角/弧线)" onClick={cycleEdgeStyle}>
         {edgeStyle === 'bezier' ? '〰' : '⤢'} {EDGE_STYLE_LABELS[edgeStyle]}
       </button>
       <button className="tb-btn" title="切换画布配色" onClick={cycleTheme}>

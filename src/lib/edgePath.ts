@@ -30,18 +30,8 @@ interface PathResult {
 }
 
 /** 点是否落在矩形 r(外扩 padding)内 */
-function pointInRectPadded(
-  x: number,
-  y: number,
-  r: ObstacleRect,
-  padding: number,
-): boolean {
-  return (
-    x >= r.x - padding &&
-    x <= r.x + r.width + padding &&
-    y >= r.y - padding &&
-    y <= r.y + r.height + padding
-  );
+function pointInRectPadded(x: number, y: number, r: ObstacleRect, padding: number): boolean {
+  return x >= r.x - padding && x <= r.x + r.width + padding && y >= r.y - padding && y <= r.y + r.height + padding;
 }
 
 /** 解析 SVG path 字符串,在每条子路径段上采样若干点。支持 M/L/C(直线与三次贝塞尔)。
@@ -88,16 +78,8 @@ function sampleSvgPath(path: string, perSegment = 8): Array<{ x: number; y: numb
         const t = s / (perSegment * 2);
         const mt = 1 - t;
         samples.push({
-          x:
-            mt * mt * mt * cursor.x +
-            3 * mt * mt * t * c1x +
-            3 * mt * t * t * c2x +
-            t * t * t * ex,
-          y:
-            mt * mt * mt * cursor.y +
-            3 * mt * mt * t * c1y +
-            3 * mt * t * t * c2y +
-            t * t * t * ey,
+          x: mt * mt * mt * cursor.x + 3 * mt * mt * t * c1x + 3 * mt * t * t * c2x + t * t * t * ex,
+          y: mt * mt * mt * cursor.y + 3 * mt * mt * t * c1y + 3 * mt * t * t * c2y + t * t * t * ey,
         });
       }
       cursor = { x: ex, y: ey };
@@ -112,20 +94,20 @@ function sampleSvgPath(path: string, perSegment = 8): Array<{ x: number; y: numb
 /**
  * 计算一条连线的 SVG 路径。
  *
- * 优先使用 React Flow 原生路径;若从 source 端口到 target 端口的直线会穿过
+ * 优先使用 React Flow 原生路径;若从 source 端口到 target 端口的路径会穿过
  * 任一中间障碍节点,则生成绕障路径:
+ * - 多个障碍命中时,取其并集包围盒统一绕行,避免顾此失彼。
  * - smoothstep(直角线):折线绕到障碍一侧,与节点边缘保持最小距离(padding)。
  * - bezier(弧线):在障碍一侧插入中间绕行点,拐一个大一点的弯避开节点。
  */
 export function computeEdgePath(params: ComputePathParams): PathResult {
-  const { sourceX, sourceY, sourcePosition, targetX, targetY, targetPosition, obstacles, edgeStyle } =
-    params;
+  const { sourceX, sourceY, sourcePosition, targetX, targetY, targetPosition, obstacles, edgeStyle } = params;
   const padding = params.padding ?? 24;
 
   // 1. 先计算 React Flow 原生路径,再采样检测其是否穿过障碍(含 target 节点)。
-  let nativePath = '';
-  let nativeLabelX = 0;
-  let nativeLabelY = 0;
+  let nativePath: string;
+  let nativeLabelX: number;
+  let nativeLabelY: number;
   if (edgeStyle === 'bezier') {
     const [path, lx, ly] = getBezierPath({
       sourceX,
@@ -154,39 +136,37 @@ export function computeEdgePath(params: ComputePathParams): PathResult {
     nativeLabelY = ly;
   }
 
-  // 采样原生路径上的点,判断是否落在任一障碍(带 padding)内。
+  // 采样原生路径上的点,找出所有被命中的障碍(带 padding)。
   const samples = sampleSvgPath(nativePath);
-  const hit = obstacles.find((r) =>
-    samples.some((p) => pointInRectPadded(p.x, p.y, r, padding)),
-  );
+  const hits = obstacles.filter((r) => samples.some((p) => pointInRectPadded(p.x, p.y, r, padding)));
 
   // 无障碍遮挡:直接用原生路径
-  if (!hit) {
+  if (hits.length === 0) {
     return { path: nativePath, labelX: nativeLabelX, labelY: nativeLabelY };
   }
 
+  // 多个命中障碍取并集包围盒,统一绕行
+  const union = unionRects(hits);
+
   // 有障碍:生成绕障路径
   return edgeStyle === 'bezier'
-    ? buildBezierAvoiding(
-        sourceX,
-        sourceY,
-        sourcePosition,
-        targetX,
-        targetY,
-        targetPosition,
-        hit,
-        padding,
-      )
-    : buildSmoothAvoiding(
-        sourceX,
-        sourceY,
-        sourcePosition,
-        targetX,
-        targetY,
-        targetPosition,
-        hit,
-        padding,
-      );
+    ? buildBezierAvoiding(sourceX, sourceY, sourcePosition, targetX, targetY, targetPosition, union, padding)
+    : buildSmoothAvoiding(sourceX, sourceY, sourcePosition, targetX, targetY, targetPosition, union, padding);
+}
+
+/** 计算一组矩形的并集包围盒 */
+function unionRects(rects: ObstacleRect[]): ObstacleRect {
+  let minX = Infinity,
+    minY = Infinity,
+    maxX = -Infinity,
+    maxY = -Infinity;
+  for (const r of rects) {
+    minX = Math.min(minX, r.x);
+    minY = Math.min(minY, r.y);
+    maxX = Math.max(maxX, r.x + r.width);
+    maxY = Math.max(maxY, r.y + r.height);
+  }
+  return { x: minX, y: minY, width: maxX - minX, height: maxY - minY };
 }
 
 /**
@@ -274,8 +254,20 @@ function buildBezierAvoiding(
   }
 
   // 中间绕行点处,曲线的进出方向与 S→T 主方向垂直(让曲线「往外拐」)
-  const midIn = horizontal ? (mid.y < midY ? Position.Bottom : Position.Top) : (mid.x < midX ? Position.Right : Position.Left);
-  const midOut = horizontal ? (mid.y < midY ? Position.Top : Position.Bottom) : (mid.x < midX ? Position.Left : Position.Right);
+  const midIn = horizontal
+    ? mid.y < midY
+      ? Position.Bottom
+      : Position.Top
+    : mid.x < midX
+      ? Position.Right
+      : Position.Left;
+  const midOut = horizontal
+    ? mid.y < midY
+      ? Position.Top
+      : Position.Bottom
+    : mid.x < midX
+      ? Position.Left
+      : Position.Right;
 
   const [p1] = getBezierPath({
     sourceX,

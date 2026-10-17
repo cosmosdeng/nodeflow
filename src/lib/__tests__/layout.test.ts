@@ -43,7 +43,12 @@ describe('computeLevels 拓扑分层', () => {
 
   it('多个前驱取最长路径', () => {
     // A、B 都连到 C,A 又连到 D,D 连到 C → C 的最长路径来自 A→D→C
-    const nodes = [node('A', { x: 0, y: 0 }), node('B', { x: 0, y: 0 }), node('C', { x: 0, y: 0 }), node('D', { x: 0, y: 0 })];
+    const nodes = [
+      node('A', { x: 0, y: 0 }),
+      node('B', { x: 0, y: 0 }),
+      node('C', { x: 0, y: 0 }),
+      node('D', { x: 0, y: 0 }),
+    ];
     const edges = [edge('e1', 'A', 'C'), edge('e2', 'B', 'C'), edge('e3', 'A', 'D'), edge('e4', 'D', 'C')];
     const levels = computeLevels(nodes, edges);
     expect(levels.get('A')).toBe(0);
@@ -52,12 +57,37 @@ describe('computeLevels 拓扑分层', () => {
     expect(levels.get('C')).toBe(2); // A→D→C 路径最长
   });
 
-  it('环状依赖不死循环,给出层级', () => {
+  it('环状依赖不死循环,环上节点同层', () => {
     const nodes = [node('A', { x: 0, y: 0 }), node('B', { x: 0, y: 0 })];
     const edges = [edge('e1', 'A', 'B'), edge('e2', 'B', 'A')];
     const levels = computeLevels(nodes, edges);
     expect(levels.has('A')).toBe(true);
     expect(levels.has('B')).toBe(true);
+    // 环上节点同层
+    expect(levels.get('A')).toBe(levels.get('B'));
+  });
+
+  it('环外前驱决定环的层级', () => {
+    // S→A→B→A(环),环应在 S 的下一层
+    const nodes = [node('S', { x: 0, y: 0 }), node('A', { x: 0, y: 0 }), node('B', { x: 0, y: 0 })];
+    const edges = [edge('e1', 'S', 'A'), edge('e2', 'A', 'B'), edge('e3', 'B', 'A')];
+    const levels = computeLevels(nodes, edges);
+    expect(levels.get('S')).toBe(0);
+    expect(levels.get('A')).toBe(1);
+    expect(levels.get('B')).toBe(1);
+  });
+
+  it('深链(>1000 节点)不爆栈', () => {
+    const n = 2000;
+    const nodes: FlowNode[] = [];
+    const edges: FlowEdge[] = [];
+    for (let i = 0; i < n; i++) {
+      nodes.push(node(`N${i}`, { x: 0, y: 0 }));
+      if (i > 0) edges.push(edge(`E${i}`, `N${i - 1}`, `N${i}`));
+    }
+    const levels = computeLevels(nodes, edges);
+    expect(levels.get('N0')).toBe(0);
+    expect(levels.get(`N${n - 1}`)).toBe(n - 1);
   });
 });
 

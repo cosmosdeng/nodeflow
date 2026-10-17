@@ -41,8 +41,10 @@ export default function EditableText({
   // 用 ref 保存回调,避免 effect 依赖每次渲染都变化的内联函数导致循环触发
   const onEditingChangeRef = useRef(onEditingChange);
   const onAutoFocusConsumedRef = useRef(onAutoFocusConsumed);
-  onEditingChangeRef.current = onEditingChange;
-  onAutoFocusConsumedRef.current = onAutoFocusConsumed;
+  useEffect(() => {
+    onEditingChangeRef.current = onEditingChange;
+    onAutoFocusConsumedRef.current = onAutoFocusConsumed;
+  }, [onEditingChange, onAutoFocusConsumed]);
 
   // autoFocus 为 true 时请求进入编辑态(contentEditable 由 editing state 驱动)
   useEffect(() => {
@@ -83,7 +85,10 @@ export default function EditableText({
     if (!multiline) {
       next = next.replace(/\s+/g, ' ').trim();
     } else {
-      next = next.replace(/[ \t]+\n/g, '\n').replace(/\n{3,}/g, '\n\n').trimEnd();
+      next = next
+        .replace(/[ \t]+\n/g, '\n')
+        .replace(/\n{3,}/g, '\n\n')
+        .trimEnd();
     }
     if (next !== value) onCommit(next);
     // 无论是否提交,把 DOM 重置为最终值,清掉编辑留下的多余空行/占位符

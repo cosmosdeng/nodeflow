@@ -99,47 +99,90 @@ describe('NodeFlow MCP Adapter — normal capabilities', () => {
   });
 
   it('mutation:create_node(用返回 nodeId 续链)→ assign → arrange,revision 递增', async () => {
-    const before = (textData((await client.callTool({ name: 'get_graph_state', arguments: {} })) as unknown as ResultLike) as { revision: number }).revision;
+    const before = (
+      textData((await client.callTool({ name: 'get_graph_state', arguments: {} })) as unknown as ResultLike) as {
+        revision: number;
+      }
+    ).revision;
 
-    const create = textData((await client.callTool({
-      name: 'create_node',
-      arguments: { label: 'MCP 新节点', x: 10, y: 10 },
-    })) as unknown as ResultLike) as { success: boolean; revision: number; nodeId: string };
+    const create = textData(
+      (await client.callTool({
+        name: 'create_node',
+        arguments: { label: 'MCP 新节点', x: 10, y: 10 },
+      })) as unknown as ResultLike,
+    ) as { success: boolean; revision: number; nodeId: string };
     expect(create.success).toBe(true);
     expect(typeof create.nodeId).toBe('string');
     expect(create.revision).toBeGreaterThan(before);
 
     // AI 直接用上一步返回值继续,无需回查猜测
-    const parts = (textData((await client.callTool({ name: 'get_participants', arguments: {} })) as unknown as ResultLike) as { id: string }[]);
-    const stages = (textData((await client.callTool({ name: 'get_stages', arguments: {} })) as unknown as ResultLike) as { id: string }[]);
-    const assignP = textData((await client.callTool({ name: 'assign_participant', arguments: { nodeId: create.nodeId, participantId: parts[0].id } })) as unknown as ResultLike) as { success: boolean; revision: number };
+    const parts = textData(
+      (await client.callTool({ name: 'get_participants', arguments: {} })) as unknown as ResultLike,
+    ) as { id: string }[];
+    const stages = textData(
+      (await client.callTool({ name: 'get_stages', arguments: {} })) as unknown as ResultLike,
+    ) as { id: string }[];
+    const assignP = textData(
+      (await client.callTool({
+        name: 'assign_participant',
+        arguments: { nodeId: create.nodeId, participantId: parts[0].id },
+      })) as unknown as ResultLike,
+    ) as { success: boolean; revision: number };
     expect(assignP.success).toBe(true);
-    const assignS = textData((await client.callTool({ name: 'assign_stage', arguments: { nodeId: create.nodeId, stageId: stages[0].id } })) as unknown as ResultLike) as { success: boolean; revision: number };
+    const assignS = textData(
+      (await client.callTool({
+        name: 'assign_stage',
+        arguments: { nodeId: create.nodeId, stageId: stages[0].id },
+      })) as unknown as ResultLike,
+    ) as { success: boolean; revision: number };
     expect(assignS.success).toBe(true);
-    const arrange = textData((await client.callTool({ name: 'arrange', arguments: {} })) as unknown as ResultLike) as { success: boolean; revision: number };
+    const arrange = textData((await client.callTool({ name: 'arrange', arguments: {} })) as unknown as ResultLike) as {
+      success: boolean;
+      revision: number;
+    };
     expect(arrange.success).toBe(true);
     expect(arrange.revision).toBeGreaterThan(assignS.revision);
 
-    const after = (textData((await client.callTool({ name: 'get_graph_state', arguments: {} })) as unknown as ResultLike) as { revision: number }).revision;
+    const after = (
+      textData((await client.callTool({ name: 'get_graph_state', arguments: {} })) as unknown as ResultLike) as {
+        revision: number;
+      }
+    ).revision;
     expect(after).toBe(arrange.revision);
   });
 
   it('query 不推进 revision', async () => {
-    const r1 = (textData((await client.callTool({ name: 'get_graph_state', arguments: {} })) as unknown as ResultLike) as { revision: number }).revision;
+    const r1 = (
+      textData((await client.callTool({ name: 'get_graph_state', arguments: {} })) as unknown as ResultLike) as {
+        revision: number;
+      }
+    ).revision;
     await client.callTool({ name: 'get_participants', arguments: {} });
     await client.callTool({ name: 'get_stages', arguments: {} });
-    const r2 = (textData((await client.callTool({ name: 'get_graph_state', arguments: {} })) as unknown as ResultLike) as { revision: number }).revision;
+    const r2 = (
+      textData((await client.callTool({ name: 'get_graph_state', arguments: {} })) as unknown as ResultLike) as {
+        revision: number;
+      }
+    ).revision;
     expect(r2).toBe(r1);
   });
 
   it('human mutation:直接 store action 修改后,MCP observe 能看到 revision 变化', async () => {
     const { executeAgentRequest: _unused } = await import('../../agent/executor');
     void _unused;
-    const before = (textData((await client.callTool({ name: 'get_graph_state', arguments: {} })) as unknown as ResultLike) as { revision: number }).revision;
+    const before = (
+      textData((await client.callTool({ name: 'get_graph_state', arguments: {} })) as unknown as ResultLike) as {
+        revision: number;
+      }
+    ).revision;
     // Human/GUI 侧:直接走 store action(模拟 GUI mutation)
     const { useGraphStore } = await import('../../store/graphStore');
     useGraphStore.getState().addParticipant('Human GUI 改动', 'department');
-    const after = (textData((await client.callTool({ name: 'get_graph_state', arguments: {} })) as unknown as ResultLike) as { revision: number }).revision;
+    const after = (
+      textData((await client.callTool({ name: 'get_graph_state', arguments: {} })) as unknown as ResultLike) as {
+        revision: number;
+      }
+    ).revision;
     expect(after).toBeGreaterThan(before);
   });
 
@@ -168,32 +211,68 @@ describe('NodeFlow MCP Adapter — normal capabilities', () => {
   it('Phase D 工具:gateway/artifact/annotation 经 Agent 映射可用', async () => {
     const list = await client.listTools();
     const names = list.tools.map((t) => t.name);
-    for (const expected of ['create_gateway', 'change_gateway_type', 'attach_artifact', 'create_annotation', 'update_annotation', 'get_annotations']) {
+    for (const expected of [
+      'create_gateway',
+      'change_gateway_type',
+      'attach_artifact',
+      'create_annotation',
+      'update_annotation',
+      'get_annotations',
+    ]) {
       expect(names).toContain(expected);
     }
 
-    const gw = textData((await client.callTool({ name: 'create_gateway', arguments: { type: 'exclusive', x: 5, y: 5 } })) as unknown as ResultLike) as { gatewayId: string; success: boolean };
+    const gw = textData(
+      (await client.callTool({
+        name: 'create_gateway',
+        arguments: { type: 'exclusive', x: 5, y: 5 },
+      })) as unknown as ResultLike,
+    ) as { gatewayId: string; success: boolean };
     expect(gw.success).toBe(true);
     expect(gw.gatewayId).toBeTruthy();
-    const cg = textData((await client.callTool({ name: 'change_gateway_type', arguments: { nodeId: gw.gatewayId, type: 'inclusive' } })) as unknown as ResultLike) as { success: boolean };
+    const cg = textData(
+      (await client.callTool({
+        name: 'change_gateway_type',
+        arguments: { nodeId: gw.gatewayId, type: 'inclusive' },
+      })) as unknown as ResultLike,
+    ) as { success: boolean };
     expect(cg.success).toBe(true);
 
-    const s = textData((await client.callTool({ name: 'get_graph_state', arguments: {} })) as unknown as ResultLike) as {
+    const s = textData(
+      (await client.callTool({ name: 'get_graph_state', arguments: {} })) as unknown as ResultLike,
+    ) as {
       nodes: { id: string; label: string }[];
     };
     const a = s.nodes.find((x) => x.label === 'Node 01')!;
     const b = s.nodes.find((x) => x.label === 'Node 06')!;
-    const e = textData((await client.callTool({ name: 'connect_edge', arguments: { source: a.id, target: b.id } })) as unknown as ResultLike) as { edgeId: string };
-    const art = textData((await client.callTool({ name: 'attach_artifact', arguments: { edgeId: e.edgeId, kind: 'video', label: '片段' } })) as unknown as ResultLike) as { success: boolean; artifactId: string };
+    const e = textData(
+      (await client.callTool({
+        name: 'connect_edge',
+        arguments: { source: a.id, target: b.id },
+      })) as unknown as ResultLike,
+    ) as { edgeId: string };
+    const art = textData(
+      (await client.callTool({
+        name: 'attach_artifact',
+        arguments: { edgeId: e.edgeId, kind: 'video', label: '片段' },
+      })) as unknown as ResultLike,
+    ) as { success: boolean; artifactId: string };
     expect(art.success).toBe(true);
     expect(art.artifactId).toBeTruthy();
 
-    const ann = textData((await client.callTool({ name: 'create_annotation', arguments: { targetKind: 'node', nodeId: a.id, title: '说明', content: '正文' } })) as unknown as ResultLike) as { success: boolean; annotationId: string };
+    const ann = textData(
+      (await client.callTool({
+        name: 'create_annotation',
+        arguments: { targetKind: 'node', nodeId: a.id, title: '说明', content: '正文' },
+      })) as unknown as ResultLike,
+    ) as { success: boolean; annotationId: string };
     expect(ann.success).toBe(true);
     expect(ann.annotationId).toBeTruthy();
 
     const nodes = textData((await client.callTool({ name: 'get_nodes', arguments: {} })) as unknown as ResultLike) as {
-      id: string; isGateway: boolean; gatewayType: string | null;
+      id: string;
+      isGateway: boolean;
+      gatewayType: string | null;
     }[];
     const gwDto = nodes.find((n) => n.id === gw.gatewayId)!;
     expect(gwDto.isGateway).toBe(true);

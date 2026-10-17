@@ -68,6 +68,5 @@ export function createHistorySlice({ set, get }: SliceDeps): Partial<FlowStore> 
 
     canUndo: () => get().past.length > 0,
     canRedo: () => get().future.length > 0,
-
   };
 }

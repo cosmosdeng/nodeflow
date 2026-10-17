@@ -43,14 +43,22 @@ import {
   docKey,
   seedGraph,
 } from '../persistence';
-import {
-  collapseComposite,
-  expandComposite,
-  refreshCompositeHidden,
-  buildNodesById,
-} from '../compositeHelpers';
+import { collapseComposite, expandComposite, refreshCompositeHidden, buildNodesById } from '../compositeHelpers';
 import { closeCompositeTabInState } from '../historyHelpers';
-import { applyCompositeBoxes, computeCompositeBounds, computeCompositeActor, computeCompositePorts, encodeCompositePort, decodeCompositePort, decodeCompositePortPath, findParentCompositeId, getNodeSize, isCompositePort, COMPOSITE_PAD, COMPOSITE_PREFIX } from '../../lib/composite';
+import {
+  applyCompositeBoxes,
+  computeCompositeBounds,
+  computeCompositeActor,
+  computeCompositePorts,
+  encodeCompositePort,
+  decodeCompositePort,
+  decodeCompositePortPath,
+  findParentCompositeId,
+  getNodeSize,
+  isCompositePort,
+  COMPOSITE_PAD,
+  COMPOSITE_PREFIX,
+} from '../../lib/composite';
 import { findNodeById, findEdgeById } from '../../domain/graph/queries';
 
 export function createDocumentsSlice({ set, get }: SliceDeps): Partial<FlowStore> {
@@ -60,7 +68,20 @@ export function createDocumentsSlice({ set, get }: SliceDeps): Partial<FlowStore
     clearGraph: () => {
       if (get().allLocked) return;
       get().markHistory();
-      set({ nodes: [], edges: [], annotations: [], stages: [], participants: [], organizations: [], participantOrder: [], participantOrderMode: 'auto', stageOrder: [], arrangePending: false, compositeTabs: [], activeTabId: 'main' });
+      set({
+        nodes: [],
+        edges: [],
+        annotations: [],
+        stages: [],
+        participants: [],
+        organizations: [],
+        participantOrder: [],
+        participantOrderMode: 'auto',
+        stageOrder: [],
+        arrangePending: false,
+        compositeTabs: [],
+        activeTabId: 'main',
+      });
     },
 
     loadGraph: (data) => {
@@ -120,11 +141,7 @@ export function createDocumentsSlice({ set, get }: SliceDeps): Partial<FlowStore
       persistDocument(doc);
       const idx = loadDocsIndex() ?? { docs: [], activeId: s.activeDocumentId };
       persistDocsIndex({
-        docs: idx.docs.map((m) =>
-          m.id === s.activeDocumentId
-            ? { ...m, lastSavedAt: Date.now() }
-            : m,
-        ),
+        docs: idx.docs.map((m) => (m.id === s.activeDocumentId ? { ...m, lastSavedAt: Date.now() } : m)),
         activeId: s.activeDocumentId,
       });
       set({ lastSavedAt: Date.now(), dirty: false });
@@ -142,9 +159,7 @@ export function createDocumentsSlice({ set, get }: SliceDeps): Partial<FlowStore
       });
       // 同步更新内存中该文档的 dirty/lastSavedAt
       set((state) => ({
-        documents: state.documents.map((d) =>
-          d.id === id ? { ...d, dirty: false, lastSavedAt: Date.now() } : d,
-        ),
+        documents: state.documents.map((d) => (d.id === id ? { ...d, dirty: false, lastSavedAt: Date.now() } : d)),
         // 如果是当前活动文档,同步顶层镜像
         ...(state.activeDocumentId === id ? { dirty: false, lastSavedAt: Date.now() } : {}),
       }));
@@ -219,7 +234,8 @@ export function createDocumentsSlice({ set, get }: SliceDeps): Partial<FlowStore
           const document = (data as Record<string, unknown> | undefined)?.document ?? {};
           const d = document as Record<string, unknown>;
           name = typeof d.name === 'string' ? d.name : '未命名项目';
-          color = typeof d.color === 'string' ? d.color : DOCUMENT_COLORS[get().documents.length % DOCUMENT_COLORS.length];
+          color =
+            typeof d.color === 'string' ? d.color : DOCUMENT_COLORS[get().documents.length % DOCUMENT_COLORS.length];
         } else if (info.legacy && info.version === 4) {
           // Legacy Project v4:迁移到 v5(仅 schema 转换,不改写 membership/participantId;
           // participant/stage order 由下方 resolveParticipantOrder/resolveStageOrder 补默认)
@@ -227,14 +243,16 @@ export function createDocumentsSlice({ set, get }: SliceDeps): Partial<FlowStore
           const document = (data as Record<string, unknown> | undefined)?.document ?? {};
           const d = document as Record<string, unknown>;
           name = typeof d.name === 'string' ? d.name : '未命名项目';
-          color = typeof d.color === 'string' ? d.color : DOCUMENT_COLORS[get().documents.length % DOCUMENT_COLORS.length];
+          color =
+            typeof d.color === 'string' ? d.color : DOCUMENT_COLORS[get().documents.length % DOCUMENT_COLORS.length];
         } else if (info.legacy) {
           // Legacy Project v2
           norm = migrateProjectV2ToDocument(data);
           const project = (data as Record<string, unknown> | undefined)?.project ?? {};
           const p = project as Record<string, unknown>;
           name = typeof p.name === 'string' ? p.name : '未命名项目';
-          color = typeof p.color === 'string' ? p.color : DOCUMENT_COLORS[get().documents.length % DOCUMENT_COLORS.length];
+          color =
+            typeof p.color === 'string' ? p.color : DOCUMENT_COLORS[get().documents.length % DOCUMENT_COLORS.length];
         } else {
           // Current Project v3
           const document = (data as Record<string, unknown> | undefined)?.document ?? {};
@@ -252,7 +270,8 @@ export function createDocumentsSlice({ set, get }: SliceDeps): Partial<FlowStore
             activeTabId: typeof editor.activeTabId === 'string' ? editor.activeTabId : 'main',
           };
           name = typeof d.name === 'string' ? d.name : '未命名项目';
-          color = typeof d.color === 'string' ? d.color : DOCUMENT_COLORS[get().documents.length % DOCUMENT_COLORS.length];
+          color =
+            typeof d.color === 'string' ? d.color : DOCUMENT_COLORS[get().documents.length % DOCUMENT_COLORS.length];
         }
         // Current Validation:标准化后确保结构可安全进入 Runtime
         const issues = validateDocumentData(norm);
@@ -339,8 +358,7 @@ export function createDocumentsSlice({ set, get }: SliceDeps): Partial<FlowStore
     // ---- 多文档管理 ----
     createDocument: (name) => {
       const id = uid('doc');
-      const color =
-        DOCUMENT_COLORS[get().documents.length % DOCUMENT_COLORS.length];
+      const color = DOCUMENT_COLORS[get().documents.length % DOCUMENT_COLORS.length];
       const doc: GraphDocument = {
         id,
         name: name ?? `未命名项目 ${get().documents.length + 1}`,
@@ -435,8 +453,7 @@ export function createDocumentsSlice({ set, get }: SliceDeps): Partial<FlowStore
       // 唯一项目:关闭后新建一个空项目替换,保证始终至少有一个项目
       if (docs.length <= 1) {
         const newId = uid('doc');
-        const color =
-          DOCUMENT_COLORS[get().documents.length % DOCUMENT_COLORS.length];
+        const color = DOCUMENT_COLORS[get().documents.length % DOCUMENT_COLORS.length];
         const emptyDoc: GraphDocument = {
           id: newId,
           name: `未命名项目 ${get().documents.length + 1}`,
@@ -515,9 +532,7 @@ export function createDocumentsSlice({ set, get }: SliceDeps): Partial<FlowStore
       if (idx) {
         persistDocsIndex({
           docs: idx.docs.filter((d) => d.id !== id),
-          activeId: remaining.some((d) => d.id === idx.activeId)
-            ? idx.activeId
-            : remaining[0].id,
+          activeId: remaining.some((d) => d.id === idx.activeId) ? idx.activeId : remaining[0].id,
         });
       }
     },
@@ -533,7 +548,5 @@ export function createDocumentsSlice({ set, get }: SliceDeps): Partial<FlowStore
         });
       }
     },
-
-
   };
 }

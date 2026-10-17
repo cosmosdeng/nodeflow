@@ -52,14 +52,8 @@ const lay = (o: {
     stageOrder: o.stageOrder ?? [],
   });
 
-const sameColNoOverlap = (
-  pos: Map<string, { x: number; y: number }>,
-  ids: string[],
-  hOf: (id: string) => number,
-) => {
-  const rects = ids
-    .filter((id) => pos.has(id))
-    .map((id) => ({ id, y: pos.get(id)!.y, h: hOf(id) }));
+const sameColNoOverlap = (pos: Map<string, { x: number; y: number }>, ids: string[], hOf: (id: string) => number) => {
+  const rects = ids.filter((id) => pos.has(id)).map((id) => ({ id, y: pos.get(id)!.y, h: hOf(id) }));
   rects.sort((a, b) => a.y - b.y);
   for (let i = 1; i < rects.length; i++) {
     expect(rects[i].y, `overlap ${rects[i - 1].id}/${rects[i].id}`).toBeGreaterThanOrEqual(
@@ -92,10 +86,7 @@ describe('C Primary + D 窄化(单列矩阵场景)', () => {
       stageOrder: ['s1'],
       nodes: [nd('nA', 'p1'), nd('nB', 'p2'), nd('X', undefined)],
     });
-    const envBottom = Math.max(
-      pos.get('nA')!.y + 150,
-      pos.get('nB')!.y + 150,
-    );
+    const envBottom = Math.max(pos.get('nA')!.y + 150, pos.get('nB')!.y + 150);
     expect(pos.get('X')!.y).toBeGreaterThanOrEqual(envBottom + GAP);
   });
 
@@ -107,7 +98,10 @@ describe('C Primary + D 窄化(单列矩阵场景)', () => {
       nodes: [nd('X1', undefined), nd('X2', undefined), nd('X3', undefined)],
     });
     expect(pos.get('X1')!.y).toBeGreaterThanOrEqual(80); // 列独立起点
-    for (const [p, c] of [['X1', 'X2'], ['X2', 'X3']] as const) {
+    for (const [p, c] of [
+      ['X1', 'X2'],
+      ['X2', 'X3'],
+    ] as const) {
       expect(pos.get(c)!.y).toBeGreaterThanOrEqual(pos.get(p)!.y + 150 + GAP);
     }
     sameColNoOverlap(pos, ['X1', 'X2', 'X3'], () => 150);
@@ -227,10 +221,13 @@ describe('real_like 回归(stageOnly 不重叠、不进 free corner、真 free �
     stageOrder: input.stageOrder,
   });
   const cls = (id: string) =>
-    classifyMatrixNode(input.nodes.find((n) => n.id === id)!, {
-      participants: input.participants,
-      stages: input.stages,
-    }).classification;
+    classifyMatrixNode(
+      input.nodes.find((n) => n.id === id)!,
+      {
+        participants: input.participants,
+        stages: input.stages,
+      },
+    ).classification;
   const hOf = (id: string) => input.nodes.find((n) => n.id === id)!.height ?? 150;
 
   it('stageOnly 进入正确 Stage 列,classification !== free', () => {

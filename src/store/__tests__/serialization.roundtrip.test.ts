@@ -29,31 +29,103 @@ beforeEach(() => {
 
 function buildRichGraph() {
   const A: FlowNode = {
-    id: 'A', type: 'flow', position: { x: 0, y: 0 }, width: 240, height: 150,
-    data: { label: '节点A', description: '描述', actor: 'human', locked: false, inputs: [], outputs: [{ id: 'out1', name: '输出' }] },
+    id: 'A',
+    type: 'flow',
+    position: { x: 0, y: 0 },
+    width: 240,
+    height: 150,
+    data: {
+      label: '节点A',
+      description: '描述',
+      actor: 'human',
+      locked: false,
+      inputs: [],
+      outputs: [{ id: 'out1', name: '输出' }],
+    },
   };
   const B: FlowNode = {
-    id: 'B', type: 'flow', position: { x: 400, y: 0 }, width: 240, height: 150,
-    data: { label: '节点B', description: '', actor: 'machine', locked: false, inputs: [{ id: 'in1', name: '输入' }], outputs: [] },
+    id: 'B',
+    type: 'flow',
+    position: { x: 400, y: 0 },
+    width: 240,
+    height: 150,
+    data: {
+      label: '节点B',
+      description: '',
+      actor: 'machine',
+      locked: false,
+      inputs: [{ id: 'in1', name: '输入' }],
+      outputs: [],
+    },
   };
   const G: FlowNode = {
-    id: 'G', type: 'flow', position: { x: 0, y: 300 }, width: 240, height: 150,
-    data: { label: '组合', description: '', actor: 'hybrid', locked: false, inputs: [], outputs: [], composite: { expanded: false, childIds: ['A', 'B'] } },
+    id: 'G',
+    type: 'flow',
+    position: { x: 0, y: 300 },
+    width: 240,
+    height: 150,
+    data: {
+      label: '组合',
+      description: '',
+      actor: 'hybrid',
+      locked: false,
+      inputs: [],
+      outputs: [],
+      composite: { expanded: false, childIds: ['A', 'B'] },
+    },
   };
   const GE: FlowNode = {
-    id: 'GE', type: 'flow', position: { x: 400, y: 300 }, width: 240, height: 150,
-    data: { label: '嵌套', description: '', actor: 'human', locked: false, inputs: [], outputs: [], composite: { expanded: false, childIds: ['G'] } },
+    id: 'GE',
+    type: 'flow',
+    position: { x: 400, y: 300 },
+    width: 240,
+    height: 150,
+    data: {
+      label: '嵌套',
+      description: '',
+      actor: 'human',
+      locked: false,
+      inputs: [],
+      outputs: [],
+      composite: { expanded: false, childIds: ['G'] },
+    },
   };
   const GW: FlowNode = {
-    id: 'GW', type: 'flow', position: { x: 0, y: 600 }, width: 380, height: 220,
-    data: { label: '排他网关', description: '', actor: 'hybrid', locked: false, inputs: [{ id: 'in_1', name: '输入' }], outputs: [{ id: 'out_1', name: '分支1' }, { id: 'out_2', name: '分支2' }], gateway: { type: 'exclusive' } },
+    id: 'GW',
+    type: 'flow',
+    position: { x: 0, y: 600 },
+    width: 380,
+    height: 220,
+    data: {
+      label: '排他网关',
+      description: '',
+      actor: 'hybrid',
+      locked: false,
+      inputs: [{ id: 'in_1', name: '输入' }],
+      outputs: [
+        { id: 'out_1', name: '分支1' },
+        { id: 'out_2', name: '分支2' },
+      ],
+      gateway: { type: 'exclusive' },
+    },
   };
   const e1: FlowEdge = {
-    id: 'e1', source: 'A', sourceHandle: 'out1', target: 'B', targetHandle: 'in1', type: 'flow',
+    id: 'e1',
+    source: 'A',
+    sourceHandle: 'out1',
+    target: 'B',
+    targetHandle: 'in1',
+    type: 'flow',
     data: { label: '连线说明', artifact: { id: 'art1', kind: 'document', label: '对账单', description: '' } },
   };
   const stage: Stage = { id: 's1', name: '阶段一', x: -20, y: -20, width: 700, height: 200, nodeIds: ['A', 'B'] };
-  const annot: Annotation = { id: 'an1', title: '注释标题', content: '注释内容', collapsed: false, target: { kind: 'node', nodeId: 'A' } };
+  const annot: Annotation = {
+    id: 'an1',
+    title: '注释标题',
+    content: '注释内容',
+    collapsed: false,
+    target: { kind: 'node', nodeId: 'A' },
+  };
   return { A, B, G, GE, GW, e1, stage, annot };
 }
 
@@ -135,7 +207,10 @@ describe('P4-04 Serialization Round Trip', () => {
   it('exportJson 静态导出可被加载(round-trip 语义一致)', () => {
     const { A, B, e1, stage, annot } = buildRichGraph();
     useGraphStore.setState({
-      nodes: [A, B], edges: [e1], stages: [stage], annotations: [annot],
+      nodes: [A, B],
+      edges: [e1],
+      stages: [stage],
+      annotations: [annot],
     });
     const json = useGraphStore.getState().exportJson();
     useGraphStore.setState({ nodes: [], edges: [], stages: [], annotations: [] });

@@ -49,10 +49,7 @@ export function computeMatrixTargetZones(input: {
   stageOrder: readonly string[];
 }): MatrixTargetZones {
   const { nodes, edges, participants, participantOrder, stages, stageOrder } = input;
-  const geo = computeMatrixGridGeometry(
-    { nodes, participants, participantOrder, stages, stageOrder },
-    { edges },
-  );
+  const geo = computeMatrixGridGeometry({ nodes, participants, participantOrder, stages, stageOrder }, { edges });
   const { structure } = geo;
   const stageIdSet = new Set(stages.map((s) => s.id));
   const nodeRects = structure.topNodes.map((n) => {

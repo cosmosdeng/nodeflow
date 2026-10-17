@@ -4,7 +4,11 @@ import { AGENT_PROTOCOL_VERSION, type AgentCommandResult, type AgentGraphState, 
 import { useGraphStore } from '../../store/graphStore';
 import { setAgentTestCommandsEnabled } from '../capabilities';
 
-interface Result { success: boolean; data?: unknown; error?: { code?: string } }
+interface Result {
+  success: boolean;
+  data?: unknown;
+  error?: { code?: string };
+}
 async function act(type: AgentRequestType, payload?: unknown): Promise<Result> {
   const r = await executeAgentRequest({
     protocolVersion: AGENT_PROTOCOL_VERSION,

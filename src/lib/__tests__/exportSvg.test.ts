@@ -50,25 +50,13 @@ describe('buildSvg', () => {
   });
 
   it('连线生成 path 元素', () => {
-    const r = buildSvg(
-      [node('A', 0, 0), node('B', 200, 0)],
-      [edge('e1', 'A', 'B')],
-      'dark',
-      fit,
-      bounds,
-    );
+    const r = buildSvg([node('A', 0, 0), node('B', 200, 0)], [edge('e1', 'A', 'B')], 'dark', fit, bounds);
     expect(r.svg).toContain('<path');
     expect(r.svg).toContain('<text');
   });
 
   it('hidden 节点不导出', () => {
-    const r = buildSvg(
-      [node('A', 0, 0), node('B', 100, 0, { hidden: true })],
-      [],
-      'dark',
-      fit,
-      bounds,
-    );
+    const r = buildSvg([node('A', 0, 0), node('B', 100, 0, { hidden: true })], [], 'dark', fit, bounds);
     expect(r.svg).not.toContain('>B<');
     expect(r.svg).toContain('>A<');
   });
