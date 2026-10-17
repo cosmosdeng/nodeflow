@@ -51,15 +51,34 @@
 
 | Commit | 内容 |
 |---|---|
-| `a18ea68` | fix(lint,algo,store): 路线图遗留项批量修复 |
+| `a18ea68` | fix(lint,algo,store): 路线图遗留项批量修复（错误码/ESLint/多障碍/环安全/增量同步） |
 | `9e19258` | lint: warning 清理 222 → 1 |
 | `74ac09e` | docs: PROGRESS 更新 |
+| `ffdae47` | feat(a11y,docs): 键盘移动/连线 + UI_UX_DESIGN 同步 |
+| `2b7b278` | docs: npm 发布记录 |
+
+### 会话收尾
+
+`CODE_REVIEW.md` 路线图**全部完成**：
+
+| 路线图项 | 状态 |
+|---|---|
+| ~~拆 graphStore god store~~ | ✅ 早前完成 |
+| ~~friendly.ts 错误码~~ | ✅ |
+| ~~ESLint/Prettier~~ | ✅ |
+| ~~edgePath 多障碍绕行 + layout 环处理~~ | ✅ |
+| ~~syncActiveDoc 细粒度同步~~ | ✅ |
+| ~~键盘连线/移动替代（a11y）~~ | ✅ |
+| ~~npm latest dist-tag~~ | ✅ 发布 0.4.0-next.3 |
+| ~~UI_UX_DESIGN.md 同步~~ | ✅ |
+
+**测试基线**：449 用例 / 47 文件全绿，lint 0 error / 1 warn，`tsc` 干净，`build` 通过。
+
+**遗留备注**：发布 stable `0.4.0` 时将 npm `latest` 更新为 stable。
 
 ### 遗留
 
-1. ~~**键盘连线 / 移动替代**（完整 a11y）~~ ✅ 已完成（方向键移动 + L 键连线）
-2. ~~**npm `latest` dist-tag** 指向 stable~~ ✅ 已完成（发布 `0.4.0-next.3`，`latest`/`next` 均指向 `0.4.0-next.3`；发布 stable `0.4.0` 时需再更新 `latest`）
-3. ~~`docs/UI_UX_DESIGN.md` 与实现同步~~ ✅ 已完成
+**无**。路线图全部完成，仅备注：发布 stable `0.4.0` 时更新 npm `latest` dist-tag。
 
 ---
 
