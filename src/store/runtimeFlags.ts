@@ -15,3 +15,17 @@ export function setEdgeDeleteHistoryPending(v: boolean): void {
 export function getEdgeDeleteHistoryPending(): boolean {
   return edgeDeleteHistoryPending;
 }
+
+/**
+ * 键盘微调(nudge)最近一次移动的时间戳。
+ * 连续方向键在合并窗口内只记录一次历史,使「按住微调」可被一次 Undo 完整还原。
+ */
+export let lastNudgeAt = 0;
+
+export function setLastNudgeAt(v: number): void {
+  lastNudgeAt = v;
+}
+
+export function getLastNudgeAt(): number {
+  return lastNudgeAt;
+}

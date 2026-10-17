@@ -85,19 +85,13 @@ function MainApp() {
         if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.key)) {
           const st = useGraphStore.getState();
           if (st.allLocked) return;
-          const selectedNodes = st.nodes.filter((n) => n.selected);
-          if (selectedNodes.length === 0) return;
+          if (!st.nodes.some((n) => n.selected)) return;
           e.preventDefault();
           const step = e.shiftKey ? 50 : 10;
           const dx = e.key === 'ArrowLeft' ? -step : e.key === 'ArrowRight' ? step : 0;
           const dy = e.key === 'ArrowUp' ? -step : e.key === 'ArrowDown' ? step : 0;
-          st.onNodesChange(
-            selectedNodes.map((n) => ({
-              type: 'position' as const,
-              id: n.id,
-              position: { x: n.position.x + dx, y: n.position.y + dy },
-            })),
-          );
+          // 走 store action:纳入历史栈,连续按键在 500ms 窗口内合并为一次撤销
+          st.nudgeSelectedNodes(dx, dy);
           return;
         }
         // L:键盘连线 — 第一次按下记录源节点,第二次按下连线到当前选中节点

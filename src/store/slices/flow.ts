@@ -1,6 +1,6 @@
-import type { FlowNode, FlowEdge } from '../../types'
-import type {FlowStore} from '../types';
-import type {SliceDeps} from './deps';
+import type { FlowNode, FlowEdge } from '../../types';
+import type { FlowStore } from '../types';
+import type { SliceDeps } from './deps';
 import { applyNodeChanges, applyEdgeChanges } from '@xyflow/react';
 import { removeChildFromComposites, refreshCompositeHidden, expandComposite } from '../compositeHelpers';
 import { applyCompositeBoxes, decodeCompositePort } from '../../lib/composite';
@@ -11,7 +11,15 @@ import { createFlowEdge } from '../../lib/edge';
 import { computeLayout } from '../../lib/layout';
 import { getNodeSize } from '../../lib/composite';
 import { savePrefs } from '../persistence';
-import { getEdgeDeleteHistoryPending, setEdgeDeleteHistoryPending } from '../runtimeFlags';
+import {
+  getEdgeDeleteHistoryPending,
+  setEdgeDeleteHistoryPending,
+  getLastNudgeAt,
+  setLastNudgeAt,
+} from '../runtimeFlags';
+
+/** 键盘微调的历史合并窗口(ms):窗口内的连续移动合并为一条撤销记录 */
+const NUDGE_MERGE_WINDOW_MS = 500;
 
 export function createFlowSlice({ set, get }: SliceDeps): Partial<FlowStore> {
   return {
@@ -131,6 +139,26 @@ export function createFlowSlice({ set, get }: SliceDeps): Partial<FlowStore> {
     onViewportChange: (v) => set({ viewport: v }),
 
     setSelected: (sel) => set({ selected: sel }),
+
+    nudgeSelectedNodes: (dx, dy, mergeWindowMs = NUDGE_MERGE_WINDOW_MS) => {
+      // 演示锁定下不允许移动
+      if (get().allLocked) return;
+      const targets = get().nodes.filter((n) => n.selected);
+      if (targets.length === 0) return;
+      const now = Date.now();
+      // 超出合并窗口(首次移动 / 停顿后再次移动)才打快照,使连续微调只占一条历史
+      if (now - getLastNudgeAt() > mergeWindowMs) {
+        get().markHistory();
+      }
+      setLastNudgeAt(now);
+      get().onNodesChange(
+        targets.map((n) => ({
+          type: 'position' as const,
+          id: n.id,
+          position: { x: n.position.x + dx, y: n.position.y + dy },
+        })),
+      );
+    },
 
     requestAutoEdit: (t) => set({ pendingAutoEdit: t }),
 

@@ -16,6 +16,11 @@
 
 ## P1 · 体验与健壮性
 
+- [x] **键盘微调纳入历史栈**(已完成)
+  - 问题:方向键移动走 `onNodesChange`,历史只在 `handleNodeDragStart` 打点 → 键盘移动无法撤销。
+  - 修复:新增 store action `nudgeSelectedNodes(dx, dy, mergeWindowMs = 500)`,移动前 `markHistory()`;连续按键在窗口内合并为一条历史,一次撤销回到移动前。`App.tsx` 方向键分支改走该 action;新增 6 个 store 用例。
+  - 附带:`CI` 增加 `lint` / `format:check` / `build` 三步,并补跑全仓 Prettier(22 文件格式已漂移)。
+
 - [x] **展开态组合节点的对外连线能力**(已完成)
   - 修复:`FlowNodeComponent` 展开态(虚线框)左右边缘渲染聚合端口 Handle,端口 id 与塌缩态一致(`cid:` 编码),可直接对外连线;塌缩 / 展开逻辑天然兼容(展开态聚合连线指向组合节点,塌缩不改写,再展开解码还原)。
   - 说明:展开态聚合端口连线端点落在虚线框边缘,塌缩后保持指向组合节点聚合端口,再展开还原到内部子节点端口。

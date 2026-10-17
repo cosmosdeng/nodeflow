@@ -2,7 +2,26 @@
  * FlowStore 领域类型:选中、自动编辑目标、完整 Store 接口。
  * 由 graphStore 实现;切片只依赖本文件的类型。
  */
-import type { FlowNode, FlowEdge, GraphSnapshot, GraphState, GraphDocument, ViewportState, Artifact, FlowNodeData, FlowEdgeData, EdgeStyle, ThemeMode, Annotation, AnnotationTarget, Stage, Participant, Organization, ParticipantOrderMode, ParticipantType } from '../types'
+import type {
+  FlowNode,
+  FlowEdge,
+  GraphSnapshot,
+  GraphState,
+  GraphDocument,
+  ViewportState,
+  Artifact,
+  FlowNodeData,
+  FlowEdgeData,
+  EdgeStyle,
+  ThemeMode,
+  Annotation,
+  AnnotationTarget,
+  Stage,
+  Participant,
+  Organization,
+  ParticipantOrderMode,
+  ParticipantType,
+} from '../types';
 import type { Connection, OnNodesChange, OnEdgesChange } from '@xyflow/react';
 import type { LayoutDirection } from '../lib/layout';
 
@@ -80,6 +99,12 @@ export interface FlowStore extends GraphState {
 
   // ---- 选中 ----
   setSelected: (sel: Selection) => void;
+
+  /**
+   * 键盘微调:整体平移所有选中节点。
+   * 连续按键在 mergeWindowMs(默认 500ms)内合并为一条历史记录,一次 Undo 回到移动前。
+   */
+  nudgeSelectedNodes: (dx: number, dy: number, mergeWindowMs?: number) => void;
 
   // ---- 自动进入编辑模式 ----
   /** 待自动进入编辑的对象(创建节点/连线/端口后设置,组件消费后清除) */
