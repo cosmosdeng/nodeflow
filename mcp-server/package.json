@@ -1,6 +1,6 @@
 {
   "name": "@cosmosdeng/nodeflow-mcp",
-  "version": "0.4.0-next.3",
+  "version": "0.4.0-next.4",
   "description": "NodeFlow MCP stdio adapter — lets AI agents (WorkBuddy / MCP clients) operate a running NodeFlow via its local Agent Bridge (http://127.0.0.1:8787).",
   "author": {
     "name": "cosmosdeng",
