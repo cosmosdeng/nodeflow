@@ -2,6 +2,16 @@
 
 > 按时间倒序记录开发历程。新功能、重要修复、里程碑都应在此追加。
 
+## 2026-10-18 · 发布 v0.4.0-next.4(完成)
+
+- **版本号**:根 `package.json` 与 `mcp-server/package.json` 统一 → `0.4.0-next.4`,tag `v0.4.0-next.4`,提交 `chore(release): prepare v0.4.0-next.4`(`aa78641`)。
+- **GitHub Release**:Pre-release 已发布,安装包改为**在 GitHub Actions 上构建**(`release.yml`,on push tag `v*`):mac arm64 / mac x64 / linux / win 四个 job 全绿,`Publish GitHub Release` 上传 8 个资产(dmg ×2、mac.zip ×2、exe、win.zip、AppImage、deb)。手写的发布说明被保留(未被 `generate_release_notes` 覆盖)。
+- **npm**:`@cosmosdeng/nodeflow-mcp@0.4.0-next.4` 已发布,`next` 与 `latest` 两个 dist-tag 均指向 `0.4.0-next.4`。该包只有 next 线(npm 上仅有 next.2 / next.3 / next.4,无 0.3.x),所以 `latest` 继续指向最新 prerelease。
+- **踩坑**:npm 账号开启了 2FA(Auth & Writing),`npm publish` 被 `EOTP` 拦截;CLI 的 `--otp` 需要认证器动态码,改用 **Automation token**(写入 `~/.npmrc` 的 `//registry.npmjs.org/:_authToken`)可绕过 2FA,后续发版无需 OTP。
+- **README**:版本历史补 `next.3`(此前漏记)与 `next.4` 两行;头部与双线对照表版本号同步;参与方入口改为「🧭 语义」面板;测试基线 441/46 → 455/48。
+
+---
+
 ## 2026-10-18 · 工具栏编组 + 语义面板分工(完成)
 
 - **工具栏重排**:按「文件 → 历史(撤销/重做)→ 创建(＋节点 / ▦阶段域 / ⧉组合)→ 整理(⤺自动排列)→ 显示(💬注释 / ▮阶段带 / ▬参与方带)→ 面板(🗂大纲 / 🧭语义 / ⚙属性 / 🕘历史)→ 外观与保护(连线风格 / 主题 / 🔒锁定全部)」重排。💬 注释原在「创建」组,语义上属于显示开关,移入「显示」组;面板开关集中成组并右移,与画布操作分离。

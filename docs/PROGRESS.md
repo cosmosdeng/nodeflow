@@ -15,7 +15,9 @@
   - **CI 护栏**：新增 lint / format:check / build
 - **README**：版本历史补 `next.3`（此前缺失）与 `next.4` 两行；头部与双线对照表版本号同步；参与方入口改为「🧭 语义」面板；测试基线 441/46 → 455/48
 - **验证**：`format:check` 通过、lint 0 error / 1 warn、`tsc` + electron `tsc` 干净、455 用例 / 48 文件全绿、`bun run build` 通过
-- **待用户确认**：npm 发布 `@cosmosdeng/nodeflow-mcp@0.4.0-next.4` 与 GitHub Pre-release 需明确授权；`latest` dist-tag 是否继续指向 prerelease 待决策
+- **GitHub Release**：Pre-release 已发布 —— https://github.com/cosmosdeng/nodeflow/releases/tag/v0.4.0-next.4 ；安装包由 GitHub Actions(`release.yml`,on push tag `v*`)构建并上传,4 平台 **8 个资产**全绿(dmg ×2 / mac.zip ×2 / exe / win.zip / AppImage / deb)
+- **npm 发布**：`@cosmosdeng/nodeflow-mcp@0.4.0-next.4` 已发布,`next` 与 `latest` 两个 dist-tag 均指向 `0.4.0-next.4`(该 npm 包只有 next 线、无 0.3.x stable 包,所以 `latest` 继续指向最新 prerelease)
+- **发布流程要点**：npm 账号开启了 2FA(Auth & Writing),CLI 发布会被 `EOTP` 拦截;改用 **Automation token** 写入 `~/.npmrc` 后可绕过 2FA,后续发版无需 OTP
 
 ---
 
