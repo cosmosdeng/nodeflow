@@ -43,9 +43,11 @@ nodeflow/
 │   │   ├── AnnotationBox.tsx       # 注释框(画布/节点/连线/产物/组合)
 │   │   ├── StageComponent.tsx      # 流程阶段域(矩形虚线框,穿透内部,可拖拽/调整大小)
 │   │   ├── CompositePopupView.tsx  # 独立窗口的内部画布(只读)
-│   │   ├── Toolbar.tsx             # 顶部工具栏:新建/组合/锁定/历史/导入导出
-│   │   ├── PropertiesPanel.tsx     # 右侧属性面板
-│   │   ├── OutlinePanel.tsx        # 大纲面板(组合节点层级)
+│   │   ├── Toolbar.tsx             # 顶部工具栏:文件/历史/创建/整理/显示/面板/外观与保护
+│   │   ├── PropertiesPanel.tsx     # 右侧属性面板(含参与方 / 阶段归属赋值与「管理…」跳转)
+│   │   ├── SemanticPanel.tsx       # 语义面板:参与方与阶段的定义 / 顺序 / 删除(唯一语义入口)
+│   │   ├── SemanticOrderList.tsx   # 参与方 / 阶段通用排序行(拖动排序 / 改名 / 定位 / 删除)
+│   │   ├── OutlinePanel.tsx        # 大纲面板(节点浏览与定位,可按执行主体 / 阶段 / 参与方分组)
 │   │   ├── HistoryPanel.tsx        # 历史记录面板
 │   │   ├── ContextMenu.tsx         # 通用右键上下文菜单
 │   │   └── ConfirmDialog.tsx       # 通用确认对话框
@@ -119,8 +121,10 @@ React Flow 渲染 + CSS 样式
 | `EditableText.tsx` | 共享内联编辑组件(标题 / 描述 / 端口名 / 连线 label),支持自动聚焦 | |
 | `AnnotationBox.tsx` | 注释框(画布 / 节点 / 连线 / 产物 / 组合归属) | |
 | `Toolbar.tsx` | 全局操作入口(新建节点 / 组合 / 锁定 / 撤销重做 / 导入导出 / 清空) | |
-| `PropertiesPanel.tsx` | 选中项的属性编辑(节点 / 连线 / 组合节点聚合端口只读展示) | |
-| `OutlinePanel.tsx` | 节点大纲与组合层级导航 | |
+| `PropertiesPanel.tsx` | 选中项的属性编辑(节点 / 连线 / 组合节点聚合端口只读展示);参与方 / 阶段区块提供「管理…」跳转到语义面板 | |
+| `SemanticPanel.tsx` | 参与方与阶段的**唯一语义入口**:组织管理 + 参与方新增/改名/排序/删除 + 阶段新增/改名/排序/删除;点击行定位并选中该语义下首个节点 | 取代原 `ParticipantsPanel.tsx` |
+| `SemanticOrderList.tsx` | 参与方 / 阶段通用排序行:拖动 handle 排序、双击改名、单击定位、可选删除、聚焦高亮 | 无第三方 DnD |
+| `OutlinePanel.tsx` | 节点大纲与定位:搜索 + 按执行主体 / 阶段 / 参与方分组 | 不再承载语义顺序管理 |
 | `HistoryPanel.tsx` | 撤销 / 重做历史列表 | |
 | `ContextMenu.tsx` / `ConfirmDialog.tsx` | 右键菜单 / 删除确认模态 | 通用组件 |
 

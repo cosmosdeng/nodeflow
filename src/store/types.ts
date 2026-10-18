@@ -70,15 +70,18 @@ export interface FlowStore extends GraphState {
   showParticipantBands: boolean;
   /**
    * Phase C:拖拽悬停时的高亮候选(runtime-only,不持久化)。
-   * 高亮 ≠ semantic assignment;只有确认后才会调用 reassignNode。
-   */
-  /**
-   * Phase C:拖拽悬停时的高亮候选(runtime-only,不持久化)。
    * 可同时承载参与方 / 阶段两个轴(交叉格内两轴独立停留互不覆盖)。
    */
   reassignHighlight: { participant: string | null; stage: string | null } | null;
   /** 设置 Phase C 候选高亮(合并式;传 null 全清;不写历史) */
   setReassignHighlight: (h: Partial<{ participant: string | null; stage: string | null }> | null) => void;
+  /**
+   * 语义面板聚焦项(runtime-only,不持久化、不进文档镜像):
+   * 属性栏「管理…」或语义面板行点击时设置,用于在语义面板高亮对应参与方 / 阶段行,
+   * 实现「属性栏 ↔ 语义面板」双向联动。id 为 null 表示只打开面板、不聚焦具体项。
+   */
+  semanticFocus: { kind: 'participant' | 'stage'; id: string | null } | null;
+  setSemanticFocus: (focus: { kind: 'participant' | 'stage'; id: string | null } | null) => void;
   /**
    * Agent Interface 状态修订号(runtime-only,不持久化、不进 history snapshot)。
    * 仅由 Agent 层在成功 mutation / undo / redo 后推进;GUI 不受影响。

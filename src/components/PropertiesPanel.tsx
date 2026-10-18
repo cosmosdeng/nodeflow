@@ -112,7 +112,18 @@ function Field({ label, children, hint }: { label: string; children: ReactNode; 
   );
 }
 
-function Section({ title, children, hint }: { title: string; children: ReactNode; hint?: string }) {
+function Section({
+  title,
+  children,
+  hint,
+  action,
+}: {
+  title: string;
+  children: ReactNode;
+  hint?: string;
+  /** 标题行右侧的操作区(如「管理…」跳转到语义面板) */
+  action?: ReactNode;
+}) {
   return (
     <div style={{ marginTop: 14 }}>
       <div
@@ -123,9 +134,14 @@ function Section({ title, children, hint }: { title: string; children: ReactNode
           textTransform: 'uppercase',
           letterSpacing: 0.6,
           marginBottom: 8,
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          gap: 8,
         }}
       >
-        {title}
+        <span>{title}</span>
+        {action}
       </div>
       {children}
       {hint && <span className="helper">{hint}</span>}
@@ -136,13 +152,31 @@ function Section({ title, children, hint }: { title: string; children: ReactNode
 /* ---------------- 节点属性 ---------------- */
 
 /** 参与方分配下拉(显式 Assign:只改语义,不改 position) */
-function ParticipantField({ nodeId, disabled }: { nodeId: string; disabled?: boolean }) {
+function ParticipantField({
+  nodeId,
+  disabled,
+  onManage,
+}: {
+  nodeId: string;
+  disabled?: boolean;
+  /** 跳转到语义面板管理参与方(定义 / 顺序 / 删除) */
+  onManage?: () => void;
+}) {
   const node = useGraphStore((s) => s.nodes.find((n) => n.id === nodeId));
   const participants = useGraphStore((s) => s.participants);
   const assignParticipant = useGraphStore((s) => s.assignParticipant);
   const value = node?.data.participantId ?? '';
   return (
-    <Section title="参与方">
+    <Section
+      title="参与方"
+      action={
+        onManage ? (
+          <button className="pp-link" onClick={onManage} title="在语义面板中管理参与方(定义 / 顺序 / 删除)">
+            管理…
+          </button>
+        ) : undefined
+      }
+    >
       <div className="field">
         <label>责任主体</label>
         <select
@@ -164,7 +198,16 @@ function ParticipantField({ nodeId, disabled }: { nodeId: string; disabled?: boo
 }
 
 /** 所属阶段下拉(显式 Assign:只改 stage membership 语义,不改 position;单归属) */
-function StageField({ nodeId, disabled }: { nodeId: string; disabled?: boolean }) {
+function StageField({
+  nodeId,
+  disabled,
+  onManage,
+}: {
+  nodeId: string;
+  disabled?: boolean;
+  /** 跳转到语义面板管理阶段(定义 / 顺序 / 删除) */
+  onManage?: () => void;
+}) {
   const node = useGraphStore((s) => s.nodes.find((n) => n.id === nodeId));
   const stages = useGraphStore((s) => s.stages);
   const assignNodeStage = useGraphStore((s) => s.assignNodeStage);
@@ -173,7 +216,16 @@ function StageField({ nodeId, disabled }: { nodeId: string; disabled?: boolean }
   const current = stages.find((st) => st.nodeIds.includes(nodeId)) ?? null;
   const value = current?.id ?? '';
   return (
-    <Section title="阶段">
+    <Section
+      title="阶段"
+      action={
+        onManage ? (
+          <button className="pp-link" onClick={onManage} title="在语义面板中管理阶段(定义 / 顺序 / 删除)">
+            管理…
+          </button>
+        ) : undefined
+      }
+    >
       <div className="field">
         <label>所属阶段</label>
         <select
@@ -195,7 +247,13 @@ function StageField({ nodeId, disabled }: { nodeId: string; disabled?: boolean }
   );
 }
 
-function NodeProperties({ nodeId }: { nodeId: string }) {
+function NodeProperties({
+  nodeId,
+  onOpenSemantic,
+}: {
+  nodeId: string;
+  onOpenSemantic?: (kind: 'participant' | 'stage') => void;
+}) {
   const node = useGraphStore((s) => s.nodes.find((n) => n.id === nodeId));
   const nodes = useGraphStore((s) => s.nodes);
   const edges = useGraphStore((s) => s.edges);
@@ -359,8 +417,16 @@ function NodeProperties({ nodeId }: { nodeId: string }) {
         )}
       </Section>
 
-      <ParticipantField nodeId={nodeId} disabled={disabled} />
-      <StageField nodeId={nodeId} disabled={disabled} />
+      <ParticipantField
+        nodeId={nodeId}
+        disabled={disabled}
+        onManage={onOpenSemantic ? () => onOpenSemantic('participant') : undefined}
+      />
+      <StageField
+        nodeId={nodeId}
+        disabled={disabled}
+        onManage={onOpenSemantic ? () => onOpenSemantic('stage') : undefined}
+      />
 
       {isComposite && (
         <Section title="组合节点">
@@ -761,7 +827,14 @@ function MissingNotice() {
 
 /* ---------------- 主面板 ---------------- */
 
-export default function PropertiesPanel({ onClose }: { onClose: () => void }) {
+export default function PropertiesPanel({
+  onClose,
+  onOpenSemantic,
+}: {
+  onClose: () => void;
+  /** 打开语义面板并聚焦对应语义项(属性栏 ↔ 语义面板联动) */
+  onOpenSemantic?: (kind: 'participant' | 'stage') => void;
+}) {
   const selected = useGraphStore((s) => s.selected);
   const allLocked = useGraphStore((s) => s.allLocked);
 
@@ -777,7 +850,7 @@ export default function PropertiesPanel({ onClose }: { onClose: () => void }) {
 
   if (selected?.kind === 'node') {
     title = '节点属性';
-    body = <NodeProperties nodeId={selected.id} />;
+    body = <NodeProperties nodeId={selected.id} onOpenSemantic={onOpenSemantic} />;
   } else if (selected?.kind === 'edge') {
     title = '连线属性';
     body = <EdgeProperties edgeId={selected.id} />;

@@ -11,22 +11,22 @@ interface Props {
   showOutline: boolean;
   showProperties: boolean;
   showHistory: boolean;
-  showParticipants: boolean;
+  showSemantic: boolean;
   onToggleOutline: () => void;
   onToggleProperties: () => void;
   onToggleHistory: () => void;
-  onToggleParticipants: () => void;
+  onToggleSemantic: () => void;
 }
 
 export default function Toolbar({
   showOutline,
   showProperties,
   showHistory,
-  showParticipants,
+  showSemantic,
   onToggleOutline,
   onToggleProperties,
   onToggleHistory,
-  onToggleParticipants,
+  onToggleSemantic,
 }: Props) {
   const [fileOpen, setFileOpen] = useState(false);
   const [importOpen, setImportOpen] = useState(false);
@@ -434,15 +434,6 @@ export default function Toolbar({
         ⧉ 组合节点
       </button>
 
-      <button
-        className="tb-btn"
-        disabled={allLocked || annotations.length === 0}
-        title="一键展开 / 收起所有注释"
-        onClick={() => toggleAllAnnotations()}
-      >
-        💬 注释
-      </button>
-
       <span className="sep" />
 
       <button
@@ -456,6 +447,17 @@ export default function Toolbar({
         onClick={runSmartArrange}
       >
         ⤺ 自动排列
+      </button>
+      <span className="sep" />
+
+      {/* 显示:只影响画布可见性,不改变语义 */}
+      <button
+        className="tb-btn"
+        disabled={allLocked || annotations.length === 0}
+        title="一键展开 / 收起所有注释"
+        onClick={() => toggleAllAnnotations()}
+      >
+        💬 注释
       </button>
       <button
         className={`tb-btn tb-band ${showStageBands ? 'active' : ''}`}
@@ -474,19 +476,16 @@ export default function Toolbar({
 
       <span className="sep" />
 
-      <button
-        className={`tb-btn ${allLocked ? 'active' : ''}`}
-        style={allLocked ? { borderColor: 'rgba(232,176,40,.6)', color: '#ffc53d', fontWeight: 600 } : undefined}
-        title={allLocked ? '演示模式已锁定,点击解锁全部内容' : '演示模式:一键锁定所有节点与连线,防止误编辑'}
-        onClick={toggleLockAll}
-      >
-        {allLocked ? '🔒 锁定全部' : '🔓 锁定全部'}
-      </button>
-
-      <span className="sep" />
-
+      {/* 面板:左侧大纲 / 语义,右侧属性 / 历史 */}
       <button className={`tb-btn ${showOutline ? 'active' : ''}`} onClick={onToggleOutline}>
         🗂 大纲
+      </button>
+      <button
+        className={`tb-btn ${showSemantic ? 'active' : ''}`}
+        title="语义面板:参与方与阶段的定义 / 顺序 / 删除"
+        onClick={onToggleSemantic}
+      >
+        🧭 语义
       </button>
       <button className={`tb-btn ${showProperties ? 'active' : ''}`} onClick={onToggleProperties}>
         ⚙ 属性
@@ -494,17 +493,23 @@ export default function Toolbar({
       <button className={`tb-btn ${showHistory ? 'active' : ''}`} onClick={onToggleHistory}>
         🕘 历史
       </button>
-      <button className={`tb-btn ${showParticipants ? 'active' : ''}`} onClick={onToggleParticipants}>
-        👤 参与方
-      </button>
 
       <span className="sep" />
 
+      {/* 外观与保护 */}
       <button className="tb-btn" title="切换连线风格(直角/弧线)" onClick={cycleEdgeStyle}>
         {edgeStyle === 'bezier' ? '〰' : '⤢'} {EDGE_STYLE_LABELS[edgeStyle]}
       </button>
       <button className="tb-btn" title="切换画布配色" onClick={cycleTheme}>
         {theme === 'dark' ? '🌙' : '☀️'} {THEME_LABELS[theme]}
+      </button>
+      <button
+        className={`tb-btn ${allLocked ? 'active' : ''}`}
+        style={allLocked ? { borderColor: 'rgba(232,176,40,.6)', color: '#ffc53d', fontWeight: 600 } : undefined}
+        title={allLocked ? '演示模式已锁定,点击解锁全部内容' : '演示模式:一键锁定所有节点与连线,防止误编辑'}
+        onClick={toggleLockAll}
+      >
+        {allLocked ? '🔒 锁定全部' : '🔓 锁定全部'}
       </button>
 
       <div className="toolbar-right">

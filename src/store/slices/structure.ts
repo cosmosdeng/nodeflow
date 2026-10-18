@@ -230,6 +230,9 @@ export function createStructureSlice({ set, get }: SliceDeps): Partial<FlowStore
       get().markHistory();
       set({ nodes, arrangePending: false, arrangePendingKind: undefined });
     },
+    // 语义面板聚焦(runtime-only,不写历史、不持久化)
+    setSemanticFocus: (focus) => set({ semanticFocus: focus }),
+
     toggleStageBands: () => {
       set((st) => ({ showStageBands: !st.showStageBands }));
     },

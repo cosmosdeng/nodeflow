@@ -4,7 +4,7 @@ import FlowCanvas from './components/FlowCanvas';
 import OutlinePanel from './components/OutlinePanel';
 import PropertiesPanel from './components/PropertiesPanel';
 import HistoryPanel from './components/HistoryPanel';
-import ParticipantsPanel from './components/ParticipantsPanel';
+import SemanticPanel from './components/SemanticPanel';
 import CompositePopupView from './components/CompositePopupView';
 import DialogHost from './components/DialogHost';
 import { openCompositePopup } from './lib/compositePopup';
@@ -17,7 +17,7 @@ function MainApp() {
   // [product] 启动默认不打开属性面板,需要时点工具栏「⚙ 属性」打开
   const [showProperties, setShowProperties] = useState(false);
   const [showHistory, setShowHistory] = useState(false);
-  const [showParticipants, setShowParticipants] = useState(false);
+  const [showSemantic, setShowSemantic] = useState(false);
 
   const undo = useGraphStore((s) => s.undo);
   const redo = useGraphStore((s) => s.redo);
@@ -167,17 +167,37 @@ function MainApp() {
     return () => window.removeEventListener('keydown', onKey);
   }, [allLocked, undo, redo, saveNow, copySelection, pasteClipboard]);
 
+  const setSemanticFocus = useGraphStore((s) => s.setSemanticFocus);
+
+  /** 属性栏「管理…」 → 打开语义面板并聚焦当前选中节点的参与方 / 阶段(双向联动) */
+  const openSemantic = (kind: 'participant' | 'stage') => {
+    const st = useGraphStore.getState();
+    let id: string | null = null;
+    const sel = st.selected;
+    if (sel?.kind === 'node') {
+      const node = st.nodes.find((n) => n.id === sel.id);
+      if (node) {
+        id =
+          kind === 'participant'
+            ? (node.data.participantId ?? null)
+            : (st.stages.find((s) => s.nodeIds.includes(node.id))?.id ?? null);
+      }
+    }
+    setSemanticFocus({ kind, id });
+    setShowSemantic(true);
+  };
+
   return (
     <div className="app">
       <Toolbar
         showOutline={showOutline}
         showProperties={showProperties}
         showHistory={showHistory}
-        showParticipants={showParticipants}
+        showSemantic={showSemantic}
         onToggleOutline={() => setShowOutline((v) => !v)}
         onToggleProperties={() => setShowProperties((v) => !v)}
         onToggleHistory={() => setShowHistory((v) => !v)}
-        onToggleParticipants={() => setShowParticipants((v) => !v)}
+        onToggleSemantic={() => setShowSemantic((v) => !v)}
       />
 
       {/* 标签栏:项目文档标签 + 当前项目内(主画布 + 组合内部画布)标签 */}
@@ -255,7 +275,7 @@ function MainApp() {
 
       <div className="app-main">
         {showOutline && <OutlinePanel onClose={() => setShowOutline(false)} />}
-        {showParticipants && <ParticipantsPanel onClose={() => setShowParticipants(false)} />}
+        {showSemantic && <SemanticPanel onClose={() => setShowSemantic(false)} />}
         <div style={{ flex: 1, position: 'relative', display: 'flex' }}>
           <FlowCanvas />
           {linkHint && (
@@ -280,7 +300,7 @@ function MainApp() {
             </div>
           )}
         </div>
-        {showProperties && <PropertiesPanel onClose={() => setShowProperties(false)} />}
+        {showProperties && <PropertiesPanel onClose={() => setShowProperties(false)} onOpenSemantic={openSemantic} />}
         {showHistory && <HistoryPanel onClose={() => setShowHistory(false)} />}
       </div>
 

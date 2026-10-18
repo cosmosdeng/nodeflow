@@ -8,126 +8,26 @@ interface Props {
   onClose: () => void;
 }
 
-/** 排序段内一行的展示模型 */
-interface OrderItem {
-  id: string;
-  name: string;
-  count?: number;
-  empty?: boolean;
-}
+type GroupBy = 'flat' | 'actor' | 'stage' | 'participant';
 
 /**
- * 参与方 / 阶段 通用排序行列表(仅 UI 排序 + 双击改名):
- * - drag handle 触发 HTML5 drag,drop 后调用 store 的 reorder action;
- * - 双击行进入就地名称编辑,commit 后调用 store 的 rename action;
- * - 不引入第三方 DnD 库;整行看起来不可拖(只有 handle 可拖)。
+ * 大纲栏 —— 只负责「节点维度的浏览与定位」。
+ *
+ * 与语义面板的分工:本面板不提供参与方 / 阶段的定义与顺序管理(那是「🧭 语义」面板的职责),
+ * 但支持**按阶段 / 按参与方分组浏览**,从而把语义结构与节点列表关联起来。
  */
-function OrderRowList({
-  kind,
-  items,
-  onReorder,
-  onRename,
-}: {
-  kind: string;
-  items: OrderItem[];
-  onReorder: (from: number, to: number) => void;
-  onRename: (id: string, name: string) => void;
-}) {
-  const [dragOver, setDragOver] = useState<number | null>(null);
-  const [editing, setEditing] = useState<{ id: string; value: string } | null>(null);
-  if (items.length === 0) return null;
-
-  const commitEdit = () => {
-    if (!editing) return;
-    const v = editing.value.trim();
-    if (v && v !== items.find((x) => x.id === editing.id)?.name) onRename(editing.id, v);
-    setEditing(null);
-  };
-
-  return (
-    <div className="mx-order-list">
-      {items.map((it, i) => {
-        const isEditing = editing?.id === it.id;
-        return (
-          <div
-            key={it.id}
-            className={`mx-order-row${it.empty ? ' empty' : ''}${dragOver === i ? ' drop' : ''}`}
-            onDragOver={(e) => {
-              e.preventDefault();
-              e.dataTransfer.dropEffect = 'move';
-              setDragOver(i);
-            }}
-            onDragLeave={() => setDragOver((cur) => (cur === i ? null : cur))}
-            onDrop={(e) => {
-              e.preventDefault();
-              const from = Number(e.dataTransfer.getData(`text/mx-${kind}`));
-              if (Number.isInteger(from) && from >= 0 && from < items.length && from !== i) {
-                onReorder(from, i);
-              }
-              setDragOver(null);
-            }}
-            onDoubleClick={(e) => {
-              e.stopPropagation();
-              if (it.name === '未分配') return; // 虚拟行不可改名
-              setEditing({ id: it.id, value: it.name });
-            }}
-          >
-            <span
-              className="mx-order-handle"
-              title="拖动调整顺序;双击行可改名"
-              draggable
-              onDragStart={(e) => {
-                e.dataTransfer.setData(`text/mx-${kind}`, String(i));
-                e.dataTransfer.effectAllowed = 'move';
-              }}
-            >
-              ☰
-            </span>
-            {isEditing ? (
-              <input
-                className="mx-order-edit-input"
-                autoFocus
-                value={editing!.value}
-                onChange={(e) => setEditing((cur) => (cur ? { ...cur, value: e.target.value } : cur))}
-                onFocus={(e) => e.target.select()}
-                onBlur={commitEdit}
-                onKeyDown={(e) => {
-                  e.stopPropagation();
-                  if (e.key === 'Enter') commitEdit();
-                  else if (e.key === 'Escape') setEditing(null);
-                }}
-              />
-            ) : (
-              <span className="mx-order-name" title={it.name}>
-                {it.name}
-              </span>
-            )}
-            {!isEditing && typeof it.count === 'number' && <span className="mx-order-count">{it.count}</span>}
-          </div>
-        );
-      })}
-    </div>
-  );
-}
-
 export default function OutlinePanel({ onClose }: Props) {
   const nodes = useGraphStore((s) => s.nodes);
   const edges = useGraphStore((s) => s.edges);
   const selected = useGraphStore((s) => s.selected);
   const setSelected = useGraphStore((s) => s.setSelected);
   const participants = useGraphStore((s) => s.participants);
-  const participantOrder = useGraphStore((s) => s.participantOrder);
-  const reorderParticipant = useGraphStore((s) => s.reorderParticipant);
   const stages = useGraphStore((s) => s.stages);
-  const stageOrder = useGraphStore((s) => s.stageOrder);
-  const reorderStage = useGraphStore((s) => s.reorderStage);
-  const updateParticipant = useGraphStore((s) => s.updateParticipant);
-  const updateStage = useGraphStore((s) => s.updateStage);
   const arrangePending = useGraphStore((s) => s.arrangePending);
   const { setCenter } = useReactFlow();
 
   const [keyword, setKeyword] = useState('');
-  const [groupBy, setGroupBy] = useState<'actor' | 'flat'>('flat');
+  const [groupBy, setGroupBy] = useState<GroupBy>('flat');
 
   const filtered = useMemo(() => {
     const kw = keyword.trim().toLowerCase();
@@ -149,15 +49,43 @@ export default function OutlinePanel({ onClose }: Props) {
 
   const groups = useMemo(() => {
     if (groupBy === 'flat') return [{ key: 'all', title: '全部节点', items: filtered }];
-    const comps = filtered.filter((n) => n.data.composite);
-    const actorGroups = ACTOR_KINDS.map((a: ActorType) => ({
-      key: a as string,
-      title: `${ACTOR_META[a].label}节点`,
-      items: filtered.filter((n) => n.data.actor === a && !n.data.composite),
-    })).filter((g) => g.items.length > 0);
-    if (comps.length) actorGroups.unshift({ key: 'composite', title: '⧉ 组合节点', items: comps });
-    return actorGroups;
-  }, [filtered, groupBy]);
+
+    if (groupBy === 'actor') {
+      const comps = filtered.filter((n) => n.data.composite);
+      const actorGroups = ACTOR_KINDS.map((a: ActorType) => ({
+        key: a as string,
+        title: `${ACTOR_META[a].label}节点`,
+        items: filtered.filter((n) => n.data.actor === a && !n.data.composite),
+      })).filter((g) => g.items.length > 0);
+      if (comps.length) actorGroups.unshift({ key: 'composite', title: '⧉ 组合节点', items: comps });
+      return actorGroups;
+    }
+
+    if (groupBy === 'stage') {
+      const stageGroups = stages
+        .map((st) => ({
+          key: `stage:${st.id}`,
+          title: `▦ ${st.name || '未命名阶段'}`,
+          items: filtered.filter((n) => st.nodeIds.includes(n.id)),
+        }))
+        .filter((g) => g.items.length > 0);
+      const rest = filtered.filter((n) => !stages.some((st) => st.nodeIds.includes(n.id)));
+      if (rest.length) stageGroups.push({ key: 'stage:none', title: '未归属阶段', items: rest });
+      return stageGroups;
+    }
+
+    // participant
+    const partGroups = participants
+      .map((p) => ({
+        key: `participant:${p.id}`,
+        title: `👤 ${p.name}`,
+        items: filtered.filter((n) => n.data.participantId === p.id),
+      }))
+      .filter((g) => g.items.length > 0);
+    const rest = filtered.filter((n) => !n.data.participantId);
+    if (rest.length) partGroups.push({ key: 'participant:none', title: '未分配参与方', items: rest });
+    return partGroups;
+  }, [filtered, groupBy, stages, participants]);
 
   const edgeCountOf = (nodeId: string) => edges.filter((e) => e.source === nodeId || e.target === nodeId).length;
 
@@ -173,39 +101,6 @@ export default function OutlinePanel({ onClose }: Props) {
     }
   };
 
-  // 参与方显示顺序 = participantOrder(仅有效)+ 未列出者追加,与 P3 computeMatrixLayout 同规则;不改 store。
-  const orderedParticipantIds = useMemo(() => {
-    const valid = participantOrder.filter((id) => participants.some((p) => p.id === id));
-    const seen = new Set(valid);
-    return [...valid, ...participants.filter((p) => !seen.has(p.id)).map((p) => p.id)];
-  }, [participants, participantOrder]);
-
-  // 阶段显示顺序 = stageOrder(仅有效)+ 未列出者追加,同规则;不改 store。
-  const orderedStageIds = useMemo(() => {
-    const valid = stageOrder.filter((id) => stages.some((st) => st.id === id));
-    const seen = new Set(valid);
-    return [...valid, ...stages.filter((st) => !seen.has(st.id)).map((st) => st.id)];
-  }, [stages, stageOrder]);
-
-  const participantItems: OrderItem[] = useMemo(
-    () =>
-      orderedParticipantIds.map((pid) => {
-        const p = participants.find((x) => x.id === pid);
-        const count = nodes.filter((n) => !n.hidden && n.data?.participantId === pid).length;
-        return { id: pid, name: p?.name ?? '未命名参与方', count, empty: count === 0 };
-      }),
-    [orderedParticipantIds, participants, nodes],
-  );
-
-  const stageItems: OrderItem[] = useMemo(
-    () =>
-      orderedStageIds.map((sid) => {
-        const st = stages.find((x) => x.id === sid);
-        return { id: sid, name: st?.name ?? '未命名阶段' };
-      }),
-    [orderedStageIds, stages],
-  );
-
   return (
     <aside className={`panel${arrangePending ? ' pending' : ''}`} style={{ width: 260 }}>
       {arrangePending && <div className="mx-pending-note">顺序已改变</div>}
@@ -216,42 +111,19 @@ export default function OutlinePanel({ onClose }: Props) {
         </button>
       </div>
       <div className="panel-body">
-        {/* 参与方顺序(拖动 handle 排序 → reorderParticipant,不改节点位置) */}
-        {participantItems.length > 0 && (
-          <div className="mx-section">
-            <div className="mx-sec-title">参与方</div>
-            <OrderRowList
-              kind="participant"
-              items={participantItems}
-              onReorder={(from, to) => reorderParticipant(from, to)}
-              onRename={(id, name) => updateParticipant(id, { name })}
-            />
-          </div>
-        )}
+        <div className="helper" style={{ marginBottom: 8 }}>
+          参与方与阶段的定义 / 顺序 / 删除在工具栏「🧭 语义」面板;这里按节点浏览与定位。
+        </div>
 
-        {/* 阶段顺序(拖动 handle 排序 → reorderStage,不改节点位置) */}
-        {stageItems.length > 0 && (
-          <div className="mx-section">
-            <div className="mx-sec-title">阶段</div>
-            <OrderRowList
-              kind="stage"
-              items={stageItems}
-              onReorder={(from, to) => reorderStage(from, to)}
-              onRename={(id, name) => updateStage(id, { name })}
-            />
-          </div>
-        )}
-
-        {(participantItems.length > 0 || stageItems.length > 0) && <div className="mx-sec-divider" />}
-
-        <div className="mx-sec-title">节点</div>
         <div className="field">
           <input placeholder="搜索节点…" value={keyword} onChange={(e) => setKeyword(e.target.value)} />
         </div>
         <div className="field" style={{ marginTop: -4 }}>
-          <select value={groupBy} onChange={(e) => setGroupBy(e.target.value as 'actor' | 'flat')}>
+          <select value={groupBy} onChange={(e) => setGroupBy(e.target.value as GroupBy)}>
             <option value="flat">平铺显示</option>
             <option value="actor">按执行主体分组</option>
+            <option value="stage">按阶段分组</option>
+            <option value="participant">按参与方分组</option>
           </select>
         </div>
 
@@ -264,7 +136,7 @@ export default function OutlinePanel({ onClose }: Props) {
 
         {groups.map((g) => (
           <div key={g.key} style={{ marginBottom: 10 }}>
-            {groupBy === 'actor' && (
+            {groupBy !== 'flat' && (
               <div
                 style={{
                   fontSize: 11,

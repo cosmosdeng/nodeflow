@@ -104,6 +104,7 @@ export const useGraphStore = create<FlowStore>()(
       stageFlashId: null,
       loadError: null,
       annotAutoEditId: null,
+      semanticFocus: null,
       past: initialActiveDoc?.past ?? [],
       future: initialActiveDoc?.future ?? [],
       selected: null,
