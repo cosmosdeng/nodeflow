@@ -44,6 +44,10 @@
   - 改动:新增 `SemanticPanel.tsx`(取代 `ParticipantsPanel.tsx`)作为唯一语义入口(组织 / 参与方 / 阶段三段,支持新增、改名、拖动排序、删除、定位);大纲栏移除顺序段,改为节点浏览 + 按执行主体 / 阶段 / 参与方分组;属性栏保留归属赋值并新增「管理…」跳转,通过 `semanticFocus` 双向联动。
   - 附带:工具栏按「文件 → 历史 → 创建 → 整理 → 显示 → 面板 → 外观与保护」重排;`SemanticOrderList.tsx` 抽为共享排序组件。
 
+- [x] **语义面板批量归属(参与方 / 阶段)**(已完成)
+  - 背景:语义面板只能做定义与顺序,批量赋值能力缺失 —— 要给 20 个节点指定同一参与方,得在属性栏逐个改。
+  - 改动:新增 store action `assignParticipantToMany` / `assignStageToMany`(`src/store/slices/structure.ts`),整批**单次** `markHistory()`,`Ctrl+Z` 一步还原全部;阶段沿用单归属语义(先从原阶段移出)。UI 上 `SemanticOrderList` 行尾加 `⊕`(无选中节点时禁用),语义面板顶部提示条显示「已选 N 个节点」。
+  - 测试:`src/store/__tests__/graphStore.bulkAssign.test.ts` 12 用例(批量生效、单次历史、null 清空/脱离、非法 id 静默、重复 id 去重、演示锁定)。
 
 > 实现顺序建议:先视觉样式(1-2)→ 再基础交互(3)→ 测试加固(4)→ 布局算法(5)→ 组合结构(6-7)→ 全局架构(8)。先建立测试基线(4)再引入新算法(5),符合「由简到繁、由局部到全局」的递进。
 

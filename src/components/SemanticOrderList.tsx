@@ -24,6 +24,10 @@ interface Props {
   onSelect?: (id: string) => void;
   /** 传了该回调则在行尾显示删除按钮 */
   onDelete?: (id: string) => void;
+  /** 传了该回调则在行尾显示「批量归属」按钮(把画布选中节点归属到该语义项) */
+  onAssign?: (id: string) => void;
+  /** 当前画布选中且可归属的节点数;0 时批量归属按钮禁用 */
+  assignCount?: number;
   disabled?: boolean;
 }
 
@@ -42,6 +46,8 @@ export default function SemanticOrderList({
   activeId,
   onSelect,
   onDelete,
+  onAssign,
+  assignCount = 0,
   disabled,
 }: Props) {
   const [dragOver, setDragOver] = useState<number | null>(null);
@@ -126,6 +132,23 @@ export default function SemanticOrderList({
             )}
             {!isEditing && it.tag && <span className="mx-order-tag">{it.tag}</span>}
             {!isEditing && typeof it.count === 'number' && <span className="mx-order-count">{it.count}</span>}
+            {onAssign && !isEditing && !disabled && (
+              <button
+                className="mx-order-assign"
+                disabled={assignCount === 0}
+                title={
+                  assignCount > 0
+                    ? `把选中的 ${assignCount} 个节点归属到「${it.name}」(一次撤销可还原)`
+                    : '先在画布选中节点(可框选多个)'
+                }
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onAssign(it.id);
+                }}
+              >
+                ⊕
+              </button>
+            )}
             {onDelete && !isEditing && !disabled && (
               <button
                 className="mx-order-del"

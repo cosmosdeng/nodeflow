@@ -4,6 +4,35 @@
 
 ---
 
+## 2026-10-21（三）语义面板批量归属
+
+补上 v0.4.0-next.4 遗留的第一项：语义此前只能**逐节点**赋值，批量场景要在属性栏重复操作 N 次。
+
+### 已完成
+
+| 项 | 内容 | 模块 |
+|---|---|---|
+| **批量归属 action** | 新增 `assignParticipantToMany(nodeIds, participantId)` 与 `assignStageToMany(nodeIds, stageId)`：整批**单次** `markHistory()`，`Ctrl+Z` 一步还原全部节点；阶段沿用单归属语义（先从原阶段移出再加入）；非法 id / 空列表 / 演示锁定下静默返回，不记历史 | `src/store/slices/structure.ts` + `src/store/types.ts` |
+| **语义面板交互** | `SemanticOrderList` 行尾新增 `⊕` 批量归属按钮（无选中节点时禁用并提示）；语义面板顶部提示条显示「已选 N 个节点 · 点行尾 ⊕ 批量归属」；选中集合取 React Flow 多选（`node.selected`），回退 store 单选，排除组合内隐藏子节点 | `src/components/SemanticOrderList.tsx` + `src/components/SemanticPanel.tsx` |
+| **样式** | `.mx-order-assign`（hover 转 accent、disabled 降透明度）、`.mx-bulk-hint` / `.active`（accent 描边提示条） | `src/styles/global.css` |
+| **store 单测** | 新增 12 用例：批量生效且未选中节点不受影响、整批只占 1 条历史、undo 全集还原、`null` 清空 / 脱离、非法 id 静默且不留历史、重复 id 去重、演示锁定不动 | `src/store/__tests__/graphStore.bulkAssign.test.ts` |
+
+### 验证
+
+- **单元测试**：467 用例 / 49 文件全绿（新增 12）
+- **类型检查**：`tsc` 干净
+- **Lint**：0 error / 1 warning（既有 `EditableText`）
+- **Format / 构建**：`format:check` 通过、`bun run build` 通过
+- **预览**：dev server `http://127.0.0.1:5173/` 待人工确认
+
+### 遗留
+
+1. 批量归属暂未覆盖「取消归属」的一键入口（当前靠整批重新归属或逐个清空）
+2. 组件层仍为 0 测试，本次交互改动依赖 store 层测试 + 人工预览
+3. `syncActiveDoc` 与自动保存双写 documents、`MIRROR_FIELDS` 手工维护仍未处理
+
+---
+
 ## 2026-10-18（日）发布 v0.4.0-next.4
 
 - **版本号**：根 `package.json` 与 `mcp-server/package.json` 统一 `0.4.0-next.3` → **`0.4.0-next.4`**（tag `v0.4.0-next.4`）

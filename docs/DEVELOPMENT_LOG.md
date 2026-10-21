@@ -2,6 +2,17 @@
 
 > 按时间倒序记录开发历程。新功能、重要修复、里程碑都应在此追加。
 
+## 2026-10-21 · 语义面板批量归属(完成)
+
+- **动机**:v0.4.0-next.4 里语义面板解决了「在哪管理参与方 / 阶段」,但赋值仍是逐节点的 —— 给 20 个节点指定同一参与方要在属性栏重复 20 次。
+- **store 层**:新增 `assignParticipantToMany(nodeIds, participantId)` 与 `assignStageToMany(nodeIds, stageId)`(`src/store/slices/structure.ts`)。要点是**整批只调一次 `markHistory()`**,所以这看似 UI 层的糖其实必须落在 store:逐节点调用现有的 `assignParticipant` / `assignNodeStage` 会写 N 条历史,撤销要按 N 次。阶段沿用单归属语义(先 `detachNodeIdsFromStages` 再逐个 `addNodeToStage`)。非法 id / 空列表 / 演示锁定一律静默返回且不记历史。
+- **UI 层**:`SemanticOrderList` 行尾加 `⊕`(无选中节点时 disabled + tooltip 说明),语义面板顶部提示条显示「已选 N 个节点」。选中集合优先 React Flow 多选(`node.selected`),回退 store 单选,并排除组合内已隐藏的子节点(避免改到看不见的东西)。
+- **测试**:`graphStore.bulkAssign.test.ts` 12 用例 —— 批量生效且未选中节点不受影响、整批只占 1 条历史、undo 全集还原、`null` 清空 / 脱离、非法 id 静默且不留历史、重复 id 去重、演示锁定不动。
+- 验证:467 用例 / 49 文件全绿;`tsc` 干净;lint 0 error / 1 warn;`format:check` 与 `build` 通过。
+- 遗留:暂无「取消归属」的一键入口;组件层仍 0 测试,本次改动靠 store 测试 + 人工预览兜底。
+
+---
+
 ## 2026-10-18 · 发布 v0.4.0-next.4(完成)
 
 - **版本号**:根 `package.json` 与 `mcp-server/package.json` 统一 → `0.4.0-next.4`,tag `v0.4.0-next.4`,提交 `chore(release): prepare v0.4.0-next.4`(`aa78641`)。

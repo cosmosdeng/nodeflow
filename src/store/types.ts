@@ -217,6 +217,17 @@ export interface FlowStore extends GraphState {
   /** 给节点显式指定所属阶段(单归属:会自动从其它阶段移出;null=脱离所有阶段;只改语义,不改 position) */
   assignNodeStage: (nodeId: string, stageId: string | null) => void;
   /**
+   * 批量归属(语义面板行尾「⊕」):把一组节点统一指定到同一参与方。
+   * 整体只记录**一次**历史快照,Undo 一步还原全部节点;只改语义,不改 position。
+   * participantId 为 null 表示全部清空归属。
+   */
+  assignParticipantToMany: (nodeIds: string[], participantId: string | null) => void;
+  /**
+   * 批量归属(语义面板行尾「⊕」):把一组节点统一加入同一阶段
+   * (单归属:已在其它的会先移出;null = 全部脱离所有阶段)。整体只记录一次历史快照。
+   */
+  assignStageToMany: (nodeIds: string[], stageId: string | null) => void;
+  /**
    * Phase C:确认后的 semantic reassignment —— 一次原子事务同时写入
    * position + (可选)participantId + (可选)stageId;Undo/Redo 一步恢复。
    */

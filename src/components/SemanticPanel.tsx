@@ -49,6 +49,8 @@ export default function SemanticPanel({ onClose }: Props) {
   const updateStage = useGraphStore((s) => s.updateStage);
   const deleteStage = useGraphStore((s) => s.deleteStage);
   const reorderStage = useGraphStore((s) => s.reorderStage);
+  const assignParticipantToMany = useGraphStore((s) => s.assignParticipantToMany);
+  const assignStageToMany = useGraphStore((s) => s.assignStageToMany);
   const selectStage = useGraphStore((s) => s.selectStage);
   const setSelected = useGraphStore((s) => s.setSelected);
   const setSemanticFocus = useGraphStore((s) => s.setSemanticFocus);
@@ -103,6 +105,31 @@ export default function SemanticPanel({ onClose }: Props) {
       }),
     [orderedStageIds, stages, nodes],
   );
+
+  // 画布选中且可批量归属的节点:优先 React Flow 多选(node.selected),回退 store 单选
+  const assignableNodeIds = useMemo(() => {
+    const multi = nodes.filter((n) => n.selected && !n.hidden).map((n) => n.id);
+    if (multi.length > 0) return multi;
+    if (selected?.kind === 'node') {
+      const n = nodes.find((x) => x.id === selected.id);
+      if (n && !n.hidden) return [n.id];
+    }
+    return [];
+  }, [nodes, selected]);
+
+  function handleAssignParticipant(pid: string) {
+    const ids = assignableNodeIds;
+    if (ids.length === 0) return;
+    assignParticipantToMany(ids, pid);
+    setSemanticFocus({ kind: 'participant', id: pid });
+  }
+
+  function handleAssignStage(sid: string) {
+    const ids = assignableNodeIds;
+    if (ids.length === 0) return;
+    assignStageToMany(ids, sid);
+    setSemanticFocus({ kind: 'stage', id: sid });
+  }
 
   // 选中节点所属语义(属性栏联动的兜底高亮:未显式聚焦时跟随当前选中节点)
   const selectedNode = selected?.kind === 'node' ? nodes.find((n) => n.id === selected.id) : undefined;
@@ -240,6 +267,15 @@ export default function SemanticPanel({ onClose }: Props) {
         </button>
       </div>
       <div className="panel-body">
+        <div className={`mx-bulk-hint${assignableNodeIds.length > 0 ? ' active' : ''}`}>
+          {assignableNodeIds.length > 0 ? (
+            <>
+              已选 <b>{assignableNodeIds.length}</b> 个节点 · 点行尾 ⊕ 批量归属(一次撤销可还原)
+            </>
+          ) : (
+            <>在画布框选多个节点后,可点行尾 ⊕ 批量归属</>
+          )}
+        </div>
         <div className="pp-section">
           <div className="pp-section-title">组织(可选)</div>
           <div className="pp-add-row">
@@ -312,6 +348,8 @@ export default function SemanticPanel({ onClose }: Props) {
               onRename={(id, name) => updateParticipant(id, { name })}
               onSelect={focusParticipant}
               onDelete={handleDeleteParticipant}
+              onAssign={handleAssignParticipant}
+              assignCount={assignableNodeIds.length}
             />
           )}
           {unassigned.length > 0 && (
@@ -339,6 +377,8 @@ export default function SemanticPanel({ onClose }: Props) {
               onRename={(id, name) => updateStage(id, { name })}
               onSelect={focusStage}
               onDelete={handleDeleteStage}
+              onAssign={handleAssignStage}
+              assignCount={assignableNodeIds.length}
             />
           )}
         </div>

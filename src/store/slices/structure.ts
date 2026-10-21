@@ -384,6 +384,33 @@ export function createStructureSlice({ set, get }: SliceDeps): Partial<FlowStore
         stages: stageId ? addNodeToStage(st.stages, stageId, nodeId) : detachNodeIdsFromStages(st.stages, [nodeId]),
       }));
     },
+
+    assignParticipantToMany: (nodeIds, participantId) => {
+      if (get().allLocked) return;
+      const ids = new Set(nodeIds);
+      if (ids.size === 0) return;
+      if (participantId && !get().participants.some((p) => p.id === participantId)) return;
+      // 批量 = 一次事务:单次 markHistory,Undo 一步回到归属前
+      get().markHistory();
+      set((s) => ({
+        nodes: s.nodes.map((n) =>
+          ids.has(n.id) ? { ...n, data: { ...n.data, participantId: participantId ?? undefined } } : n,
+        ),
+      }));
+    },
+
+    assignStageToMany: (nodeIds, stageId) => {
+      if (get().allLocked) return;
+      const ids = nodeIds.filter((id, i, arr) => arr.indexOf(id) === i);
+      if (ids.length === 0) return;
+      if (stageId && !get().stages.some((st) => st.id === stageId)) return;
+      get().markHistory();
+      set((s) => {
+        // 单归属语义:先从所有阶段移出,再整体加入目标阶段(null 则只移出)
+        const base = detachNodeIdsFromStages(s.stages, ids);
+        return { stages: stageId ? ids.reduce((acc, nid) => addNodeToStage(acc, stageId, nid), base) : base };
+      });
+    },
     reassignNode: (nodeId, patch, opts) => {
       if (get().allLocked) return;
       const s = get();
