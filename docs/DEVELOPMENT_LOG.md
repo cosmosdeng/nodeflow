@@ -2,6 +2,17 @@
 
 > 按时间倒序记录开发历程。新功能、重要修复、里程碑都应在此追加。
 
+## 2026-10-27 · 连线「扭弯」根治:控制臂严格沿端口法线延伸(完成)
+
+用户两张截图定位到两类扭弯:①连线到达 target 时从节点顶部掠下来进侧端口;②连线从 source 出来后向左拐出反向 S 形大弯。根因:旧版(含 React Flow `getBezierPath`)控制点按 dx/dy **轴向比例**取值——控制臂可以指向端口法线的反方向,曲线从端口出发没走出多远就贴着节点拐弯。
+
+- **新增 `portNormal(pos)`**:端口外法线单位向量(Right→+x、Left→-x、Top→-y、Bottom→+y)。
+- **新增 `buildNativeBezier` 替换 `getBezierPath`**:控制臂严格沿两端端口法线延伸 `e=max(min(60,dist*0.5), dist*0.45)`——曲线先从端口沿法线「走出去」再圆滑弯向对方,出口/进入段都落在节点外 0°~180° 扇形内;末段恒从端口法线侧进入(不再从节点顶部拐下)。
+- **`buildBezierAvoiding` 改造**:签名补 sourcePosition/targetPosition;控制臂沿法线延伸 `e=max(24,dist*0.35)`,拱出量 bend 只作为垂直偏移叠加——旧版 `c1.x=dx*0.35` 在 target 位于法线反方向时会往回翘(截图 S 形弯的直接来源),新版出口恒合规。
+- **测试**:500 用例 / 51 文件全绿,新增 3 用例(Right 端口绕障控制臂沿法线、Bottom→Left 出入沿法线、长斜跨沿法线进入);tsc/lint/build 通过。
+
+---
+
 ## 2026-10-27 · 连线渲染两条新规则:覆盖节点 + 端口出口 0°~180° 扇形约束(完成)
 
 - **规则一「连线永远覆盖在节点上面」**:CSS 把 `.react-flow__edges` z-index(0→1)提到 `.react-flow__nodes`(1→0)之上,连线始终绘制在节点上层;同时 edges 层 `pointer-events:none` + edge `visibleStroke`,让连线的空白区穿透,节点仍可点击/拖拽/框选。

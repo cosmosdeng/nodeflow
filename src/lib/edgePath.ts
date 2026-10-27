@@ -1,4 +1,4 @@
-import { getBezierPath, getSmoothStepPath, Position } from '@xyflow/react';
+import { getSmoothStepPath, Position } from '@xyflow/react';
 
 /** 障碍节点包围盒(世界坐标) */
 export interface ObstacleRect {
@@ -189,18 +189,10 @@ export function computeEdgePath(params: ComputePathParams): PathResult {
   let nativeLabelX: number;
   let nativeLabelY: number;
   if (edgeStyle === 'bezier') {
-    const [path, lx, ly] = getBezierPath({
-      sourceX,
-      sourceY,
-      sourcePosition,
-      targetX,
-      targetY,
-      targetPosition,
-      curvature: 0.45,
-    });
-    nativePath = path;
-    nativeLabelX = lx;
-    nativeLabelY = ly;
+    const b = buildNativeBezier(sourceX, sourceY, sourcePosition, targetX, targetY, targetPosition);
+    nativePath = b.path;
+    nativeLabelX = b.labelX;
+    nativeLabelY = b.labelY;
   } else {
     const [path, lx, ly] = getSmoothStepPath({
       sourceX,
@@ -232,7 +224,16 @@ export function computeEdgePath(params: ComputePathParams): PathResult {
     // 就**放弃绕障**回退原生路径(让线盖过节点) —— 否则弧线会激进出一个大弯。
     let avoiding: PathResult | null;
     if (edgeStyle === 'bezier') {
-      avoiding = buildBezierAvoiding(sourceX, sourceY, targetX, targetY, union, padding);
+      avoiding = buildBezierAvoiding(
+        sourceX,
+        sourceY,
+        sourcePosition,
+        targetX,
+        targetY,
+        targetPosition,
+        union,
+        padding,
+      );
     } else {
       avoiding = buildSmoothAvoiding(
         sourceX,
@@ -281,6 +282,52 @@ export function computeEdgePath(params: ComputePathParams): PathResult {
   }
   // 已无更合规的解:原样返回(不无限兜底)
   return candidate;
+}
+
+/**
+ * 端口外法线单位向量:从端口指向节点**外部**(Right→+x、Left→-x、Top→-y、Bottom→+y)。
+ */
+function portNormal(pos: Position): { x: number; y: number } {
+  switch (pos) {
+    case Position.Left:
+      return { x: -1, y: 0 };
+    case Position.Right:
+      return { x: 1, y: 0 };
+    case Position.Top:
+      return { x: 0, y: -1 };
+    default:
+      return { x: 0, y: 1 };
+  }
+}
+
+/**
+ * 原生弧线:控制臂**严格沿端口外法线**延伸。
+ *
+ * 不再使用 React Flow 的 getBezierPath —— 它按 dx/dy 轴向比例取控制点,当两端口朝向
+ * 不同轴(如 底部出→左侧进)或水平错位很小时,控制臂很短,曲线没走出多远就贴着节点
+ * 拐弯,视觉上「扭」(用户截图:连线到达 target 时从节点顶部掠下来进侧端口)。
+ * 这里保证控制臂沿法线至少延伸 minExtend:曲线先从端口沿法线「走出去」一段,
+ * 再圆滑弯向对方,出口/进入段都落在「节点外 0°~180° 扇形」内。
+ */
+function buildNativeBezier(
+  sourceX: number,
+  sourceY: number,
+  sourcePosition: Position,
+  targetX: number,
+  targetY: number,
+  targetPosition: Position,
+): PathResult {
+  const dist = Math.hypot(targetX - sourceX, targetY - sourceY);
+  const e = Math.max(Math.min(60, dist * 0.5), dist * 0.45);
+  const n1 = portNormal(sourcePosition);
+  const n2 = portNormal(targetPosition);
+  const c1 = { x: sourceX + n1.x * e, y: sourceY + n1.y * e };
+  const c2 = { x: targetX + n2.x * e, y: targetY + n2.y * e };
+  const path = `M ${sourceX},${sourceY} C ${c1.x},${c1.y} ${c2.x},${c2.y} ${targetX},${targetY}`;
+  // 标签放在曲线参数中点(t=0.5),即曲线真正走过的地方
+  const labelX = (sourceX + 3 * c1.x + 3 * c2.x + targetX) / 8;
+  const labelY = (sourceY + 3 * c1.y + 3 * c2.y + targetY) / 8;
+  return { path, labelX, labelY };
 }
 
 /** 计算一组矩形的并集包围盒 */
@@ -369,13 +416,16 @@ function buildSmoothAvoiding(
 function buildBezierAvoiding(
   sourceX: number,
   sourceY: number,
+  sourcePosition: Position,
   targetX: number,
   targetY: number,
+  targetPosition: Position,
   r: ObstacleRect,
   padding: number,
 ): PathResult | null {
   const dx = targetX - sourceX;
   const dy = targetY - sourceY;
+  const dist = Math.hypot(dx, dy);
   const horizontal = Math.abs(dx) >= Math.abs(dy);
 
   // 绕行方向:绕到障碍「远离 source」的一侧(障碍中心在 source 上方则向下绕,反之向上)
@@ -389,17 +439,24 @@ function buildBezierAvoiding(
   const span = (Math.abs(dx) + Math.abs(dy)) / 2;
   const maxBend = Math.max(40, span);
 
+  // 控制臂:严格沿端口外法线延伸(旧实现用 dx*0.35 轴向偏移,当 target 在端口法线的
+  // 反方向时控制点会「往回翘」,曲线从端口出发就扭向节点内部 —— 用户截图中的 S 形大弯);
+  // 拱出量 bend 只作为垂直于法线的偏移叠加,保证出口/进入段始终落在「节点外 0°~180° 扇形」内。
+  const n1 = portNormal(sourcePosition);
+  const n2 = portNormal(targetPosition);
+  const e = Math.max(24, dist * 0.35);
+
   let bend = 24;
   let c1 = { x: sourceX, y: sourceY };
   let c2 = { x: targetX, y: targetY };
   let path = '';
   for (let i = 0; i < 32; i++) {
     if (horizontal) {
-      c1 = { x: sourceX + dx * 0.35, y: sourceY + dirY * bend };
-      c2 = { x: targetX - dx * 0.35, y: targetY + dirY * bend };
+      c1 = { x: sourceX + n1.x * e, y: sourceY + n1.y * e + dirY * bend };
+      c2 = { x: targetX + n2.x * e, y: targetY + n2.y * e + dirY * bend };
     } else {
-      c1 = { x: sourceX + dirX * bend, y: sourceY + dy * 0.35 };
-      c2 = { x: targetX + dirX * bend, y: targetY - dy * 0.35 };
+      c1 = { x: sourceX + n1.x * e + dirX * bend, y: sourceY + n1.y * e };
+      c2 = { x: targetX + n2.x * e + dirX * bend, y: targetY + n2.y * e };
     }
     // 温和避让:再拱就超过允许的巨弧 → 放弃绕障,让线盖过节点
     if (bend > maxBend) return null;

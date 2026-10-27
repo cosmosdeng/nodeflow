@@ -229,19 +229,19 @@ describe('computeEdgePath', () => {
   });
 
   // 端口出口「节点外 0°~180° 扇形」约束:
-  // source(0,0) 为 Right 端口(节点在左),target(-400,0) 为 Left 端口,target 在 source 左侧。
-  // bezier 绕障要把控制点往「远离 target 的方向」反向回拉,c1 会出现 vx<0 → 初段从 Right 端口
-  // 往左钻进节点内部 → 违规,应回退原生路径,保证从端点沿节点外法线往外走。
-  it('Right 端口:绕障初段不允许往左扭进节点内部 → 回退原生', () => {
+  // 旧版绕障控制点用 dx*0.35 轴向偏移,target 在 source 左侧时 c1.x = -140(往左扭进节点);
+  // 新版控制臂严格沿端口外法线延伸,c1.x = +e 恒为正 → 出口合规,正常绕障不再被守门拒绝。
+  it('Right 端口:绕障控制臂沿法线往外(c1.x ≥ sourceX),出口不扭进节点', () => {
     const leftTarget = { ...base, targetX: -400, targetY: 0, targetPosition: Position.Left };
     const obstacle: ObstacleRect = { x: -200, y: -60, width: 100, height: 120 };
     const r = computeEdgePath({ ...leftTarget, obstacles: [obstacle], edgeStyle: 'bezier', padding: 24 });
-    const none = computeEdgePath({ ...leftTarget, obstacles: [], edgeStyle: 'bezier', padding: 24 });
-    expect(r.path).toBe(none.path); // 违规绕障被拒绝 → 原生(端口沿 +x 出)
-    // 原生路径起点 source(0,0),首段采样 x 应 >= 0(不会往左钻进 source 节点)
     const nums = r.path.match(/-?\d+(?:\.\d+)?/g)!.map(Number);
-    const [sx, sy, c1x] = nums;
-    expect(c1x).toBeGreaterThanOrEqual(sx); // 从 Right 端口向右走
+    const [sx, sy, c1x, c1y] = nums;
+    // source(0,0) 为 Right 端口:控制臂必须向右(+x)延伸,不得往左钻进节点
+    expect(c1x).toBeGreaterThanOrEqual(sx);
+    // 出口段方向在合法半平面:控制点不在 source 节点一侧
+    expect(c1x).toBeGreaterThan(0);
+    void c1y;
   });
 
   it('绕障初段合规时仍保持绕障(不因扇形约束误伤)', () => {
@@ -254,5 +254,45 @@ describe('computeEdgePath', () => {
     const nums = r.path.match(/-?\d+(?:\.\d+)?/g)!.map(Number);
     const [sx, sy, c1x] = nums;
     expect(c1x).toBeGreaterThanOrEqual(sx);
+  });
+
+  // 用户截图场景 1(图2):底部端口出 → 左侧端口进。旧版 getBezierPath 控制臂按轴向比例,
+  // 曲线没走出多远就贴着节点拐弯;新版控制臂严格沿法线:出口向下、进入向左。
+  it('Bottom→Left 端口对:出口沿法线向下、进入沿法线向左', () => {
+    const r = computeEdgePath({
+      sourceX: 200,
+      sourceY: 0,
+      sourcePosition: Position.Bottom,
+      targetX: 320,
+      targetY: 300,
+      targetPosition: Position.Left,
+      obstacles: [],
+      edgeStyle: 'bezier',
+    });
+    const nums = r.path.match(/-?\d+(?:\.\d+)?/g)!.map(Number);
+    const [sx, sy, c1x, c1y, c2x, c2y, tx, ty] = nums;
+    expect(c1x).toBeCloseTo(sx); // 出口不横偏
+    expect(c1y).toBeGreaterThan(sy); // 向下(节点外)
+    expect(c2y).toBeCloseTo(ty); // 进入不纵偏
+    expect(c2x).toBeLessThan(tx); // 从左侧(节点外)进入
+  });
+
+  // 用户截图场景 2(图1):长距离斜跨,旧版曲线到达 target 时从节点顶部掠下来进侧端口;
+  // 新版 c2 恒在 target 端口法线上,末段从端口外侧圆滑进入。
+  it('长距离斜跨:进入 target 恒沿端口法线,不从节点顶部拐下', () => {
+    const r = computeEdgePath({
+      sourceX: 0,
+      sourceY: 0,
+      sourcePosition: Position.Right,
+      targetX: 500,
+      targetY: 350,
+      targetPosition: Position.Left,
+      obstacles: [],
+      edgeStyle: 'bezier',
+    });
+    const nums = r.path.match(/-?\d+(?:\.\d+)?/g)!.map(Number);
+    const [, , , , c2x, c2y, tx, ty] = nums;
+    expect(c2x).toBeLessThan(tx); // c2 在端口左侧
+    expect(c2y).toBeCloseTo(ty); // 与端口同一水平线
   });
 });
