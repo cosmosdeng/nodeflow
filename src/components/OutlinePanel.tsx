@@ -32,8 +32,9 @@ export default function OutlinePanel({ onClose }: Props) {
   const filtered = useMemo(() => {
     const kw = keyword.trim().toLowerCase();
     if (!kw) return nodes;
+    // label / description 在类型上是必填,但导入旧版本项目 JSON 时字段可能缺失,用 ?? '' 兜底
     return nodes.filter(
-      (n) => n.data.label.toLowerCase().includes(kw) || n.data.description.toLowerCase().includes(kw),
+      (n) => (n.data.label ?? '').toLowerCase().includes(kw) || (n.data.description ?? '').toLowerCase().includes(kw),
     );
   }, [nodes, keyword]);
 

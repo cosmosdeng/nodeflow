@@ -37,6 +37,15 @@
 - [x] **撤销 / 重做内部画布标签联动**(已完成)
   - 修复:`GraphSnapshot` 增加 `compositeTabs` / `activeTabId`;`markHistory` 记录标签状态,`undo` / `redo` / `jumpTo` 通过新增的 `restoreTabsFromSnapshot` 完整恢复标签页;旧快照(无标签字段)回退为按节点过滤,保证任何历史跳转都不会残留指向不存在组合的标签页。
 
+- [x] **组件层测试(RTL + jsdom)**(已完成)
+  - **基建**:新增 `vitest.config.mts` 用 projects 分环境(logic 走 node 保持速度 / components 走 jsdom);依赖 `jsdom` + `@testing-library/react` + `@testing-library/jest-dom`。
+  - **setup(`src/test/setup.ts`)**:React Flow jsdom 配方 —— ResizeObserver observe 时**立即回调固定尺寸**(否则 `nodesInitialized` 恒 false,连线不渲染)、原型覆盖 offsetWidth/Height(jsdom 恒 0)、DOMMatrixReadOnly、getBoundingClientRect、getBBox、scrollIntoView、**innerText 映射到 textContent**(jsdom 未实现,EditableText 依赖它)。
+  - **覆盖(71 用例)**:EditableText / PropertiesPanel / Toolbar / OutlinePanel / HistoryPanel / AnnotationBox / ActorIcon / FlowNodeComponent / FlowEdgeComponent / FlowCanvas。
+  - **策略**:组件层只验证「交互 → 调用 action」(setState 换 spy、用完恢复),store 真实行为交给 store 层用例;渲染后 setState 必须 `act` 包裹。
+  - **顺带修复**:`OutlinePanel` 搜索对缺失 `description`(旧项目 JSON 导入)崩溃 → `?? ''` 兜底 + 回归用例。
+  - 测试:571 用例 / 60 文件全绿。
+  - 遗留:Toolbar 的 confirmDialog / 文件导入导出路径、CompositePopupView / MatrixVisualLayer / SemanticPanel / ContextMenu 等尚未覆盖。
+
 - [x] **连线渲染规则:连线永远覆盖节点 + 端口出口 0°~180° 扇形**(已完成)
   - **规则一(连线永远覆盖在节点上面)**:`global.css` 把 `.react-flow__edges` z-index 提到 `.react-flow__nodes` 之上;为避免挡住节点交互,edges 容器设 `pointer-events: none` + edge `visibleStroke`(仅描边可点选),空白区穿透 → 节点点击 / 拖拽 / 框选均不受影响。原「方案 C:默认节点在上」作废。
   - **规则二(端口出口扇形)**:新增 `portExitOk` 校验——连线从端点出来 / 进入都必须沿端口外法线(节点外 0°~180° 扇形),不得扭进节点内部;`computeEdgePath` 对**所有最终路径**(含原生)统一守门,违规则兜底 smoothstep。

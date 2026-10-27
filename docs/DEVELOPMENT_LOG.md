@@ -2,6 +2,23 @@
 
 > 按时间倒序记录开发历程。新功能、重要修复、里程碑都应在此追加。
 
+## 2026-10-27 · 组件层测试落地(RTL + jsdom)(完成)
+
+此前组件层 **0 测试**(500 用例全部是纯逻辑 / store)。本轮补齐基建与 10 个组件的冒烟 + 交互用例。
+
+- **基建**:新增 `vitest.config.mts`,用 **projects 分环境**——`logic` 沿用 node 环境跑全部 `.test.ts`(保持原速度),`components` 用 jsdom 跑 `.test.tsx` 并加载 setup;新增依赖 `jsdom` / `@testing-library/react` / `@testing-library/jest-dom`。
+- **`src/test/setup.ts`(React Flow 测试配方)**:
+  - `ResizeObserver` 在 `observe` 时**立即以固定尺寸回调** —— 否则 RF 永远等不到节点测量完成(`nodesInitialized` 恒 false),**连线与端口位置一律不渲染**;
+  - 原型覆盖 `offsetWidth / offsetHeight`(jsdom 恒返回 0,RF 靠它量节点);
+  - `DOMMatrixReadOnly`、`getBoundingClientRect`、`getBBox`、`scrollIntoView`;
+  - **`innerText` 映射到 `textContent`** —— jsdom 完全未实现 innerText,而 `EditableText` 依赖它读写内容。
+- **覆盖**:EditableText(9) / PropertiesPanel(9) / Toolbar(11) / OutlinePanel(7) / HistoryPanel(6) / AnnotationBox + ActorIcon(8) / FlowNodeComponent(8) / FlowEdgeComponent(7) / FlowCanvas(6)。
+- **测试策略**:组件层只验证「交互 → 调用 action」——用 `useGraphStore.setState` 把 action 换成 spy、用完恢复;store 的真实行为交给 store 层用例,避免重复覆盖。**渲染后再 setState 必须用 `act` 包裹**,否则组件尚未重渲染就点击。
+- **顺带修复**:`OutlinePanel` 搜索直接对 `description` 调 `toLowerCase()`,旧项目 JSON 导入时该字段可能缺失导致整块崩溃 → 加 `?? ''` 兜底并补回归用例。
+- **测试**:571 用例 / 60 文件全绿;tsc / lint / format / build 全过。
+
+---
+
 ## 2026-10-27 · 连线「扭弯」根治:控制臂严格沿端口法线延伸(完成)
 
 用户两张截图定位到两类扭弯:①连线到达 target 时从节点顶部掠下来进侧端口;②连线从 source 出来后向左拐出反向 S 形大弯。根因:旧版(含 React Flow `getBezierPath`)控制点按 dx/dy **轴向比例**取值——控制臂可以指向端口法线的反方向,曲线从端口出发没走出多远就贴着节点拐弯。

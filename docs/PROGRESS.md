@@ -4,6 +4,45 @@
 
 ---
 
+## 2026-10-27（二）组件层测试落地（RTL + jsdom）
+
+### 背景
+
+此前组件层 **0 测试**：500 个用例全部是纯逻辑 / store / agent / mcp，React 组件（共 17 个 .tsx）没有任何回归保护。
+
+### 做了什么
+
+1. **测试基建**
+- 新增 `vitest.config.mts`，用 vitest **projects 分环境**：`logic` 沿用 node 环境跑全部 `.test.ts`（保持原有速度），`components` 用 jsdom 跑 `.test.tsx` 并加载 setup
+- 依赖：`jsdom`、`@testing-library/react`、`@testing-library/jest-dom`
+2. **`src/test/setup.ts`——React Flow 在 jsdom 下的标准配方**（踩坑最多的一处）
+- `ResizeObserver` 必须在 `observe` 时**立即以固定尺寸回调**：否则 RF 永远等不到节点测量完成（`nodesInitialized` 恒 false），**连线与端口位置一律不渲染**（最初 6 个连线用例全部失败的直接原因）
+- 原型覆盖 `offsetWidth / offsetHeight`：jsdom 恒返回 0，RF 靠它量节点
+- `DOMMatrixReadOnly`、`getBoundingClientRect`、`getBBox`、`scrollIntoView`
+- **`innerText` 映射到 `textContent`**：jsdom 完全未实现 innerText，而 `EditableText` 依赖它读写内容
+3. **用例覆盖（共 71 个）**：EditableText(9) / PropertiesPanel(9) / Toolbar(11) / OutlinePanel(7) / HistoryPanel(6) / AnnotationBox + ActorIcon(8) / FlowNodeComponent(8) / FlowEdgeComponent(7) / FlowCanvas(6)
+
+### 测试策略
+
+- 组件层只验证「交互 → 调用 action」：用 `useGraphStore.setState` 把 action 换成 spy、用完恢复；store 的真实行为交给 store 层用例，避免重复覆盖
+- **渲染后再 setState 必须用 `act` 包裹**，否则组件尚未重渲染就点击（Toolbar 组合/注释按钮两例因此失败）
+
+### 顺带修复（组件测试抓到的真实缺陷）
+
+`OutlinePanel` 搜索直接对 `n.data.description` 调 `toLowerCase()`，导入旧项目 JSON 时该字段可能缺失 → **整块崩溃**；已改为 `(n.data.description ?? '')` 并补回归用例。
+
+### 验证
+
+- **单元测试**：571 用例 / 60 文件全绿
+- tsc / lint（0 error）/ format / build 全过
+
+### 遗留
+
+- 涉及 `confirmDialogAsync`（新建项目 / 清空画布）与文件导入导出（隐藏 file input）的 Toolbar 路径未覆盖，需时再补
+- `CompositePopupView` / `MatrixVisualLayer` / `SemanticPanel` / `SemanticOrderList` / `ContextMenu` / `ConfirmDialog` / `DialogHost` 尚未覆盖
+
+---
+
 ## 2026-10-27（二）连线「扭弯」根治：控制臂严格沿端口法线延伸
 
 ### 现象（用户 2 张截图）
