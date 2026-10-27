@@ -8,6 +8,40 @@ export interface ObstacleRect {
   height: number;
 }
 
+/** collectEdgeObstacles 需要的最小节点形状(便于测试与解耦 React Flow 类型) */
+export interface ObstacleCandidate {
+  id: string;
+  hidden?: boolean;
+  position: { x: number; y: number };
+  measured?: { width?: number; height?: number };
+}
+
+/**
+ * 收集连线绕障用的障碍矩形:排除 hidden 节点与 source 自身,target 及其它节点保留。
+ * 未测量到尺寸时用 fallback(与节点默认宽高一致)。
+ *
+ * 抽成纯函数是为了能在组件外单测 —— 组件里若把「每次新建对象数组」直接塞进
+ * zustand selector(哪怕套 useShallow),元素引用每次都变会导致快照不稳定,
+ * 引发无限重渲染(白屏)。派生逻辑应放在组件外,用稳定引用 + useMemo 调用。
+ */
+export function collectEdgeObstacles(
+  nodes: readonly ObstacleCandidate[],
+  sourceId: string,
+  fallback: { width: number; height: number } = { width: 230, height: 120 },
+): ObstacleRect[] {
+  const rects: ObstacleRect[] = [];
+  for (const n of nodes) {
+    if (n.id === sourceId || n.hidden) continue;
+    rects.push({
+      x: n.position.x,
+      y: n.position.y,
+      width: n.measured?.width ?? fallback.width,
+      height: n.measured?.height ?? fallback.height,
+    });
+  }
+  return rects;
+}
+
 export type EdgeStyleKind = 'smoothstep' | 'bezier';
 
 interface ComputePathParams {

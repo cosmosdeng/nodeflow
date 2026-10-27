@@ -1,9 +1,9 @@
 import { memo, useMemo, useRef, useState } from 'react';
 import { BaseEdge, EdgeLabelRenderer, type EdgeProps } from '@xyflow/react';
 import { useShallow } from 'zustand/react/shallow';
-import { ARTIFACT_META, uid, type FlowEdge, type FlowNode } from '../types';
+import { ARTIFACT_META, uid, type FlowEdge } from '../types';
 import { useGraphStore } from '../store/graphStore';
-import { computeEdgePath, type ObstacleRect } from '../lib/edgePath';
+import { collectEdgeObstacles, computeEdgePath, type ObstacleRect } from '../lib/edgePath';
 import { GATEWAY_BRANCH_COLORS } from '../lib/gateway';
 import EditableText from './EditableText';
 import AnnotationBox from './AnnotationBox';
@@ -61,23 +61,12 @@ function FlowEdgeComponent({
   const tgtLocked = useGraphStore((s) => s.nodes.find((n) => n.id === target)?.data?.locked);
   const edgeLocked = !!allLocked || !!srcLocked || !!tgtLocked;
 
-  // 收集所有可见节点作为障碍物用于连线绕障(shallow 比较,几何未变时不重算)。
-  // 排除 source 节点本身;保留 target 节点及其它中间节点。
-  const obstacles = useGraphStore(
-    useShallow((s) => {
-      const rects: ObstacleRect[] = [];
-      for (const n of s.nodes as FlowNode[]) {
-        if (n.id === source || n.hidden) continue;
-        rects.push({
-          x: n.position.x,
-          y: n.position.y,
-          width: n.measured?.width ?? 230,
-          height: n.measured?.height ?? 120,
-        });
-      }
-      return rects;
-    }),
-  );
+  // 收集所有可见节点作为障碍物用于连线绕障。
+  // 注意:不能在 selector 里返回「每次新建的对象数组」—— useShallow 只做一层浅比较,
+  // 元素引用每次都变,会被判定为「永远不相等」,导致 getSnapshot 不稳定并触发无限重渲染。
+  // 因此只订阅稳定的 nodes 引用,再用 useMemo 派生障碍矩形。
+  const nodesForObstacles = useGraphStore((s) => s.nodes);
+  const obstacles = useMemo(() => collectEdgeObstacles(nodesForObstacles, source), [nodesForObstacles, source]);
 
   const { path, labelX, labelY } = useMemo(
     () =>

@@ -2,6 +2,17 @@
 
 > 按时间倒序记录开发历程。新功能、重要修复、里程碑都应在此追加。
 
+## 2026-10-27 · 修复预览白屏(连线绕障 selector 无限重渲染)
+
+- **现象**:预览页 `#root` 为空、整页白屏;dev server 无报错,`tsc` / lint / 全部单测通过。
+- **定位**:无头 Chrome 抓 console 得到 `The result of getSnapshot should be cached to avoid an infinite loop` + `Maximum update depth exceeded`,错误发生在 `<FlowEdgeComponent>`。
+- **根因**:障碍物 selector 用 `useShallow` 包裹,但返回的是**每次新建的对象数组**(`rects.push({x,y,width,height})`)。`useShallow` 只浅比较一层,元素引用每次都变 → 快照恒不相等 → 无限重渲染 → React 卸载整棵树。
+- **修复**:只订阅稳定的 `s.nodes`,用 `useMemo` + 新抽出的纯函数 `collectEdgeObstacles`(`src/lib/edgePath.ts`)派生;顺带补 5 个单测(`src/lib/__tests__/edgeObstacles.test.ts`)锁住「排除 source / hidden、尺寸回落」等规则。
+- **经验**:zustand selector 内禁止造新对象/新数组元素;`useShallow` 只适合「元素引用稳定」的数组。另:这类 bug 只有真实渲染才暴露,组件层 0 测试的代价开始显现。
+- 验证:页面 DOM 正常、无 console 错误;478 用例 / 50 文件全绿;`tsc` / lint / format / build 均通过。
+
+---
+
 ## 2026-10-27 · 批量取消归属 + 幂等短路(完成)
 
 - **补上「减」的方向**:10-21 的批量归属只能加不能减。语义面板提示条右侧新增「⊘ 清参与方」「⊘ 脱阶段」,复用 `assignParticipantToMany(ids, null)` / `assignStageToMany(ids, null)`,整批仍是一次历史、一次撤销。

@@ -4,6 +4,53 @@
 
 ---
 
+## 2026-10-27（二）修复预览白屏：连线绕障 selector 无限重渲染
+
+### 现象
+
+`http://127.0.0.1:5173/` 打开后**一片空白**,`#root` 内无任何 DOM。dev server 日志无报错(编译正常),`tsc` / lint / 473 个单测全绿 —— 典型的「只有真跑起来才暴露」的运行时崩溃。
+
+### 定位
+
+用无头 Chrome 抓控制台(`--enable-logging=stderr --virtual-time-budget`):
+
+```
+Warning: The result of getSnapshot should be cached to avoid an infinite loop
+Uncaught Error: Maximum update depth exceeded. (…)
+The above error occurred in the <FlowEdgeComponent> component
+```
+
+### 根因
+
+`FlowEdgeComponent` 把「每次新建对象」的派生结果直接塞进了 zustand selector:
+
+```ts
+const obstacles = useGraphStore(useShallow((s) => { …; rects.push({ x, y, width, height }); return rects; }));
+```
+
+`useShallow` 只做**一层**浅比较,而数组元素是每次新建的 `{x,y,width,height}`,引用永远不同 → 快照恒不相等 → `getSnapshot` 不稳定 → 无限重渲染 → React 抛错卸载整棵树 → 白屏。
+
+### 修复
+
+| 项 | 内容 |
+|---|---|
+| **组件** | 只订阅稳定的 `s.nodes` 引用,再用 `useMemo` 派生障碍矩形(`src/components/FlowEdgeComponent.tsx`) |
+| **纯函数** | 派生逻辑抽为 `collectEdgeObstacles(nodes, sourceId, fallback)`(`src/lib/edgePath.ts`),排除 source / hidden、未测量尺寸回落 230×120 |
+| **测试** | 新增 `src/lib/__tests__/edgeObstacles.test.ts` 5 用例(排除 source、排除 hidden、实测/回落尺寸、自定义 fallback、空输入) |
+
+### 验证
+
+- **页面**:无头 Chrome dump-dom 可见完整 App DOM(`<div class="app">…`),连线 path 正常渲染,**无任何 console 错误**
+- **测试**:478 用例 / 50 文件全绿
+- **类型 / Lint / 构建**:`tsc` 干净、lint 0 error / 1 warn、`format:check` 与 `build` 通过
+
+### 经验(重要)
+
+1. **zustand selector 只返回稳定引用**:selector 内不要 `map` / `filter` 出新对象,不要 `push` 新字面量;需要派生就用「订阅原始 slice + `useMemo`」。`useShallow` 只适用于元素引用稳定的数组(如 `annotations.filter(...)` 返回原对象)。
+2. **`tsc` + 单测全绿 ≠ 页面能跑**:这类无限重渲染只有真实渲染才触发。这正说明「组件层 0 测试」的代价 —— 组件测试应是下一优先级。
+
+---
+
 ## 2026-10-27（二）批量归属补「取消归属」+ 幂等短路
 
 补齐 2026-10-21 遗留的第一条：批量归属只能「加」不能「减」，取消归属要逐节点清空。
