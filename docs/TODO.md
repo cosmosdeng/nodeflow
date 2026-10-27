@@ -37,6 +37,13 @@
 - [x] **撤销 / 重做内部画布标签联动**(已完成)
   - 修复:`GraphSnapshot` 增加 `compositeTabs` / `activeTabId`;`markHistory` 记录标签状态,`undo` / `redo` / `jumpTo` 通过新增的 `restoreTabsFromSnapshot` 完整恢复标签页;旧快照(无标签字段)回退为按节点过滤,保证任何历史跳转都不会残留指向不存在组合的标签页。
 
+- [x] **连线渲染规则:连线永远覆盖节点 + 端口出口 0°~180° 扇形**(已完成)
+  - **规则一(连线永远覆盖在节点上面)**:`global.css` 把 `.react-flow__edges` z-index 提到 `.react-flow__nodes` 之上;为避免挡住节点交互,edges 容器设 `pointer-events: none` + edge `visibleStroke`(仅描边可点选),空白区穿透 → 节点点击 / 拖拽 / 框选均不受影响。原「方案 C:默认节点在上」作废。
+  - **规则二(端口出口扇形)**:新增 `portExitOk` 校验——连线从端点出来 / 进入都必须沿端口外法线(节点外 0°~180° 扇形),不得扭进节点内部;`computeEdgePath` 对**所有最终路径**(含原生)统一守门,违规则兜底 smoothstep。
+  - **扭弯根治**:新增 `portNormal` + `buildNativeBezier` **替换** React Flow `getBezierPath`,控制臂严格沿两端端口法线延伸(旧版按 dx/dy 轴向比例取控制点,target 位于法线反方向时控制臂往回翘 → S 形扭弯);`buildBezierAvoiding` 同步改造(控制臂沿法线,拱出量只作垂直偏移)。
+  - 关键坑:`sampleSvgPath` 首点为端口起点自身、末点为 target 自身(位移 0),端点校验须取 index 1 / len-2,否则约束恒判合规。
+  - 测试:`edgePath.test.ts` 新增 5 用例,全仓 500 用例 / 51 文件全绿。
+
 ## P2 · 规划增强
 
 - [x] **语义面板:参与方 / 阶段的统一入口**(已完成)
@@ -80,7 +87,7 @@
   - **触发入口**:工具栏新增「自动排列」按钮 + 横向 / 竖向**互斥**方向按钮;选中组合节点时对其内部排列,否则全画布。
   - **算法**:新增 `lib/layout.ts` —— `computeLevels` 按连线依赖拓扑分层(最长路径,环安全);`computeLayout` 按层排列(横向列 / 竖向行),同层节点用 **barycenter 启发式排序**(邻居对齐减少交叉与压节点);默认间距按方向区分,主方向留足空间给连线 label / 中间产物。
   - **作用范围**:全画布(当前可见节点)或组合直接子节点;布局后重算展开态组合虚线框;`markHistory` 撤销可用。
-  - **连线层级**:默认节点在连线之上(节点清晰);拖拽节点时临时把连线 / label 提升到节点之上(方案 C),便于看清连线关系。
+  - **连线层级(规则已更新,见「连线渲染规则(连线永远覆盖节点 + 端口出口扇形)」条目)**:连线**永远覆盖在节点上面**(edges z-index 高于 nodes);edges 容器 `pointer-events: none` + `visibleStroke` 保证空白区穿透,节点点击 / 拖拽 / 框选不受影响。
   - 单元测试 `layout.test.ts`:拓扑分层 / 横向 / 竖向 / 同层不重叠。
 
 - [x] **组合节点嵌套组合**(已完成)

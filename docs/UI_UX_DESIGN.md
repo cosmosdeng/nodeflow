@@ -106,10 +106,11 @@ NodeFlow 是一款**节点式流程绘图工具**,设计目标是:深色优先�
 ### 4.3 连线(Edge)
 
 - **描边**:`--edge-stroke` 默认色。
-- **层级**:默认节点在上、连线在下(节点清晰);拖拽节点时临时把连线 / label 提升到节点之上(便于看清连线关系)。
+- **层级**:**连线永远覆盖在节点上面**(edges z-index 高于 nodes;拖拽节点时进一步提到最上层)。edges 容器 `pointer-events: none` + edge `visibleStroke`,让连线的空白区穿透,**节点仍可正常点击 / 拖拽 / 框选**。
 - **选中态**:`.react-flow__edge-path` 用 accent 色 + `stroke-width: 4` 加粗。
 - **说明 label**:胶囊 `border-radius: 999px`,`--chip-bg` 背景,悬停 accent 描边;编辑态展开 `max-width: 320px` 允许换行。
-- **绕障路径**:连线(含 label / 产物)默认不与节点重叠,由 `edgePath.ts` 计算绕行。
+- **绕障路径**:连线(含 label / 产物)默认不与第三者节点重叠,由 `edgePath.ts` 计算绕行。
+- **端口出口(0°~180° 扇形)**:连线从端点出来 / 进入都必须沿**端口外法线**方向(以端口为顶点、覆盖节点外 180° 的扇形),**不得扭进节点内部**。实现上 bezier 控制臂**严格沿端口法线延伸**(不再按 dx/dy 轴向比例取控制点,否则 target 位于法线反方向时控制臂会往回翘,形成 S 形扭弯);绕障无法同时满足时放弃绕障、让线盖过节点。
 
 ### 4.4 组合节点(Composite)
 
@@ -271,8 +272,8 @@ NodeFlow 是一款**节点式流程绘图工具**,设计目标是:深色优先�
 6. **执行主体语义色**:人黄 / 机蓝 / 人机协同(紫文字 + 绿框),节点外框按主体着色;机器改纯正蓝避免偏青。
 7. **选中不掩盖语义色**:节点 / 连线选中态提亮 + 光晕增强,不改边框语义色(避免"蓝=机器"与选中蓝混淆)。
 8. **端口交互增强**:连接状态绿 / 桔光晕;命中区域放大;连接半径 28→40;悬停删除端口(每方向 ≥1)。
-9. **连线层级(方案 C)**:默认节点在连线之上,拖拽时临时提升连线 / label。
-10. **连线绕障**:连线不压节点(直角绕行 / 弧线拐弯),label / 产物随路径避开。
+9. **连线层级(规则更新,原方案 C 作废)**:**连线永远覆盖在节点上面**(不再「默认节点在上」);用 edges 容器 `pointer-events: none` + `visibleStroke` 保证空白区穿透,节点交互不受影响。
+10. **连线绕障 + 端口出口**:连线不压第三者节点(直角绕行 / 弧线拐弯),label / 产物随路径避开;**端口出口优先级高于绕障**——从端点出来 / 进入必须沿端口法线(节点外 0°~180° 扇形),无法兼顾时宁可让线盖过节点,也不扭进节点内部;bezier 控制臂沿端口法线延伸以杜绝 S 形扭弯。
 11. **组合节点精致化**:塌缩粗边框 / 展开虚线框;执行主体继承;展开塌缩动画。
 12. **多项目多画布**:标签栏(项目标签 + 项目内画布标签,颜色点区分),不同项目不同色。
 13. **操作提示框分平台**:mac 提示两指滑动 / 捏合,Windows 提示滚轮;快捷键符号区分(⌘ vs Ctrl)。
@@ -294,7 +295,8 @@ NodeFlow 是一款**节点式流程绘图工具**,设计目标是:深色优先�
 | 节点 / 端口 / 连线 / 组合 / 编辑样式 | `src/styles/global.css` |
 | 主题切换 | `src/components/Toolbar.tsx` `cycleTheme` + `src/App.tsx` |
 | 内联编辑 | `src/components/EditableText.tsx` |
-| 连线绕障 | `src/lib/edgePath.ts` |
+| 连线绕障 / 端口出口扇形 | `src/lib/edgePath.ts`(`portNormal` / `buildNativeBezier` / `portExitOk`) |
+| 连线层级(永远覆盖节点) | `src/styles/global.css`(`.react-flow__edges` / `__nodes` z-index + `visibleStroke`) |
 | 自动布局 | `src/lib/layout.ts` |
 | 对话框 | `src/lib/dialog.ts` + `src/components/DialogHost.tsx` |
 | 大纲栏 | `src/components/OutlinePanel.tsx` |
