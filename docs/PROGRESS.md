@@ -153,6 +153,32 @@ if (n.id === sourceId || n.hidden) continue; // target 仍在障碍列表里
 
 ---
 
+## 2026-10-27（二）「自动排列乱套」排查：算法无回归,待真实数据定位
+
+### 排查结论（证据）
+
+| 检查项 | 结果 |
+|---|---|
+| 布局代码是否被改动 | **零改动**：`git diff v0.4.0-next.4..HEAD -- src/lib/arrange.ts src/lib/layout.ts src/lib/geometry.ts src/lib/stage.ts src/components/MatrixVisualLayer.tsx` 为空 |
+| 既有布局测试 | **81 用例全绿**（arrange / layout / matrixLayout / matrixGrid / matrixBandLayout / freePlacement / stageOnlyAnchor / arrangeConvergence） |
+| 实测边缘场景 | 语义稀薄、语义完整、顺序数组含陈旧 id 三种形态下：**无重叠、无 NaN、无节点被推到极远处** |
+| 阶段框是否错位 | **否**：`MatrixVisualLayer` 按 `store 实时 node.position` 绘制（文件头注释即声明「Arrange 的唯一输出」），band 会跟随节点，不会停在旧坐标 |
+| 排列是否可恢复 | **是**：单次历史，一次 `Ctrl+Z` 完全还原（已有回归测试锁住） |
+
+### 已做的加固
+
+新增 `src/store/__tests__/graphStore.arrangeRobustness.test.ts`（5 用例）：语义稀薄 / 语义完整 / `stageOrder` 含陈旧 id / 包围盒可控 / **排列是单次历史可一次撤销** —— 锁住「真实文档形态下排列不得产出重叠与飞出画布」。
+
+### 待用户配合
+
+自动排列的「乱」无法用空演示文档复现（headless Chrome 只有默认数据）。需要用户提供：当前项目导出文件（文件 → 导出），或描述「乱」的具体形态（节点重叠 / 跑到画布外 / 顺序错乱 / 语义框与节点分离）。
+
+### 备注
+
+`runSmartArrange` 只写 `nodes.position`（`structure.ts:323-343`），不调用 `fitView`；若排列后包围盒远大于视口（实测语义稀薄场景宽 2816px），用户可能看到节点跑到视口外 —— 这是待确认的观感来源之一，是否加「排列后自动 fitView」需用户拍板（会改变既有行为）。
+
+---
+
 ## 2026-10-27（二）批量归属补「取消归属」+ 幂等短路
 
 补齐 2026-10-21 遗留的第一条：批量归属只能「加」不能「减」，取消归属要逐节点清空。
