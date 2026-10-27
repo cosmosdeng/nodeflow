@@ -17,8 +17,12 @@ export interface ObstacleCandidate {
 }
 
 /**
- * 收集连线绕障用的障碍矩形:排除 hidden 节点与 source 自身,target 及其它节点保留。
+ * 收集连线绕障用的障碍矩形:排除 hidden 节点,以及连线的 **source 与 target 自身**。
  * 未测量到尺寸时用 fallback(与节点默认宽高一致)。
+ *
+ * 为什么必须同时排除 target:连线的原生路径终点必然落在 target 节点(外扩 padding)内,
+ * 若把 target 也算障碍,命中判定就**恒成立** —— 每条线都会被送去绕障,弧线全被拱成大弯,
+ * 看起来「线很奇怪」。绕障只该为「穿过第三者节点」而触发。
  *
  * 抽成纯函数是为了能在组件外单测 —— 组件里若把「每次新建对象数组」直接塞进
  * zustand selector(哪怕套 useShallow),元素引用每次都变会导致快照不稳定,
@@ -27,11 +31,12 @@ export interface ObstacleCandidate {
 export function collectEdgeObstacles(
   nodes: readonly ObstacleCandidate[],
   sourceId: string,
+  targetId?: string,
   fallback: { width: number; height: number } = { width: 230, height: 120 },
 ): ObstacleRect[] {
   const rects: ObstacleRect[] = [];
   for (const n of nodes) {
-    if (n.id === sourceId || n.hidden) continue;
+    if (n.id === sourceId || n.id === targetId || n.hidden) continue;
     rects.push({
       x: n.position.x,
       y: n.position.y,
@@ -286,7 +291,8 @@ function buildBezierAvoiding(
   const passX = sourceX >= cx ? r.x - margin : r.x + r.width + margin;
 
   // 控制点外推量:先按「把曲线拉到绕行通道」估算,再采样校验,若仍压到障碍就逐步加大
-  let bend = Math.max(40, horizontal ? Math.abs(passY - midY) * 1.6 : Math.abs(passX - midX) * 1.6);
+  // 三次贝塞尔在 t=0.5 处的偏移是 0.75·bend,所以取 ~1.35 倍刚好把曲线拱到绕行通道上
+  let bend = Math.max(40, horizontal ? Math.abs(passY - midY) * 1.35 : Math.abs(passX - midX) * 1.35);
 
   let c1 = { x: sourceX, y: sourceY };
   let c2 = { x: targetX, y: targetY };

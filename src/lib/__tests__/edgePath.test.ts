@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { Position } from '@xyflow/react';
-import { computeEdgePath, type ObstacleRect } from '../edgePath';
+import { collectEdgeObstacles, computeEdgePath, type ObstacleRect } from '../edgePath';
 
 const base = {
   sourceX: 0,
@@ -149,6 +149,20 @@ describe('computeEdgePath', () => {
       maxTurn = Math.max(maxTurn, angle);
     }
     expect(maxTurn).toBeLessThan(90);
+  });
+
+  // 集成回归:真实调用链 collectEdgeObstacles → computeEdgePath。
+  // 若把 target 自身也算障碍,则线会 100% 走绕障(弧线被拱成大弯),这里锁死「不绕」。
+  it('集成:source / target 自身不算障碍,无第三者时走原生路径', () => {
+    const nodes = [
+      { id: 'A', position: { x: -230, y: -60 } },
+      { id: 'B', position: { x: 400, y: -60 } },
+    ];
+    const obstacles = collectEdgeObstacles(nodes, 'A', 'B');
+    expect(obstacles).toEqual([]);
+    const r = computeEdgePath({ ...base, obstacles, edgeStyle: 'bezier', padding: 24 });
+    const none = computeEdgePath({ ...base, obstacles: [], edgeStyle: 'bezier', padding: 24 });
+    expect(r.path).toBe(none.path);
   });
 
   it('bezier 绕障曲线不压在障碍实体上,且标签落在曲线上', () => {

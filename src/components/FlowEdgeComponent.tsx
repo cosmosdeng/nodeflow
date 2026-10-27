@@ -66,7 +66,11 @@ function FlowEdgeComponent({
   // 元素引用每次都变,会被判定为「永远不相等」,导致 getSnapshot 不稳定并触发无限重渲染。
   // 因此只订阅稳定的 nodes 引用,再用 useMemo 派生障碍矩形。
   const nodesForObstacles = useGraphStore((s) => s.nodes);
-  const obstacles = useMemo(() => collectEdgeObstacles(nodesForObstacles, source), [nodesForObstacles, source]);
+  // 只把「第三者」节点当障碍:source / target 自身不算(否则每条线都会判定为需要绕障)
+  const obstacles = useMemo(
+    () => collectEdgeObstacles(nodesForObstacles, source, target),
+    [nodesForObstacles, source, target],
+  );
 
   const { path, labelX, labelY } = useMemo(
     () =>

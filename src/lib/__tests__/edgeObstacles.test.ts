@@ -6,10 +6,17 @@ function node(id: string, x = 0, y = 0, extra: Partial<ObstacleCandidate> = {}):
 }
 
 describe('collectEdgeObstacles(连线绕障障碍收集)', () => {
-  it('排除 source 自身,保留 target 与其它节点', () => {
+  // 回归:早期只排除 source、保留 target 当作障碍,而连线终点必然落在 target 矩形
+  // (外扩 padding)内 → 命中判定恒成立 → 每条线都被送去绕障,弧线全被拱成大弯。
+  it('同时排除 source 与 target(否则每条线都会判定为需要绕障)', () => {
+    const rects = collectEdgeObstacles([node('A'), node('B'), node('C')], 'A', 'B');
+    expect(rects).toHaveLength(1); // 只剩第三者 C
+    expect(rects[0]).toEqual({ x: 0, y: 0, width: 230, height: 120 });
+  });
+
+  it('未传 target 时只排除 source', () => {
     const rects = collectEdgeObstacles([node('A'), node('B'), node('C')], 'A');
     expect(rects).toHaveLength(2);
-    expect(rects[0]).toEqual({ x: 0, y: 0, width: 230, height: 120 });
   });
 
   it('排除 hidden 节点', () => {
@@ -28,7 +35,7 @@ describe('collectEdgeObstacles(连线绕障障碍收集)', () => {
   });
 
   it('自定义 fallback 生效', () => {
-    const rects = collectEdgeObstacles([node('B')], 'A', { width: 100, height: 50 });
+    const rects = collectEdgeObstacles([node('B')], 'A', 'X', { width: 100, height: 50 });
     expect(rects[0]).toEqual({ x: 0, y: 0, width: 100, height: 50 });
   });
 
