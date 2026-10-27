@@ -321,8 +321,10 @@ function buildBezierAvoiding(
     targetPosition,
     curvature: 0.35,
   });
-  // 拼接两段 path(去掉第二段开头的 M)
-  const path = `${p1} ${p2.replace(/^M[^L]*L?/, '')}`;
+  // 拼接两段 path:去掉第二段开头的「M + 坐标」,保留其后的曲线命令。
+  // 不能用 /M[^L]*L?/ 一类写法 —— getBezierPath 输出形如「M0,0 C150,0 150,200 300,200」,
+  // 不含 L 命令,[^L]* 会把整段第二段吞光,连线只剩前半截,视觉上「终点悬空」。
+  const path = `${p1} ${p2.replace(/^M[-\d.,\s]+/, '')}`;
   return { path, labelX: mid.x, labelY: mid.y };
 }
 

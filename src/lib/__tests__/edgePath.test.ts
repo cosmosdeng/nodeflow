@@ -44,6 +44,26 @@ describe('computeEdgePath', () => {
     expect(r.path).toContain('C');
   });
 
+  // 回归:绕障 bezier 拼接时用 /M[^L]*L?/ 去第二段开头的 M,而 getBezierPath 输出不含 L,
+  // [^L]* 把整段第二段吞光 → 连线终点悬空在半途(画布上表现为「线和端口断开」)。
+  it('bezier 绕障路径必须完整连到 target(终点悬空回归用例)', () => {
+    const obstacle: ObstacleRect = { x: 150, y: -60, width: 100, height: 120 };
+    const r = computeEdgePath({ ...base, obstacles: [obstacle], edgeStyle: 'bezier', padding: 24 });
+    const m = r.path.match(/(-?[\d.]+)[,\s]+(-?[\d.]+)\s*$/);
+    expect(m).not.toBeNull();
+    expect(Number(m![1])).toBeCloseTo(base.targetX);
+    expect(Number(m![2])).toBeCloseTo(base.targetY);
+  });
+
+  it('smoothstep 绕障路径同样必须连到 target', () => {
+    const obstacle: ObstacleRect = { x: 150, y: -60, width: 100, height: 120 };
+    const r = computeEdgePath({ ...base, obstacles: [obstacle], edgeStyle: 'smoothstep', padding: 24 });
+    const m = r.path.match(/(-?[\d.]+)[,\s]+(-?[\d.]+)\s*$/);
+    expect(m).not.toBeNull();
+    expect(Number(m![1])).toBeCloseTo(base.targetX);
+    expect(Number(m![2])).toBeCloseTo(base.targetY);
+  });
+
   it('障碍不在线上时走原生路径', () => {
     const obstacle: ObstacleRect = { x: 150, y: 200, width: 100, height: 100 };
     const smooth = computeEdgePath({ ...base, obstacles: [obstacle], edgeStyle: 'smoothstep' });
