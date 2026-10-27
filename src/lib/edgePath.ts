@@ -184,7 +184,7 @@ export function computeEdgePath(params: ComputePathParams): PathResult {
 
   // 有障碍:生成绕障路径
   return edgeStyle === 'bezier'
-    ? buildBezierAvoiding(sourceX, sourceY, sourcePosition, targetX, targetY, targetPosition, union, padding)
+    ? buildBezierAvoiding(sourceX, sourceY, targetX, targetY, union, padding)
     : buildSmoothAvoiding(sourceX, sourceY, sourcePosition, targetX, targetY, targetPosition, union, padding);
 }
 
@@ -257,15 +257,18 @@ function buildSmoothAvoiding(
 }
 
 /**
- * 弧线绕障:在障碍一侧插入中间绕行点,用两段贝塞尔拼接,拐大弯避开。
+ * 弧线绕障:用**单段**三次贝塞尔,把控制点拉到障碍一侧,使整条曲线拱出去绕开障碍。
+ *
+ * 早先的实现是「source→绕行中点」+「绕行中点→target」两段贝塞尔拼接:两段曲线在拼接点的
+ * 切线方向由各自的 handle 朝向(midIn / midOut)决定,无法保证一致,拼接处必然出现可见的
+ * 拐角 / 折返 —— 而标签与产物正好放在这个中点上,所以拐弯看起来就贴在连线说明旁边。
+ * 单段三次贝塞尔整体 C1 连续,不存在拼接点,中点天然平滑。
  */
 function buildBezierAvoiding(
   sourceX: number,
   sourceY: number,
-  sourcePosition: Position,
   targetX: number,
   targetY: number,
-  targetPosition: Position,
   r: ObstacleRect,
   padding: number,
 ): PathResult {
@@ -277,55 +280,38 @@ function buildBezierAvoiding(
   const dy = targetY - sourceY;
   const horizontal = Math.abs(dx) >= Math.abs(dy);
 
-  // 绕行点放到障碍「远离 source」的外侧,距离障碍较远以确保不遮
-  let mid: { x: number; y: number };
-  if (horizontal) {
-    const passY = sourceY >= cy ? r.y - padding - 40 : r.y + r.height + padding + 40;
-    mid = { x: midX, y: passY };
-  } else {
-    const passX = sourceX >= cx ? r.x - padding - 40 : r.x + r.width + padding + 40;
-    mid = { x: passX, y: midY };
+  // 绕行通道放在障碍「远离 source」的一侧
+  const margin = padding + 40;
+  const passY = sourceY >= cy ? r.y - margin : r.y + r.height + margin;
+  const passX = sourceX >= cx ? r.x - margin : r.x + r.width + margin;
+
+  // 控制点外推量:先按「把曲线拉到绕行通道」估算,再采样校验,若仍压到障碍就逐步加大
+  let bend = Math.max(40, horizontal ? Math.abs(passY - midY) * 1.6 : Math.abs(passX - midX) * 1.6);
+
+  let c1 = { x: sourceX, y: sourceY };
+  let c2 = { x: targetX, y: targetY };
+  let path = '';
+  for (let i = 0; i < 8; i++) {
+    if (horizontal) {
+      const dir = passY < midY ? -1 : 1;
+      c1 = { x: sourceX + dx * 0.35, y: sourceY + dir * bend };
+      c2 = { x: targetX - dx * 0.35, y: targetY + dir * bend };
+    } else {
+      const dir = passX < midX ? -1 : 1;
+      c1 = { x: sourceX + dir * bend, y: sourceY + dy * 0.35 };
+      c2 = { x: targetX + dir * bend, y: targetY - dy * 0.35 };
+    }
+    path = `M ${sourceX},${sourceY} C ${c1.x},${c1.y} ${c2.x},${c2.y} ${targetX},${targetY}`;
+    // 采样曲线:只有真正压到障碍实体(留 4px 视觉余量)才继续加大外推量
+    if (!sampleSvgPath(path).some((p) => pointInRectPadded(p.x, p.y, r, 4))) break;
+    if (bend > 1200) break; // 兜底:别把曲线拉到天边
+    bend *= 1.35;
   }
 
-  // 中间绕行点处,曲线的进出方向与 S→T 主方向垂直(让曲线「往外拐」)
-  const midIn = horizontal
-    ? mid.y < midY
-      ? Position.Bottom
-      : Position.Top
-    : mid.x < midX
-      ? Position.Right
-      : Position.Left;
-  const midOut = horizontal
-    ? mid.y < midY
-      ? Position.Top
-      : Position.Bottom
-    : mid.x < midX
-      ? Position.Left
-      : Position.Right;
-
-  const [p1] = getBezierPath({
-    sourceX,
-    sourceY,
-    sourcePosition,
-    targetX: mid.x,
-    targetY: mid.y,
-    targetPosition: midIn,
-    curvature: 0.35,
-  });
-  const [p2] = getBezierPath({
-    sourceX: mid.x,
-    sourceY: mid.y,
-    sourcePosition: midOut,
-    targetX,
-    targetY,
-    targetPosition,
-    curvature: 0.35,
-  });
-  // 拼接两段 path:去掉第二段开头的「M + 坐标」,保留其后的曲线命令。
-  // 不能用 /M[^L]*L?/ 一类写法 —— getBezierPath 输出形如「M0,0 C150,0 150,200 300,200」,
-  // 不含 L 命令,[^L]* 会把整段第二段吞光,连线只剩前半截,视觉上「终点悬空」。
-  const path = `${p1} ${p2.replace(/^M[-\d.,\s]+/, '')}`;
-  return { path, labelX: mid.x, labelY: mid.y };
+  // 标签放在曲线参数中点(t=0.5),即曲线真正走过的地方,而不是几何中点
+  const labelX = (sourceX + 3 * c1.x + 3 * c2.x + targetX) / 8;
+  const labelY = (sourceY + 3 * c1.y + 3 * c2.y + targetY) / 8;
+  return { path, labelX, labelY };
 }
 
 /** 把折线点数组转成 smoothstep 风格的直角折线 SVG path */

@@ -115,4 +115,58 @@ describe('computeEdgePath', () => {
     expect(Number.isFinite(r.labelX)).toBe(true);
     expect(Number.isFinite(r.labelY)).toBe(true);
   });
+
+  it('bezier 绕障是单段三次贝塞尔(回归:早年两段拼接会在中点留下拐角)', () => {
+    const obstacle: ObstacleRect = { x: 150, y: -60, width: 100, height: 120 };
+    const r = computeEdgePath({ ...base, obstacles: [obstacle], edgeStyle: 'bezier', padding: 24 });
+    expect(r.path.match(/M/g)?.length).toBe(1);
+    expect(r.path.match(/C/g)?.length).toBe(1);
+  });
+
+  it('bezier 绕障曲线方向连续:相邻切线夹角 < 90°(无折返拐点)', () => {
+    const obstacle: ObstacleRect = { x: 150, y: -60, width: 100, height: 120 };
+    const r = computeEdgePath({ ...base, obstacles: [obstacle], edgeStyle: 'bezier', padding: 24 });
+
+    const nums = r.path.match(/-?\d+(?:\.\d+)?/g)!.map(Number);
+    const [sx, sy, c1x, c1y, c2x, c2y, tx, ty] = nums;
+    const pts: Array<{ x: number; y: number }> = [];
+    for (let i = 0; i <= 60; i++) {
+      const t = i / 60;
+      const mt = 1 - t;
+      pts.push({
+        x: mt ** 3 * sx + 3 * mt ** 2 * t * c1x + 3 * mt * t ** 2 * c2x + t ** 3 * tx,
+        y: mt ** 3 * sy + 3 * mt ** 2 * t * c1y + 3 * mt * t ** 2 * c2y + t ** 3 * ty,
+      });
+    }
+    let maxTurn = 0;
+    for (let i = 1; i < pts.length - 1; i++) {
+      const ax = pts[i].x - pts[i - 1].x;
+      const ay = pts[i].y - pts[i - 1].y;
+      const bx = pts[i + 1].x - pts[i].x;
+      const by = pts[i + 1].y - pts[i].y;
+      if (ax === 0 && ay === 0) continue;
+      const angle = Math.abs(Math.atan2(ax * by - ay * bx, ax * bx + ay * by)) * (180 / Math.PI);
+      maxTurn = Math.max(maxTurn, angle);
+    }
+    expect(maxTurn).toBeLessThan(90);
+  });
+
+  it('bezier 绕障曲线不压在障碍实体上,且标签落在曲线上', () => {
+    const obstacle: ObstacleRect = { x: 150, y: -60, width: 100, height: 120 };
+    const r = computeEdgePath({ ...base, obstacles: [obstacle], edgeStyle: 'bezier', padding: 24 });
+    const nums = r.path.match(/-?\d+(?:\.\d+)?/g)!.map(Number);
+    const [sx, sy, c1x, c1y, c2x, c2y, tx, ty] = nums;
+    // 采样:任意点都不应落在障碍矩形内(保守判定,取矩形本体)
+    for (let i = 0; i <= 40; i++) {
+      const t = i / 40;
+      const mt = 1 - t;
+      const x = mt ** 3 * sx + 3 * mt ** 2 * t * c1x + 3 * mt * t ** 2 * c2x + t ** 3 * tx;
+      const y = mt ** 3 * sy + 3 * mt ** 2 * t * c1y + 3 * mt * t ** 2 * c2y + t ** 3 * ty;
+      const inside =
+        x >= obstacle.x && x <= obstacle.x + obstacle.width && y >= obstacle.y && y <= obstacle.y + obstacle.height;
+      expect(inside).toBe(false);
+    }
+    // 标签取曲线 t=0.5 处,应明显偏离直线 y=0(确实在绕行段上)
+    expect(Math.abs(r.labelY)).toBeGreaterThan(10);
+  });
 });
