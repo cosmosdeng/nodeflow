@@ -183,4 +183,15 @@ describe('computeEdgePath', () => {
     // 标签取曲线 t=0.5 处,应明显偏离直线 y=0(确实在绕行段上)
     expect(Math.abs(r.labelY)).toBeGreaterThan(10);
   });
+
+  // 回归:绕障弧线应「贴着」障碍走,而不是一路拱到障碍边缘外几十像素。
+  // 早年实现直接用绕行通道坐标估算 bend(障碍边 + padding + 40 margin),曲线拱得太远,视觉「太激进」。
+  it('绕障弧线贴近障碍、不过度外扩', () => {
+    const obstacle: ObstacleRect = { x: 150, y: -60, width: 100, height: 120 };
+    const r = computeEdgePath({ ...base, obstacles: [obstacle], edgeStyle: 'bezier', padding: 24 });
+    // 障碍半高 60 + padding 24 + 小余量:曲线中点偏移应控制在此范围内,而不是拱得更高
+    expect(Math.abs(r.labelY)).toBeLessThan(120);
+    // 同时确实绕开了障碍本体(半高 60):中点应拱过 60
+    expect(Math.abs(r.labelY)).toBeGreaterThan(60);
+  });
 });

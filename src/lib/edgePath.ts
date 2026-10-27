@@ -268,6 +268,10 @@ function buildSmoothAvoiding(
  * 切线方向由各自的 handle 朝向(midIn / midOut)决定,无法保证一致,拼接处必然出现可见的
  * 拐角 / 折返 —— 而标签与产物正好放在这个中点上,所以拐弯看起来就贴在连线说明旁边。
  * 单段三次贝塞尔整体 C1 连续,不存在拼接点,中点天然平滑。
+ *
+ * 外推量采用**采样驱动的最小搜索**:从很小的 bend 起步,采样生成曲线,只要仍压到障碍(带
+ * padding)就逐步加大,直到「刚好」避开为止。这样曲线贴着障碍走,不会一路拱到障碍边缘外
+ * 几十像素 —— 早年实现直接用绕行通道坐标估算 bend,把曲线拱得太远,视觉上「太激进」。
  */
 function buildBezierAvoiding(
   sourceX: number,
@@ -277,41 +281,32 @@ function buildBezierAvoiding(
   r: ObstacleRect,
   padding: number,
 ): PathResult {
-  const midX = (sourceX + targetX) / 2;
-  const midY = (sourceY + targetY) / 2;
-  const cy = r.y + r.height / 2;
-  const cx = r.x + r.width / 2;
   const dx = targetX - sourceX;
   const dy = targetY - sourceY;
   const horizontal = Math.abs(dx) >= Math.abs(dy);
 
-  // 绕行通道放在障碍「远离 source」的一侧
-  const margin = padding + 40;
-  const passY = sourceY >= cy ? r.y - margin : r.y + r.height + margin;
-  const passX = sourceX >= cx ? r.x - margin : r.x + r.width + margin;
+  // 绕行方向:绕到障碍「远离 source」的一侧(障碍中心在 source 上方则向下绕,反之向上)
+  const cx = r.x + r.width / 2;
+  const cy = r.y + r.height / 2;
+  const dirY = sourceY >= cy ? -1 : 1;
+  const dirX = sourceX >= cx ? -1 : 1;
 
-  // 控制点外推量:先按「把曲线拉到绕行通道」估算,再采样校验,若仍压到障碍就逐步加大
-  // 三次贝塞尔在 t=0.5 处的偏移是 0.75·bend,所以取 ~1.35 倍刚好把曲线拱到绕行通道上
-  let bend = Math.max(40, horizontal ? Math.abs(passY - midY) * 1.35 : Math.abs(passX - midX) * 1.35);
-
+  let bend = 24;
   let c1 = { x: sourceX, y: sourceY };
   let c2 = { x: targetX, y: targetY };
   let path = '';
-  for (let i = 0; i < 8; i++) {
+  for (let i = 0; i < 32; i++) {
     if (horizontal) {
-      const dir = passY < midY ? -1 : 1;
-      c1 = { x: sourceX + dx * 0.35, y: sourceY + dir * bend };
-      c2 = { x: targetX - dx * 0.35, y: targetY + dir * bend };
+      c1 = { x: sourceX + dx * 0.35, y: sourceY + dirY * bend };
+      c2 = { x: targetX - dx * 0.35, y: targetY + dirY * bend };
     } else {
-      const dir = passX < midX ? -1 : 1;
-      c1 = { x: sourceX + dir * bend, y: sourceY + dy * 0.35 };
-      c2 = { x: targetX + dir * bend, y: targetY - dy * 0.35 };
+      c1 = { x: sourceX + dirX * bend, y: sourceY + dy * 0.35 };
+      c2 = { x: targetX + dirX * bend, y: targetY - dy * 0.35 };
     }
     path = `M ${sourceX},${sourceY} C ${c1.x},${c1.y} ${c2.x},${c2.y} ${targetX},${targetY}`;
-    // 采样曲线:只有真正压到障碍实体(留 4px 视觉余量)才继续加大外推量
-    if (!sampleSvgPath(path).some((p) => pointInRectPadded(p.x, p.y, r, 4))) break;
-    if (bend > 1200) break; // 兜底:别把曲线拉到天边
-    bend *= 1.35;
+    // 曲线避开障碍(带 padding)即停:找到最小的外推量,贴着障碍走
+    if (!sampleSvgPath(path).some((p) => pointInRectPadded(p.x, p.y, r, padding))) break;
+    bend *= 1.3;
   }
 
   // 标签放在曲线参数中点(t=0.5),即曲线真正走过的地方,而不是几何中点
