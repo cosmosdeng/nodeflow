@@ -190,7 +190,8 @@ export function createFlowSlice({ set, get }: SliceDeps): Partial<FlowStore> {
       } else {
         targetIds = new Set(s.nodes.filter((n) => !n.hidden).map((n) => n.id));
       }
-      const targets = s.nodes.filter((n) => targetIds.has(n.id));
+      // 锁定节点不参与布局(锁定 = 不可拖动,自动排列同样不得移动)
+      const targets = s.nodes.filter((n) => targetIds.has(n.id) && !n.data?.locked);
       if (targets.length === 0) return;
       const layoutEdges = s.edges.filter((e) => targetIds.has(e.source) && targetIds.has(e.target));
       get().markHistory();

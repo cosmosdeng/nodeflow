@@ -199,7 +199,9 @@ export function createStructureSlice({ set, get }: SliceDeps): Partial<FlowStore
       // Unified Matrix Arrange:读取 semantic,计算 node.position 目标(world-space)
       const positions = computeMatrixLayout(
         {
-          nodes: s.nodes,
+          // 锁定语义 = 不可拖动(FlowCanvas 以 draggable=false 拦截拖拽):自动排列同样不得移动
+          // 锁定节点 —— 否则用户锁定的节点会被搬到矩阵位置上,排列结果「乱套」。
+          nodes: s.nodes.filter((n) => !n.data?.locked),
           participants: s.participants,
           participantOrder: s.participantOrder,
           stages: s.stages,
@@ -260,7 +262,9 @@ export function createStructureSlice({ set, get }: SliceDeps): Partial<FlowStore
         for (const n of t.nodes) {
           for (const cid of n.data?.composite?.childIds ?? []) compChild.add(cid);
         }
-        const tops = t.nodes.filter((n) => !n.hidden && !compChild.has(n.id));
+        const tops = t.nodes.filter(
+          (n) => !n.hidden && !compChild.has(n.id) && !n.data?.locked, // 锁定节点保持原位(与拖拽锁定语义一致)
+        );
         if (tops.length === 0) return;
         const topSet = new Set(tops.map((n) => n.id));
         const pos = computeLayout(
@@ -298,7 +302,8 @@ export function createStructureSlice({ set, get }: SliceDeps): Partial<FlowStore
       // 语义轴存在 → 与 runArrange 共用同一 unified matrix geometry core(computeMatrixLayout):
       //   X = Stage Order(col);Y = Participant Order(row);stageOnly → C+D Anchor;free → freePlacement。
       const input = {
-        nodes: s.nodes,
+        // 锁定节点不参与布局(写回时 positions 里没有它们 → 保留原位),理由同 runArrange
+        nodes: s.nodes.filter((n) => !n.data?.locked),
         participants: s.participants,
         participantOrder: s.participantOrder,
         stages: s.stages,

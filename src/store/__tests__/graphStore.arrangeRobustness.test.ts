@@ -230,4 +230,37 @@ describe('runSmartArrange 鲁棒性(真实文档形态)', () => {
     useGraphStore.getState().undo();
     expect(useGraphStore.getState().nodes.map((n) => ({ ...n.position }))).toEqual(before);
   });
+
+  // 回归:排列链路(structure/arrange/freePlacement)原本完全没有 locked 处理 —— 锁定语义
+  // 是「不可拖动」(FlowCanvas 以 draggable=false 拦截),排列却把锁定节点搬到矩阵/拓扑位置,
+  // 用户看到的排列结果「乱套」(散落的锁定节点 + 长弧线)。
+  it('矩阵路径:锁定节点保持原位,其余照常排列', () => {
+    const { nodes, edges } = chain(9);
+    nodes.forEach((n, i) => {
+      n.data = { ...n.data, participantId: PARTICIPANTS[i % 3].id };
+    });
+    nodes[4].data = { ...nodes[4].data, locked: true };
+    const lockedPos = { ...nodes[4].position };
+    setup({ nodes, edges, stages: stagesOf([['S1', ['N0', 'N1', 'N2', 'N3', 'N4'], 0]]) });
+
+    useGraphStore.getState().runSmartArrange();
+    const after = useGraphStore.getState().nodes;
+    expect(after.find((n) => n.id === 'N4')!.position).toEqual(lockedPos);
+    // 未锁定的同列节点仍被移动(确实排了)
+    expect(after.find((n) => n.id === 'N0')!.position).not.toEqual(nodes[0].position);
+  });
+
+  it('legacy 拓扑路径(无语义轴):锁定节点保持原位', () => {
+    const { nodes, edges } = chain(6);
+    nodes[2].data = { ...nodes[2].data, locked: true };
+    const lockedPos = { ...nodes[2].position };
+    setup({ nodes, edges, stages: [] });
+    // 清空语义轴 → 走 legacy 纯拓扑路径
+    useGraphStore.setState({ participants: [], participantOrder: [] });
+
+    useGraphStore.getState().runSmartArrange();
+    const after = useGraphStore.getState().nodes;
+    expect(after.find((n) => n.id === 'N2')!.position).toEqual(lockedPos);
+    expect(after.find((n) => n.id === 'N0')!.position).not.toEqual(nodes[0].position);
+  });
 });
