@@ -44,7 +44,7 @@ const participants: Participant[] = [
 // 与 matrix 常量一致的默认节点尺寸 240×150
 const X_COL0 = 80 + 24;
 const Y_ROW0 = 80;
-const Y_ROW1 = 80 + 150 + 80;
+const Y_ROW1 = 80 + 150 + 104; // START_Y + 行高 + MATRIX_ROW_GAP
 
 function resetStore() {
   useGraphStore.setState({

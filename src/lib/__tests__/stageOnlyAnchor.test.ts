@@ -35,7 +35,7 @@ const nd = (id: string, pid?: string, h = 150, x = 0, y = 0): FlowNode => ({
     ...(pid ? { participantId: pid } : {}),
   },
 });
-const GAP = 40;
+const GAP = 54; // MATRIX_STACK_GAP
 const lay = (o: {
   participants?: Participant[];
   participantOrder?: string[];

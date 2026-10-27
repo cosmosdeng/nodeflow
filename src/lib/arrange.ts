@@ -143,16 +143,20 @@ export function organizationNameOf(participant: Participant, organizations: read
 /** 矩阵布局起点(world-space) */
 const MATRIX_START_X = 80;
 const MATRIX_START_Y = 80;
-/** 列区域间距(相邻 Stage 列之间) */
-const MATRIX_COL_GAP = 120;
+/** 列区域基础间距(相邻 Stage 列之间);多条跨列连线时按 MATRIX_EDGE_GAP_PER_EDGE 再叠加 */
+const MATRIX_COL_GAP = 150;
 /** 行间距 */
-const MATRIX_ROW_GAP = 80;
+const MATRIX_ROW_GAP = 104;
 /** cell 水平内边距(节点距列左缘) */
 const MATRIX_CELL_PAD_X = 24;
 /** 同 cell 内节点纵向堆叠间距 */
-const MATRIX_STACK_GAP = 40;
+const MATRIX_STACK_GAP = 54;
 /** 同一 Stage 列内「相邻拓扑层」的水平间距(X = 拓扑层) */
-const MATRIX_LAYER_GAP = 60;
+const MATRIX_LAYER_GAP = 78;
+/** 相邻两列之间每多一条「跨列连线」额外加宽的列缝隙(让连线有更多纵向空间展开,减少重叠与大弧避让) */
+const MATRIX_EDGE_GAP_PER_EDGE = 12;
+/** 列缝隙因跨列连线叠加的宽度上限 */
+const MATRIX_EDGE_GAP_MAX = 96;
 /** 空 Participant 行视觉带高(3 × label 高约 20) */
 const MATRIX_EMPTY_ROW_H = 60;
 /** 游离节点避让到矩阵区域外时的留白(world) */
@@ -454,11 +458,32 @@ export function computeMatrixGridGeometry(input: MatrixGridInput, opts?: MatrixG
     const extent = n > 0 ? (n - 1) * (colMaxAssignedW[c] + MATRIX_LAYER_GAP) + colMaxAssignedW[c] : 0;
     colWidths[c] = Math.max(extent, colMaxStageOnlyW[c]);
   }
+  // 连线感知列缝隙:统计「跨相邻两列」的连线条数,多加的连线越多,该列缝隙越宽。
+  // 更多横向空间 → 跨列连线有更充足的纵向间距展开,减少连线互相重叠、避免端点过近时被迫大弧避让。
+  const colEdgeGap = new Array<number>(Math.max(0, colCount - 1)).fill(MATRIX_COL_GAP);
+  if (colCount > 1) {
+    const crossCount = new Array<number>(colCount - 1).fill(0);
+    for (const e of opts?.edges ?? []) {
+      const sc = nodeColOf.get(e.source);
+      const tc = nodeColOf.get(e.target);
+      if (sc === undefined || tc === undefined || sc === tc) continue;
+      const lo = Math.min(sc, tc);
+      const hi = Math.max(sc, tc);
+      // 从 lo 到 hi 跨越的每个相邻列缝隙都计一次(缝隙内侧的边视作会经过)
+      for (let b = lo; b < hi; b++) crossCount[b] += 1;
+    }
+    for (let b = 0; b < colCount - 1; b++) {
+      colEdgeGap[b] = Math.min(
+        MATRIX_COL_GAP + crossCount[b] * MATRIX_EDGE_GAP_PER_EDGE,
+        MATRIX_COL_GAP + MATRIX_EDGE_GAP_MAX,
+      );
+    }
+  }
   const colXs = new Array<number>(colCount).fill(0);
   let cx = MATRIX_START_X;
   for (let c = 0; c < colCount; c++) {
     colXs[c] = cx;
-    cx += colWidths[c] + MATRIX_CELL_PAD_X * 2 + MATRIX_COL_GAP;
+    cx += colWidths[c] + MATRIX_CELL_PAD_X * 2 + colEdgeGap[c];
   }
   const colRights = colXs.map((x, i) => x + colWidths[i] + MATRIX_CELL_PAD_X * 2);
 

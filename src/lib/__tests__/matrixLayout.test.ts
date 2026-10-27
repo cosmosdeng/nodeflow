@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { computeMatrixLayout } from '../arrange';
+import { computeMatrixGridGeometry, computeMatrixLayout } from '../arrange';
 import type { FlowNode, Participant, Stage } from '../../types';
 
 /**
@@ -41,8 +41,8 @@ const stage = (id: string, nodeIds: string[] = []): Stage => ({
 // 矩阵常量与默认节点尺寸(240×150)
 const X0 = 80 + 24; // START_X + CELL_PAD_X
 const ROW0_Y = 80;
-const ROW1_Y = 80 + 150 + 80;
-const STACK_OFFSET = 150 + 40;
+const ROW1_Y = 80 + 150 + 104; // START_Y + 行高 + MATRIX_ROW_GAP
+const STACK_OFFSET = 150 + 54; // 节点高 + MATRIX_STACK_GAP
 
 const layout = (o: {
   nodes?: FlowNode[];
@@ -146,7 +146,7 @@ describe('P3+ computeMatrixLayout(入矩阵节点)', () => {
     // stageOnly 不再折叠为 free:路由进 s1 列(临时 Y = 该列 assigned 内容底 + 间距之后)
     expect(pos.has('nuNull')).toBe(true);
     expect(pos.get('nuNull')!.x).toBe(X0);
-    expect(pos.get('nuNull')!.y).toBe(ROW0_Y + 150 + 40);
+    expect(pos.get('nuNull')!.y).toBe(ROW0_Y + 150 + 54);
     // 真 free(两轴皆无):不在任何带、与已布局 Node 无碰撞 → 保持原位(结果物化为原坐标)
     expect(pos.get('nuGhost')).toEqual({ x: 900, y: 900 });
   });
@@ -226,5 +226,31 @@ describe('P3+ computeMatrixLayout(入矩阵节点)', () => {
       { x: 10, y: 5 },
       { x: 3, y: 200 },
     ]);
+  });
+
+  describe('连线感知列缝隙(减少连线重叠与大弧避让)', () => {
+    const baseInput = {
+      participants: [participant('p1'), participant('p2')],
+      participantOrder: ['p1', 'p2'],
+      stages: [stage('s1', ['a1', 'a2']), stage('s2', ['b1', 'b2'])],
+      stageOrder: ['s1', 's2'],
+      nodes: [node('a1', 'p1'), node('a2', 'p2'), node('b1', 'p1'), node('b2', 'p2')],
+    };
+
+    it('有跨列连线的列缝隙 比 无跨列连线的列缝隙 更宽', () => {
+      // 无跨列连线(两列之间没有任何边)→ 基础列缝隙
+      const noEdge = computeMatrixGridGeometry(baseInput);
+      const gapNo = noEdge.colXs[1] - noEdge.colRights[0];
+
+      // 加两条跨列连线 a1→b1、a2→b2 → 列缝隙应加宽
+      const withEdge = computeMatrixGridGeometry(baseInput, {
+        edges: [
+          { id: 'e1', source: 'a1', target: 'b1', sourceHandle: null, targetHandle: null },
+          { id: 'e2', source: 'a2', target: 'b2', sourceHandle: null, targetHandle: null },
+        ],
+      });
+      const gapWith = withEdge.colXs[1] - withEdge.colRights[0];
+      expect(gapWith).toBeGreaterThan(gapNo);
+    });
   });
 });

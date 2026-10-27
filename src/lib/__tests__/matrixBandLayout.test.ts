@@ -88,7 +88,7 @@ describe('computeMatrixLayout + rankOf(格内按流排序堆叠)', () => {
     });
     expect(ranked.get('a')!.y).toBeLessThan(ranked.get('b')!.y);
     expect(ranked.get('a')!.y).toBe(80);
-    expect(ranked.get('b')!.y).toBe(80 + 150 + 40);
+    expect(ranked.get('b')!.y).toBe(80 + 150 + 54);
   });
 });
 
