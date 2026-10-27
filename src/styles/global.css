@@ -2569,6 +2569,11 @@ body,
 
 /* 语义面板顶部的批量归属提示条 */
 .mx-bulk-hint {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 6px;
   font-size: 11.5px;
   color: var(--text-faint);
   background: var(--bg-panel-2);
@@ -2576,6 +2581,27 @@ body,
   border-radius: 6px;
   padding: 5px 8px;
   margin-bottom: 10px;
+}
+
+/* 提示条右侧的批量取消归属按钮组 */
+.mx-bulk-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.mx-bulk-actions .pp-link {
+  color: var(--text-dim);
+}
+
+.mx-bulk-actions .pp-link:hover:not(:disabled) {
+  color: var(--danger);
+}
+
+.mx-bulk-actions .pp-link:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
 }
 
 .mx-bulk-hint.active {

@@ -131,6 +131,20 @@ export default function SemanticPanel({ onClose }: Props) {
     setSemanticFocus({ kind: 'stage', id: sid });
   }
 
+  /** 批量取消归属:清空选中节点的参与方(单次历史,一次撤销全集还原) */
+  function handleClearParticipants() {
+    const ids = assignableNodeIds;
+    if (ids.length === 0) return;
+    assignParticipantToMany(ids, null);
+  }
+
+  /** 批量取消归属:让选中节点脱离所有阶段(单次历史) */
+  function handleDetachStages() {
+    const ids = assignableNodeIds;
+    if (ids.length === 0) return;
+    assignStageToMany(ids, null);
+  }
+
   // 选中节点所属语义(属性栏联动的兜底高亮:未显式聚焦时跟随当前选中节点)
   const selectedNode = selected?.kind === 'node' ? nodes.find((n) => n.id === selected.id) : undefined;
   const selectedParticipantId = selectedNode?.data.participantId ?? null;
@@ -270,10 +284,30 @@ export default function SemanticPanel({ onClose }: Props) {
         <div className={`mx-bulk-hint${assignableNodeIds.length > 0 ? ' active' : ''}`}>
           {assignableNodeIds.length > 0 ? (
             <>
-              已选 <b>{assignableNodeIds.length}</b> 个节点 · 点行尾 ⊕ 批量归属(一次撤销可还原)
+              <span>
+                已选 <b>{assignableNodeIds.length}</b> 个节点 · 点行尾 ⊕ 批量归属
+              </span>
+              <span className="mx-bulk-actions">
+                <button
+                  className="pp-link"
+                  disabled={allLocked}
+                  title="清空这些节点的参与方归属(整批一次撤销可还原)"
+                  onClick={handleClearParticipants}
+                >
+                  ⊘ 清参与方
+                </button>
+                <button
+                  className="pp-link"
+                  disabled={allLocked}
+                  title="让这些节点脱离所有阶段(整批一次撤销可还原)"
+                  onClick={handleDetachStages}
+                >
+                  ⊘ 脱阶段
+                </button>
+              </span>
             </>
           ) : (
-            <>在画布框选多个节点后,可点行尾 ⊕ 批量归属</>
+            <span>在画布框选多个节点后,可点行尾 ⊕ 批量归属 / 用 ⊘ 一键取消归属</span>
           )}
         </div>
         <div className="pp-section">

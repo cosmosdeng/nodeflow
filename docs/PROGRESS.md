@@ -4,6 +4,35 @@
 
 ---
 
+## 2026-10-27（二）批量归属补「取消归属」+ 幂等短路
+
+补齐 2026-10-21 遗留的第一条：批量归属只能「加」不能「减」，取消归属要逐节点清空。
+
+### 已完成
+
+| 项 | 内容 | 模块 |
+|---|---|---|
+| **批量取消归属** | 语义面板提示条右侧新增「⊘ 清参与方」「⊘ 脱阶段」：前者对选中节点批量清空 `participantId`，后者让选中节点脱离所有阶段；复用 `assignParticipantToMany(ids, null)` / `assignStageToMany(ids, null)`，整批一次历史 | `src/components/SemanticPanel.tsx` |
+| **幂等短路** | 两个批量 action 增加「目标状态 = 现状」判定：重复点同一 `⊕`、对已无归属的节点点 `⊘`、把已在目标阶段的节点再归属一次，都不写历史、不产生空撤销步 | `src/store/slices/structure.ts` |
+| **样式** | `.mx-bulk-hint` 改两端布局（文字 + 按钮组），新增 `.mx-bulk-actions`（按钮悬停转 `--danger`，disabled 降透明度） | `src/styles/global.css` |
+| **测试** | 批量归属测试 12 → 18 用例：幂等短路不写历史、批量取消单次历史可撤销、全未归属时取消不写历史、先归属再取消两条历史逐次还原、阶段批量脱离与幂等 | `src/store/__tests__/graphStore.bulkAssign.test.ts` |
+
+### 验证
+
+- **单元测试**：473 用例 / 49 文件全绿（新增 6）
+- **类型检查**：`tsc` 干净
+- **Lint**：0 error / 1 warning（既有 `EditableText`）
+- **Format / 构建**：`format:check` 通过、`bun run build` 通过
+- **预览**：dev server `http://127.0.0.1:5173/` 待人工确认
+
+### 遗留
+
+1. 组件层仍为 0 测试，本次 UI 改动依赖 store 层测试 + 人工预览
+2. `syncActiveDoc` 与自动保存双写 documents、`MIRROR_FIELDS` 手工维护仍未处理
+3. 大纲栏分组选择不记忆
+
+---
+
 ## 2026-10-21（三）语义面板批量归属
 
 补上 v0.4.0-next.4 遗留的第一项：语义此前只能**逐节点**赋值，批量场景要在属性栏重复操作 N 次。

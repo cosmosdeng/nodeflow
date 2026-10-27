@@ -389,7 +389,11 @@ export function createStructureSlice({ set, get }: SliceDeps): Partial<FlowStore
       if (get().allLocked) return;
       const ids = new Set(nodeIds);
       if (ids.size === 0) return;
-      if (participantId && !get().participants.some((p) => p.id === participantId)) return;
+      const s = get();
+      if (participantId && !s.participants.some((p) => p.id === participantId)) return;
+      // 幂等短路:目标状态与现状一致时不产生「空撤销步」(重复点 ⊕ / 全未归属时点 ⊘)
+      const next = participantId ?? null;
+      if (!s.nodes.some((n) => ids.has(n.id) && (n.data?.participantId ?? null) !== next)) return;
       // 批量 = 一次事务:单次 markHistory,Undo 一步回到归属前
       get().markHistory();
       set((s) => ({
@@ -403,7 +407,14 @@ export function createStructureSlice({ set, get }: SliceDeps): Partial<FlowStore
       if (get().allLocked) return;
       const ids = nodeIds.filter((id, i, arr) => arr.indexOf(id) === i);
       if (ids.length === 0) return;
-      if (stageId && !get().stages.some((st) => st.id === stageId)) return;
+      const s = get();
+      if (stageId && !s.stages.some((st) => st.id === stageId)) return;
+      // 幂等短路:目标状态与现状一致时不产生空撤销步
+      const idSet = new Set(ids);
+      const changed = stageId
+        ? ids.some((id) => !s.stages.find((st) => st.id === stageId)!.nodeIds.includes(id))
+        : s.stages.some((st) => st.nodeIds.some((nid) => idSet.has(nid)));
+      if (!changed) return;
       get().markHistory();
       set((s) => {
         // 单归属语义:先从所有阶段移出,再整体加入目标阶段(null 则只移出)

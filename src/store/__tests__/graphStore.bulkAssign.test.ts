@@ -96,6 +96,35 @@ describe('assignParticipantToMany(批量归属参与方)', () => {
     expect(pidOf('A')).toBe('P1');
     expect(stageIdsOf('S1')).toEqual(['A']); // 阶段归属不受影响
   });
+
+  it('幂等短路:目标状态与现状一致时不写空历史', () => {
+    act().assignParticipantToMany(['A'], 'P1'); // A 已是 P1
+    expect(pastLen()).toBe(0);
+  });
+
+  it('批量取消归属:清空并只记一次历史,撤销可还原', () => {
+    act().assignParticipantToMany(['A', 'B'], null);
+    expect(pidOf('A')).toBeUndefined();
+    expect(pidOf('B')).toBeUndefined();
+    expect(pastLen()).toBe(1);
+    act().undo();
+    expect(pidOf('A')).toBe('P1');
+  });
+
+  it('全部未归属时批量取消:不写历史', () => {
+    act().assignParticipantToMany(['B', 'C'], null);
+    expect(pastLen()).toBe(0);
+  });
+
+  it('先归属再取消:两条历史,逐次撤销分别还原', () => {
+    act().assignParticipantToMany(['B'], 'P2');
+    act().assignParticipantToMany(['B'], null);
+    expect(pastLen()).toBe(2);
+    act().undo();
+    expect(pidOf('B')).toBe('P2'); // 回到「已归属」
+    act().undo();
+    expect(pidOf('B')).toBeUndefined(); // 回到「未归属」
+  });
 });
 
 describe('assignStageToMany(批量归属阶段)', () => {
@@ -130,6 +159,21 @@ describe('assignStageToMany(批量归属阶段)', () => {
   it('重复 id 去重后不会重复入列', () => {
     act().assignStageToMany(['A', 'A', 'B'], 'S2');
     expect(stageIdsOf('S2')).toEqual(['A', 'B']);
+  });
+
+  it('批量脱离阶段:单次历史,撤销可还原', () => {
+    act().assignStageToMany(['A', 'B'], null);
+    expect(stageIdsOf('S1')).toEqual([]);
+    expect(pastLen()).toBe(1);
+    act().undo();
+    expect(stageIdsOf('S1')).toEqual(['A']);
+  });
+
+  it('幂等短路:全部已在目标阶段 / 全部不在任何阶段时不写历史', () => {
+    act().assignStageToMany(['A'], 'S1'); // A 已在 S1
+    expect(pastLen()).toBe(0);
+    act().assignStageToMany(['B'], null); // B 不在任何阶段
+    expect(pastLen()).toBe(0);
   });
 
   it('空列表 / 演示锁定:静默返回', () => {
