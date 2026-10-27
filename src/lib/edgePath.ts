@@ -220,33 +220,67 @@ export function computeEdgePath(params: ComputePathParams): PathResult {
   const samples = sampleSvgPath(nativePath);
   const hits = obstacles.filter((r) => samples.some((p) => pointInRectPadded(p.x, p.y, r, padding)));
 
-  // 无障碍遮挡:直接用原生路径
-  if (hits.length === 0) {
-    return { path: nativePath, labelX: nativeLabelX, labelY: nativeLabelY };
+  // 默认候选:原生路径(React Flow 生成,端口通常沿节点外法线出发)
+  let candidate: PathResult = { path: nativePath, labelX: nativeLabelX, labelY: nativeLabelY };
+
+  if (hits.length > 0) {
+    // 多个命中障碍取并集包围盒,统一绕行
+    const union = unionRects(hits);
+
+    // 有障碍:生成绕障路径。
+    // bezier 采用「温和避让」:若某条障碍就在端口近旁、必须从法线方向硬拱成巨弧才能避开,
+    // 就**放弃绕障**回退原生路径(让线盖过节点) —— 否则弧线会激进出一个大弯。
+    let avoiding: PathResult | null;
+    if (edgeStyle === 'bezier') {
+      avoiding = buildBezierAvoiding(sourceX, sourceY, targetX, targetY, union, padding);
+    } else {
+      avoiding = buildSmoothAvoiding(
+        sourceX,
+        sourceY,
+        sourcePosition,
+        targetX,
+        targetY,
+        targetPosition,
+        union,
+        padding,
+      );
+    }
+    // 绕障路径必须满足端口出口扇形约束才采用
+    if (
+      avoiding &&
+      portExitOk(sourceX, sourceY, sourcePosition, avoiding.path) &&
+      portExitOk(targetX, targetY, targetPosition, avoiding.path, true)
+    ) {
+      candidate = avoiding;
+    }
   }
 
-  // 多个命中障碍取并集包围盒,统一绕行
-  const union = unionRects(hits);
-
-  // 有障碍:生成绕障路径。
-  // bezier 采用「温和避让」:若某条障碍就在端口近旁、必须从法线方向硬拱成巨弧才能避开,
-  // 就**放弃绕障**回退原生路径(让线盖过节点) —— 否则弧线会激进出一个大弯。
-  // 无论哪种绕障,都必须满足**端口出口扇形约束**(从端点往外走、不得扭进节点内部),
-  // 若不满足也一律回退原生路径 —— 原生路径由 React Flow 生成,端口沿节点外法线出发,天然合规。
-  let avoiding: PathResult | null;
-  if (edgeStyle === 'bezier') {
-    avoiding = buildBezierAvoiding(sourceX, sourceY, targetX, targetY, union, padding);
-  } else {
-    avoiding = buildSmoothAvoiding(sourceX, sourceY, sourcePosition, targetX, targetY, targetPosition, union, padding);
-  }
+  // ---- 端口出口守门(对所有最终路径生效,含原生路径) ----
+  // 连线从端点出来必须朝**节点外部**走(节点外 0°~180° 扇形),不得扭进节点内部。
+  // 原生 bezier 在端口朝向背对背等极端几何下也可能折返钻进节点,因此这里统一兜底。
   if (
-    avoiding &&
-    portExitOk(sourceX, sourceY, sourcePosition, avoiding.path) &&
-    portExitOk(targetX, targetY, targetPosition, avoiding.path, true)
+    portExitOk(sourceX, sourceY, sourcePosition, candidate.path) &&
+    portExitOk(targetX, targetY, targetPosition, candidate.path, true)
   ) {
-    return avoiding;
+    return candidate;
   }
-  return { path: nativePath, labelX: nativeLabelX, labelY: nativeLabelY };
+
+  // 兜底:改用 smoothstep —— 它从端口沿法线直行一段再拐弯,出口方向恒在合法半平面内,
+  // 绝不从端点扭进节点内部(代价:可能盖过中间节点,但「不得扭进节点」优先级更高)。
+  const [sp, slx, sly] = getSmoothStepPath({
+    sourceX,
+    sourceY,
+    sourcePosition,
+    targetX,
+    targetY,
+    targetPosition,
+    borderRadius: 12,
+  });
+  if (portExitOk(sourceX, sourceY, sourcePosition, sp) && portExitOk(targetX, targetY, targetPosition, sp, true)) {
+    return { path: sp, labelX: slx, labelY: sly };
+  }
+  // 已无更合规的解:原样返回(不无限兜底)
+  return candidate;
 }
 
 /** 计算一组矩形的并集包围盒 */
