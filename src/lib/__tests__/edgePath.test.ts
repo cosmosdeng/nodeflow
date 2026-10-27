@@ -227,4 +227,32 @@ describe('computeEdgePath', () => {
     const none = computeEdgePath({ ...base, obstacles: [], edgeStyle: 'bezier', padding: 24 });
     expect(r.path).toBe(none.path);
   });
+
+  // 端口出口「节点外 0°~180° 扇形」约束:
+  // source(0,0) 为 Right 端口(节点在左),target(-400,0) 为 Left 端口,target 在 source 左侧。
+  // bezier 绕障要把控制点往「远离 target 的方向」反向回拉,c1 会出现 vx<0 → 初段从 Right 端口
+  // 往左钻进节点内部 → 违规,应回退原生路径,保证从端点沿节点外法线往外走。
+  it('Right 端口:绕障初段不允许往左扭进节点内部 → 回退原生', () => {
+    const leftTarget = { ...base, targetX: -400, targetY: 0, targetPosition: Position.Left };
+    const obstacle: ObstacleRect = { x: -200, y: -60, width: 100, height: 120 };
+    const r = computeEdgePath({ ...leftTarget, obstacles: [obstacle], edgeStyle: 'bezier', padding: 24 });
+    const none = computeEdgePath({ ...leftTarget, obstacles: [], edgeStyle: 'bezier', padding: 24 });
+    expect(r.path).toBe(none.path); // 违规绕障被拒绝 → 原生(端口沿 +x 出)
+    // 原生路径起点 source(0,0),首段采样 x 应 >= 0(不会往左钻进 source 节点)
+    const nums = r.path.match(/-?\d+(?:\.\d+)?/g)!.map(Number);
+    const [sx, sy, c1x] = nums;
+    expect(c1x).toBeGreaterThanOrEqual(sx); // 从 Right 端口向右走
+  });
+
+  it('绕障初段合规时仍保持绕障(不因扇形约束误伤)', () => {
+    // source(0,0) Right → target(400,0) Left,障碍在中段 → 绕障 c1 向右(vx>0)合规,不应回退
+    const obstacle: ObstacleRect = { x: 160, y: -70, width: 80, height: 140 };
+    const r = computeEdgePath({ ...base, obstacles: [obstacle], edgeStyle: 'bezier', padding: 24 });
+    const none = computeEdgePath({ ...base, obstacles: [], edgeStyle: 'bezier', padding: 24 });
+    expect(r.path).not.toBe(none.path);
+    // 且从 source Right 端口初段向右(outside),不从端点扭进节点内部
+    const nums = r.path.match(/-?\d+(?:\.\d+)?/g)!.map(Number);
+    const [sx, sy, c1x] = nums;
+    expect(c1x).toBeGreaterThanOrEqual(sx);
+  });
 });

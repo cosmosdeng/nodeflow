@@ -2,6 +2,16 @@
 
 > 按时间倒序记录开发历程。新功能、重要修复、里程碑都应在此追加。
 
+## 2026-10-27 · 连线渲染两条新规则:覆盖节点 + 端口出口 0°~180° 扇形约束(完成)
+
+- **规则一「连线永远覆盖在节点上面」**:CSS 把 `.react-flow__edges` z-index(0→1)提到 `.react-flow__nodes`(1→0)之上,连线始终绘制在节点上层;同时 edges 层 `pointer-events:none` + edge `visibleStroke`,让连线的空白区穿透,节点仍可点击/拖拽/框选。
+
+- **规则二「从端点出来必须在节点外 0°~180° 扇形往外走,不得扭进节点内部」**:`edgePath.ts` 新增 `portExitOk(fromX,fromY,fromPos,path,fromEnd)`,以端口边中点为顶点、节点外法线为中心,要求初段方向落在合法半平面(Right→vx≥0、Left→vx≤0、Top→vy≤0、Bottom→vy≥0);`computeEdgePath` 对绕障路径(bezier + smooth)同时校验 source 与 target 两端,任一违规即**回退原生路径**(原生由 React Flow 生成,端口沿节点外法线出发,天然合规)。
+- **关键坑**:`sampleSvgPath` 的 samples[0] 恒为端口起点自身(位移 0)→ 用 index 1;target 端用 samples[len-2] 避开终点自身,否则恒判合规、约束失效。
+- **测试**:498 用例 / 51 文件全绿,新增 2 用例(Right 端口违规回退 native + 合规绕障不误伤);tsc/lint/build 通过。
+
+---
+
 ## 2026-10-27 · 自动排列:加大矩阵间距 + 连线感知列缝隙(完成)
 
 - **背景**:用户反馈「自动排列后连线避让过于激进」;希望从排列源头优化——合理分布节点间距,避免端点挨太紧导致连线大弧避让,同时连线重叠最小化、避让努力最小化。

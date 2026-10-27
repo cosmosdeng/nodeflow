@@ -488,6 +488,17 @@ body,
   user-select: none;
 }
 
+/* 连线覆盖节点后,不能让连线层整块挡住下层节点的指针事件:
+   层级容器的 pointer-events 关掉,仅让线的描边(visibleStroke)本身可点选,其余空白穿透到下方节点,
+   从而兼顾「连线永远覆盖在节点上面」与节点的点击/拖拽/框选交互。 */
+.react-flow__edges,
+.react-flow__edge {
+  pointer-events: none;
+}
+.react-flow__edge {
+  pointer-events: visibleStroke;
+}
+
 .react-flow__minimap {
   background: var(--bg-panel);
   border-radius: 8px;
@@ -532,13 +543,13 @@ body,
   stroke-width: 2;
 }
 
-/* 连线的层级:默认节点在上、连线在下(节点清晰)。
-   拖拽节点时(flow-area.dragging-edge)临时把连线与 label 提升到节点之上,便于看清连线关系。 */
+/* 连线的层级:连线**永远覆盖在节点上面**(用户明确「连线永远在节点上面」)。
+   拖拽节点时(flow-area.dragging-edge)进一步把连线与 label 提到最上层,便于看清连线关系。 */
 .react-flow__nodes {
-  z-index: 1;
+  z-index: 0;
 }
 .react-flow__edges {
-  z-index: 0;
+  z-index: 1;
 }
 .react-flow__edgelabel-renderer {
   z-index: 2;

@@ -73,6 +73,47 @@ function pointInRectPadded(x: number, y: number, r: ObstacleRect, padding: numbe
   return x >= r.x - padding && x <= r.x + r.width + padding && y >= r.y - padding && y <= r.y + r.height + padding;
 }
 
+/**
+ * 端口出口方向是否符合「节点外 0°~180° 扇形」约束。
+ *
+ * 连线从端点出来,必须朝节点**外部**的方向走,不能直接扭进节点内部。
+ * 以端口所在边中点为顶点、节点外法线为中心,覆盖 180° 的扇形即「合法出发方向」:
+ * - Right 端口:初段必须往右(vx ≥ -ε),不得往左钻进节点;
+ * - Left  端口:初段必须往左(vx ≤ ε);
+ * - Top   端口:初段必须往上(vy ≤ ε);
+ * - Bottom端口:初段必须往下(vy ≥ -ε)。
+ *
+ * 通过采样路径首点相对端点的位移近似初始切向。
+ *
+ * 注意:sampleSvgPath 的 samples[0] 恒等于端口起点本身(位移为 0),因此取**首个真正离开端口**
+ * 的采样点(index 1);判断 target 端出口方向则取**终点前一个**采样点(index len-2),避免取到终点
+ * 自身(位移为 0)导致误判。
+ */
+function portExitOk(
+  fromX: number,
+  fromY: number,
+  fromPos: Position,
+  path: string,
+  fromEnd = false,
+  perSegment = 8,
+): boolean {
+  const samples = sampleSvgPath(path, perSegment);
+  if (samples.length < 2) return true;
+  const p = fromEnd ? samples[samples.length - 2] : samples[1];
+  const vx = p.x - fromX;
+  const vy = p.y - fromY;
+  switch (fromPos) {
+    case Position.Right:
+      return vx >= -1e-6;
+    case Position.Left:
+      return vx <= 1e-6;
+    case Position.Top:
+      return vy <= 1e-6;
+    default:
+      return vy >= -1e-6;
+  }
+}
+
 /** 解析 SVG path 字符串,在每条子路径段上采样若干点。支持 M/L/C(直线与三次贝塞尔)。
  *  兼容 RF 输出的紧凑格式(M0 0L20 0)、逗号分隔与科学计数法。 */
 function sampleSvgPath(path: string, perSegment = 8): Array<{ x: number; y: number }> {
@@ -190,12 +231,22 @@ export function computeEdgePath(params: ComputePathParams): PathResult {
   // 有障碍:生成绕障路径。
   // bezier 采用「温和避让」:若某条障碍就在端口近旁、必须从法线方向硬拱成巨弧才能避开,
   // 就**放弃绕障**回退原生路径(让线盖过节点) —— 否则弧线会激进出一个大弯。
+  // 无论哪种绕障,都必须满足**端口出口扇形约束**(从端点往外走、不得扭进节点内部),
+  // 若不满足也一律回退原生路径 —— 原生路径由 React Flow 生成,端口沿节点外法线出发,天然合规。
+  let avoiding: PathResult | null;
   if (edgeStyle === 'bezier') {
-    const avoiding = buildBezierAvoiding(sourceX, sourceY, targetX, targetY, union, padding);
-    if (avoiding) return avoiding;
-    return { path: nativePath, labelX: nativeLabelX, labelY: nativeLabelY };
+    avoiding = buildBezierAvoiding(sourceX, sourceY, targetX, targetY, union, padding);
+  } else {
+    avoiding = buildSmoothAvoiding(sourceX, sourceY, sourcePosition, targetX, targetY, targetPosition, union, padding);
   }
-  return buildSmoothAvoiding(sourceX, sourceY, sourcePosition, targetX, targetY, targetPosition, union, padding);
+  if (
+    avoiding &&
+    portExitOk(sourceX, sourceY, sourcePosition, avoiding.path) &&
+    portExitOk(targetX, targetY, targetPosition, avoiding.path, true)
+  ) {
+    return avoiding;
+  }
+  return { path: nativePath, labelX: nativeLabelX, labelY: nativeLabelY };
 }
 
 /** 计算一组矩形的并集包围盒 */
