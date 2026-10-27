@@ -187,10 +187,15 @@ export function computeEdgePath(params: ComputePathParams): PathResult {
   // 多个命中障碍取并集包围盒,统一绕行
   const union = unionRects(hits);
 
-  // 有障碍:生成绕障路径
-  return edgeStyle === 'bezier'
-    ? buildBezierAvoiding(sourceX, sourceY, targetX, targetY, union, padding)
-    : buildSmoothAvoiding(sourceX, sourceY, sourcePosition, targetX, targetY, targetPosition, union, padding);
+  // 有障碍:生成绕障路径。
+  // bezier 采用「温和避让」:若某条障碍就在端口近旁、必须从法线方向硬拱成巨弧才能避开,
+  // 就**放弃绕障**回退原生路径(让线盖过节点) —— 否则弧线会激进出一个大弯。
+  if (edgeStyle === 'bezier') {
+    const avoiding = buildBezierAvoiding(sourceX, sourceY, targetX, targetY, union, padding);
+    if (avoiding) return avoiding;
+    return { path: nativePath, labelX: nativeLabelX, labelY: nativeLabelY };
+  }
+  return buildSmoothAvoiding(sourceX, sourceY, sourcePosition, targetX, targetY, targetPosition, union, padding);
 }
 
 /** 计算一组矩形的并集包围盒 */
@@ -272,6 +277,9 @@ function buildSmoothAvoiding(
  * 外推量采用**采样驱动的最小搜索**:从很小的 bend 起步,采样生成曲线,只要仍压到障碍(带
  * padding)就逐步加大,直到「刚好」避开为止。这样曲线贴着障碍走,不会一路拱到障碍边缘外
  * 几十像素 —— 早年实现直接用绕行通道坐标估算 bend,把曲线拱得太远,视觉上「太激进」。
+ *
+ * 温和避让边界:若 bend 涨到「最大拱出量」仍无法避开(说明障碍就贴着端口,必须从法线方向
+ * 硬拱成巨弧),返回 **null**,由调用方回退到原生路径 —— 让线盖过节点,而不是激进出大弯。
  */
 function buildBezierAvoiding(
   sourceX: number,
@@ -280,7 +288,7 @@ function buildBezierAvoiding(
   targetY: number,
   r: ObstacleRect,
   padding: number,
-): PathResult {
+): PathResult | null {
   const dx = targetX - sourceX;
   const dy = targetY - sourceY;
   const horizontal = Math.abs(dx) >= Math.abs(dy);
@@ -290,6 +298,11 @@ function buildBezierAvoiding(
   const cy = r.y + r.height / 2;
   const dirY = sourceY >= cy ? -1 : 1;
   const dirX = sourceX >= cx ? -1 : 1;
+
+  // 端口间距的一半,作为「允许的最大拱出量」:绕行不该超过这一半,
+  // 否则弧线从法线方向硬拱出去,视觉上过于激进。
+  const span = (Math.abs(dx) + Math.abs(dy)) / 2;
+  const maxBend = Math.max(40, span);
 
   let bend = 24;
   let c1 = { x: sourceX, y: sourceY };
@@ -303,6 +316,8 @@ function buildBezierAvoiding(
       c1 = { x: sourceX + dirX * bend, y: sourceY + dy * 0.35 };
       c2 = { x: targetX + dirX * bend, y: targetY - dy * 0.35 };
     }
+    // 温和避让:再拱就超过允许的巨弧 → 放弃绕障,让线盖过节点
+    if (bend > maxBend) return null;
     path = `M ${sourceX},${sourceY} C ${c1.x},${c1.y} ${c2.x},${c2.y} ${targetX},${targetY}`;
     // 曲线避开障碍(带 padding)即停:找到最小的外推量,贴着障碍走
     if (!sampleSvgPath(path).some((p) => pointInRectPadded(p.x, p.y, r, padding))) break;

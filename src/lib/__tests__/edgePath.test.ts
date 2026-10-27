@@ -194,4 +194,37 @@ describe('computeEdgePath', () => {
     // 同时确实绕开了障碍本体(半高 60):中点应拱过 60
     expect(Math.abs(r.labelY)).toBeGreaterThan(60);
   });
+
+  // 温和避让:障碍紧贴端口、必须从法线方向硬拱成巨弧才能避开时,放弃绕障、盖上节点。
+  // 场景:source(0,0) → target(400,0),障碍把两端都封死、几乎贴在整条路径上,
+  // 若要避开需拱出 > 端口间距一半(200)的巨弧 → 应回退到与无障碍完全相同的原生路径。
+  it('温和避让:远离端口的障碍仍绕开', () => {
+    // 障碍集中在中段、距离两端较远 → 轻轻一拱即可避开,不应放弃绕障
+    const obstacle: ObstacleRect = { x: 160, y: -70, width: 80, height: 140 };
+    const r = computeEdgePath({ ...base, obstacles: [obstacle], edgeStyle: 'bezier', padding: 24 });
+    const none = computeEdgePath({ ...base, obstacles: [], edgeStyle: 'bezier', padding: 24 });
+    expect(r.path).not.toBe(none.path);
+    // 且确实绕开了障碍本体(不应盖上去)
+    const nums = r.path.match(/-?\d+(?:\.\d+)?/g)!.map(Number);
+    const [sx, sy, c1x, c1y, c2x, c2y, tx, ty] = nums;
+    let hit = false;
+    for (let i = 0; i <= 40; i++) {
+      const t = i / 40;
+      const mt = 1 - t;
+      const x = mt ** 3 * sx + 3 * mt ** 2 * t * c1x + 3 * mt * t ** 2 * c2x + t ** 3 * tx;
+      const y = mt ** 3 * sy + 3 * mt ** 2 * t * c1y + 3 * mt * t ** 2 * c2y + t ** 3 * ty;
+      if (x >= obstacle.x && x <= obstacle.x + obstacle.width && y >= obstacle.y && y <= obstacle.y + obstacle.height) {
+        hit = true;
+      }
+    }
+    expect(hit).toBe(false);
+  });
+
+  it('温和避让:巨障贴两边时放弃绕障、回退原生路径(盖上节点)', () => {
+    // 一个又高又贯穿中段的障碍:要避开必须拱出远超端口间距一半的巨弧 → 应放弃绕障
+    const obstacle: ObstacleRect = { x: 120, y: -120, width: 160, height: 240 };
+    const r = computeEdgePath({ ...base, obstacles: [obstacle], edgeStyle: 'bezier', padding: 24 });
+    const none = computeEdgePath({ ...base, obstacles: [], edgeStyle: 'bezier', padding: 24 });
+    expect(r.path).toBe(none.path);
+  });
 });
