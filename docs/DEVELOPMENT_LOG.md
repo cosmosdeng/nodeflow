@@ -2,6 +2,23 @@
 
 > 按时间倒序记录开发历程。新功能、重要修复、里程碑都应在此追加。
 
+## 2026-10-28 · 组件层测试补齐:剩余 7 个组件(完成)
+
+继上一轮 10 个组件后,把剩下未覆盖的组件一并补齐,**组件层 0 测试的状态彻底结束**。
+
+- **新增用例(79 个 / 6 文件)**:
+  - SemanticOrderList(15):受控双向联动——渲染 / 编辑改名(空值与同值不提交、Escape 取消、`未分配` 虚拟行禁改)/ **拖拽重排**(自建 `getData`/`setData` 的 DataTransfer 替身)/ ⊕ 批量归属 / activeId 高亮。
+  - ContextMenu(9):`---` 分隔符不是按钮、disabled / danger、**点击顺序为先关菜单再执行 onClick**、Escape 与点击别处关闭、菜单内部 pointerdown 不被误判为「点击别处」。
+  - ConfirmDialog + DialogHost(13):按钮文案与 danger、取消三种触发(按钮 / 遮罩 / Esc)、alert 无取消按钮;`confirmDialogAsync` → 点确认 → **Promise resolve true/false** 的完整异步链路(需 `await act`)。
+  - MatrixVisualLayer(12):两轴显示开关互斥组合、尺寸为 0 时空壳、语义再指派高亮、名称缺失回落「未命名阶段 / 未命名参与方」,以及**双击标签改名**(window 捕获阶段 + 坐标命中表)落到 `updateStage` / `updateParticipant`。
+  - CompositePopupView(7):localStorage 快照读取、**损坏 JSON / 结构非法均回落空态不崩**、storage 事件热刷新、多 id 各自独立。
+  - SemanticPanel(13):三个小节与空态、添加参与方 / 组织(输入为空时按钮禁用)、新增阶段域、删除走确认后生效、批量归属与一键清空。
+  - Toolbar 补(11→21):文件菜单两层展开、**新建 / 清空画布的确认 → 取消双路径**、导入导出二级菜单(JSON / JPG / PDF / 幅面)、保存项目走 `serializeProject` 下载。
+- **基建再补**:`src/test/setup.ts` 增加 **`URL.createObjectURL` 占位实现** —— 保存项目 / 导出流程会 `new Blob` 后建 Blob URL,测试环境的实现不兼容,抛出未捕获异常污染整轮运行(表现为「用例全过但退出码非 0」)。
+- **测试**:650 用例 / 66 文件全绿且无未处理错误;tsc / lint(0 error)/ format / build 全过。
+
+---
+
 ## 2026-10-27 · 组件层测试落地(RTL + jsdom)(完成)
 
 此前组件层 **0 测试**(500 用例全部是纯逻辑 / store)。本轮补齐基建与 10 个组件的冒烟 + 交互用例。

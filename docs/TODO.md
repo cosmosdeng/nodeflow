@@ -37,6 +37,14 @@
 - [x] **撤销 / 重做内部画布标签联动**(已完成)
   - 修复:`GraphSnapshot` 增加 `compositeTabs` / `activeTabId`;`markHistory` 记录标签状态,`undo` / `redo` / `jumpTo` 通过新增的 `restoreTabsFromSnapshot` 完整恢复标签页;旧快照(无标签字段)回退为按节点过滤,保证任何历史跳转都不会残留指向不存在组合的标签页。
 
+- [x] **组件层测试补齐:剩余 7 个组件**(已完成)
+  - 新增 79 用例 / 6 文件:SemanticOrderList(15)/ ContextMenu(9)/ ConfirmDialog + DialogHost(13)/ MatrixVisualLayer(12)/ CompositePopupView(7)/ SemanticPanel(13)/ Toolbar 文件菜单与确认流程(补 10,共 21)。
+  - 覆盖要点:拖拽重排(DataTransfer 替身)、`confirmDialogAsync` 的 Promise 链路、双击标签改名(坐标命中表)、快照损坏回落空态、文件菜单两层展开与确认 / 取消双路径。
+  - **基建补 `URL.createObjectURL` 占位**:否则保存项目 / 导出流程抛未捕获异常,表现为「用例全过但退出码非 0」。
+  - 新增踩坑:dialog mock 需 `mockClear()`、`dialog.ts` 单例需 `cancelDialog()` 清理、同名元素用 scope 或类名精确定位、action 语义以真实行为为准勿臆断。
+  - 测试:650 用例 / 66 文件全绿无未处理错误。
+  - 遗留:file input 实际写入、JPG/PDF 真实编码流程(宜用专用导出测试 + stub)。
+
 - [x] **组件层测试(RTL + jsdom)**(已完成)
   - **基建**:新增 `vitest.config.mts` 用 projects 分环境(logic 走 node 保持速度 / components 走 jsdom);依赖 `jsdom` + `@testing-library/react` + `@testing-library/jest-dom`。
   - **setup(`src/test/setup.ts`)**:React Flow jsdom 配方 —— ResizeObserver observe 时**立即回调固定尺寸**(否则 `nodesInitialized` 恒 false,连线不渲染)、原型覆盖 offsetWidth/Height(jsdom 恒 0)、DOMMatrixReadOnly、getBoundingClientRect、getBBox、scrollIntoView、**innerText 映射到 textContent**(jsdom 未实现,EditableText 依赖它)。

@@ -4,6 +4,47 @@
 
 ---
 
+---
+
+## 2026-10-28（三）组件层测试补齐：剩余 7 个组件
+
+### 背景
+
+上一轮补齐了 10 个组件（571 用例 / 60 文件），仍有 7 个组件无覆盖：`SemanticOrderList`、`ContextMenu`、`ConfirmDialog`/`DialogHost`、`CompositePopupView`、`MatrixVisualLayer`、`SemanticPanel`，以及 `Toolbar` 的文件菜单与确认流程。
+
+### 做了什么
+
+**新增 79 个用例 / 6 个文件**
+
+| 组件 | 用例 | 重点覆盖 |
+| --- | --- | --- |
+| SemanticOrderList | 15 | 改名边界（空值/同值不提交、Escape、`未分配` 禁改）、拖拽重排、⊕ 批量归属、activeId 高亮 |
+| ContextMenu | 9 | `---` 非按钮、点击顺序「先关菜单再执行」、Escape / 点击别处关闭 |
+| ConfirmDialog + DialogHost | 13 | 三种取消触发、alert 无取消按钮、`confirmDialogAsync` 的完整 Promise 链路 |
+| MatrixVisualLayer | 12 | 两轴开关组合、尺寸 0 空壳、再指派高亮、名称回落、**双击标签改名** |
+| CompositePopupView | 7 | 快照读取、**损坏 JSON / 结构非法回落空态**、storage 热刷新 |
+| SemanticPanel | 13 | 小节与空态、添加 / 删除 / 批量归属 / 全局锁定 |
+| Toolbar（补 10） | 21 | 文件菜单两层、**确认 → 取消双路径**、导入导出二级菜单 |
+
+### 关键坑（新）
+
+1. **`URL.createObjectURL` 缺失/不兼容**：「保存项目」会 `new Blob` 后建 Blob URL，测试环境抛出未捕获异常。症状很有迷惑性——**用例全部通过，但 `bun run test` 退出码为 1**，日志里是独立的 "Unhandled Errors" 段。已在 `setup.ts` 补占位实现。**以后看测试结果不能只数通过数，还要看退出码与错误段。**
+2. **dialog mock 的调用记录不会自动清空**：`vi.mocked(confirmDialogAsync).mockResolvedValue(false)` 只改返回值，不会清空 accumulated calls → 断言 `toHaveBeenCalledTimes(1)` 会算上上一用例的调用。必须在 `beforeEach` 里 `mockClear()`。
+3. **`dialog.ts` 是模块级单例**：用例之间必须 `cancelDialog()` 清理，否则未 settle 的 Promise 被覆盖后永不完成。
+4. 部分 action 的真实语义与直觉不同——「保存项目」走 `serializeProject` 下载（不是 `saveDocument`）；这类不确定语义不要写臆断断言，先跑一次看真实行为再决定。
+5. 组件里同名文本/按钮很多（`✕`、`添加`、`删除`、组织名在下拉与行里重复）→ 用 `getAllBy*` + 索引、CSS 类名 scope，或 `within(select).getByRole('option')` 精确定位。
+
+### 验证
+
+- **单元测试**：650 用例 / 66 文件全绿，**无未处理错误**
+- tsc / lint（0 error）/ format / build 全过
+
+### 遗留
+
+- 组件层已基本铺满；尚未覆盖：导入/导出的实际 file input 写入、导出 JPG/PDF 的真实编码流程（依赖 html-to-image，宜放在专门的导出测试里用 stub 验证）
+
+---
+
 ## 2026-10-27（二）组件层测试落地（RTL + jsdom）
 
 ### 背景

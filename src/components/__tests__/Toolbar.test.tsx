@@ -1,9 +1,16 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { act, fireEvent, render, screen } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { ReactFlowProvider } from '@xyflow/react';
 import { useGraphStore } from '../../store/graphStore';
-import type { FlowNode, GraphSnapshot } from '../../types';
+import { confirmDialogAsync } from '../../lib/dialog';
+import type { FlowNode, GraphDocument, GraphSnapshot } from '../../types';
 import Toolbar from '../Toolbar';
+
+// 新建项目 / 清空画布走确认对话框;只替换这一个函数,其余导出保持真实实现
+vi.mock('../../lib/dialog', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../../lib/dialog')>();
+  return { ...actual, confirmDialogAsync: vi.fn() };
+});
 
 const S = useGraphStore.getState();
 const REAL = {
@@ -16,6 +23,12 @@ const REAL = {
   groupSelected: S.groupSelected,
   toggleAllAnnotations: S.toggleAllAnnotations,
   runSmartArrange: S.runSmartArrange,
+  createDocument: S.createDocument,
+  clearGraph: S.clearGraph,
+  saveDocument: S.saveDocument,
+  closeDocument: S.closeDocument,
+  exportJson: S.exportJson,
+  serializeProject: S.serializeProject,
 };
 
 let undo = vi.fn();
@@ -27,6 +40,12 @@ let toggleLockAll = vi.fn();
 let groupSelected = vi.fn();
 let toggleAllAnnotations = vi.fn();
 let runSmartArrange = vi.fn();
+let createDocument = vi.fn();
+let clearGraph = vi.fn();
+let saveDocument = vi.fn();
+let closeDocument = vi.fn();
+let exportJson = vi.fn();
+let serializeProject = vi.fn();
 
 /** 组件只关心 past/future 的**长度**,内容用最小合法快照即可 */
 function emptySnap(): GraphSnapshot {
@@ -73,6 +92,14 @@ beforeEach(() => {
   groupSelected = vi.fn();
   toggleAllAnnotations = vi.fn();
   runSmartArrange = vi.fn();
+  createDocument = vi.fn();
+  clearGraph = vi.fn();
+  saveDocument = vi.fn();
+  closeDocument = vi.fn();
+  exportJson = vi.fn();
+  serializeProject = vi.fn(() => '{}');
+  vi.mocked(confirmDialogAsync).mockClear();
+  vi.mocked(confirmDialogAsync).mockResolvedValue(true);
   useGraphStore.setState({
     nodes: [makeNode('n1', '脚本撰写')],
     edges: [],
@@ -82,6 +109,10 @@ beforeEach(() => {
     annotations: [],
     allLocked: false,
     arrangePending: false,
+    // 保存 / 关闭项目需要当前文档存在,否则菜单项的处理函数会直接早退
+    documents: [{ id: 'd1', name: '测试项目', nodes: [], edges: [] }] as unknown as GraphDocument[],
+    activeDocumentId: 'd1',
+    dirty: false,
     undo,
     redo,
     addNode,
@@ -91,6 +122,12 @@ beforeEach(() => {
     groupSelected,
     toggleAllAnnotations,
     runSmartArrange,
+    createDocument,
+    clearGraph,
+    saveDocument,
+    closeDocument,
+    exportJson,
+    serializeProject,
   });
 });
 
@@ -197,5 +234,111 @@ describe('Toolbar', () => {
     expect(screen.getByRole('button', { name: /重做/ })).toBeDisabled();
     expect(screen.getByRole('button', { name: /添加节点/ })).toBeDisabled();
     expect(screen.getByRole('button', { name: /自动排列/ })).toBeDisabled();
+  });
+});
+
+describe('Toolbar 文件菜单与确认流程', () => {
+  // 菜单是「点文件 → 一级菜单 → 点导入/导出 → 二级菜单」两层结构
+  async function openFileMenu() {
+    renderToolbar();
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: /文件/ }));
+    });
+  }
+
+  it('点击「文件」展开一级菜单', async () => {
+    renderToolbar();
+    expect(screen.queryByRole('button', { name: /新建项目/ })).not.toBeInTheDocument();
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: /文件/ }));
+    });
+    expect(screen.getByRole('button', { name: /新建项目/ })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /保存项目/ })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /导入/ })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /导出/ })).toBeInTheDocument();
+  });
+
+  it('新建项目:确认后调用 createDocument', async () => {
+    vi.mocked(confirmDialogAsync).mockResolvedValue(true);
+    await openFileMenu();
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: /新建项目/ }));
+    });
+    await waitFor(() => expect(createDocument).toHaveBeenCalledTimes(1));
+  });
+
+  it('新建项目:取消后不调用 createDocument', async () => {
+    vi.mocked(confirmDialogAsync).mockResolvedValue(false);
+    await openFileMenu();
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: /新建项目/ }));
+    });
+    expect(confirmDialogAsync).toHaveBeenCalledTimes(1);
+    expect(createDocument).not.toHaveBeenCalled();
+  });
+
+  it('清空画布:确认后调用 clearGraph', async () => {
+    vi.mocked(confirmDialogAsync).mockResolvedValue(true);
+    await openFileMenu();
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: /清空画布/ }));
+    });
+    await waitFor(() => expect(clearGraph).toHaveBeenCalledTimes(1));
+  });
+
+  it('演示模式锁定时新建项目 / 清空画布禁用', async () => {
+    useGraphStore.setState({ allLocked: true });
+    await openFileMenu();
+    expect(screen.getByRole('button', { name: /新建项目/ })).toBeDisabled();
+    expect(screen.getByRole('button', { name: /清空画布/ })).toBeDisabled();
+  });
+
+  it('保存项目:序列化当前编辑状态并下载文件', async () => {
+    await openFileMenu();
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: /保存项目/ }));
+    });
+    // 「保存项目」是把包含撤销历史的整体 projects 下载走,走的是 serializeProject
+    expect(serializeProject).toHaveBeenCalledTimes(1);
+    expect(saveDocument).not.toHaveBeenCalled();
+  });
+
+  it('关闭项目:确认后调用 closeDocument', async () => {
+    await openFileMenu();
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: /关闭项目/ }));
+    });
+    expect(confirmDialogAsync).toHaveBeenCalledTimes(1);
+    await waitFor(() => expect(closeDocument).toHaveBeenCalledTimes(1));
+  });
+
+  it('导入二级菜单:点「导入」后出现 JSON 导入项', async () => {
+    await openFileMenu();
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: /导入/ }));
+    });
+    expect(screen.getByRole('button', { name: /导入 JSON/ })).toBeInTheDocument();
+  });
+
+  it('导出二级菜单:点「导出」后出现 JSON / JPG / PDF 与幅面选项', async () => {
+    await openFileMenu();
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: /导出/ }));
+    });
+    expect(screen.getByRole('button', { name: /导出 JSON/ })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /导出 JPG/ })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /导出 PDF/ })).toBeInTheDocument();
+    expect(screen.getAllByRole('button', { name: /幅面:/ }).length).toBeGreaterThan(0);
+  });
+
+  it('导出 JSON 菜单项触发 exportJson', async () => {
+    await openFileMenu();
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: /导出/ }));
+    });
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: /导出 JSON/ }));
+    });
+    expect(exportJson).toHaveBeenCalledTimes(1);
   });
 });

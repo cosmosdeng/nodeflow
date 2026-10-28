@@ -113,6 +113,11 @@ if (!('innerText' in HTMLElement.prototype)) {
   });
 }
 
+// 保存项目 / 导出流程会 new Blob + URL.createObjectURL 触发下载;
+// 测试环境的 Blob URL 实现不兼容,直接给出占位 URL,避免未捕获异常污染测试运行
+URL.createObjectURL = (): string => 'blob:nodeflow-test';
+URL.revokeObjectURL = (): void => {};
+
 // 每个用例后自动卸载组件、清理 DOM
 afterEach(() => {
   cleanup();
